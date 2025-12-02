@@ -1,0 +1,9 @@
+# Formato: DOMINIO;GRUPOS;TESTE;TIPOS_REGISTRO;HOSTS_EXTRA
+# TESTE: iterative, recursive, both;;;;
+uol.com.br;GRUPO1;iterative;ns;
+g1.com.br;GRUPO2,GRUPO1;iterative;ns;
+g1.com.br;GRUPO2;iterative;a;www,smtp
+meuip.com.br;GRUPO1,GRUPO2,OPEN;recursive;ns;
+oi.net.br;OI;iterative;ns;www,seguro
+ntp-bsa.oi.net.br;OI;iterative;a;
+ntp-bsa.oi.net.br;OPEN;recursive;a;

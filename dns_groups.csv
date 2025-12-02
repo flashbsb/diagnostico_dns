@@ -1,0 +1,6 @@
+# Formato: NOME_GRUPO;DESCRICAO;TIPO;SERVIDORES
+# TIPO: authoritative, recursive, mixed;;;
+GRUPO1;DNS GRUPO1;mixed;ns01,ns02,ns03,etc
+GRUPO2;DNS GRUPO2;mixed;ip1,ip2,ip3,ip4,etc
+OPEN;DNS Recursivos Publicos;recursive;8.8.8.8,1.1.1.1,208.67.222.222
+OI;DNS OI;authoritative;ns01.oi.net.br,venus.oi.net.br
