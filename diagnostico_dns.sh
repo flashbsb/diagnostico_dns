@@ -19,6 +19,9 @@ CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
+# Cache de conectividade
+declare -A CONNECTIVITY_CACHE
+
 # Carregar configurações externas se existirem
 if [[ -f "script_config.cfg" ]]; then
     source script_config.cfg
@@ -299,11 +302,27 @@ validate_connectivity() {
     local server="$1"
     local timeout="$2"
     
+    # Verificar cache primeiro
+    if [[ -n "${CONNECTIVITY_CACHE[$server]}" ]]; then
+        # Já testamos este servidor, retornar resultado em cache
+        return ${CONNECTIVITY_CACHE[$server]}
+    fi
+    
+    log_color "$CYAN" "Testando conectividade com servidor: $server:53..." "info"
+    
     if nc -z -w "$timeout" "$server" 53 2>/dev/null; then
+        CONNECTIVITY_CACHE[$server]=0
         return 0
     else
+        CONNECTIVITY_CACHE[$server]=1
         return 1
     fi
+}
+
+# Função para limpar o cache de conectividade
+clear_connectivity_cache() {
+    CONNECTIVITY_CACHE=()
+    log_color "$GREEN" "Cache de conectividade limpo" "success"
 }
 
 run_dig_test() {
@@ -479,7 +498,6 @@ process_domain_tests() {
                     for server in "${servers[@]}"; do
                         # Validar conectividade se configurado
                         if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
-                        log_color "$CYAN" "Verificando conectividade com servidor: $server:53..." "info"
                             if ! validate_connectivity "$server" "$TIMEOUT"; then
                                 log_color "$RED" "ERRO: Servidor $server não responde na porta 53" "error"
                                 continue
@@ -569,6 +587,9 @@ main() {
     # Reiniciar contador de testes
     TEST_COUNTER=0
     
+    # Limpar cache de conectividade no início
+    clear_connectivity_cache
+    
     load_dns_groups
     generate_summary
     process_domain_tests
@@ -585,6 +606,7 @@ main() {
     fi
     log_color "$GREEN" "Total de testes executados: $(printf "%02d" $TEST_COUNTER)" "success"
     log_color "$GREEN" "Intervalo utilizado entre comandos: ${SLEEP}s" "success"
+    log_color "$GREEN" "Cache de conectividade: ${#CONNECTIVITY_CACHE[@]} servidores testados" "success"
     log_color "$GREEN" "https://github.com/flashbsb/diagnostico_dns"
 }
 
