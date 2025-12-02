@@ -6,7 +6,7 @@ Scripts para testes com o dig de forma iterativa e recusiva.
 
 ```bash
 # Instalar os pacotes
-apt update && apt install bc
+apt update && apt install bc wget
 
 # Baixar o script e arquivos de configuração
 wget -O diagnostico_dns.sh https://raw.githubusercontent.com/flashbsb/diagnostico_dns/refs/heads/main/diagnostico_dns.sh
