@@ -479,6 +479,7 @@ process_domain_tests() {
                     for server in "${servers[@]}"; do
                         # Validar conectividade se configurado
                         if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
+                        log_color "$CYAN" "Verificando conectividade com servidor: $server:53..." "info"
                             if ! validate_connectivity "$server" "$TIMEOUT"; then
                                 log_color "$RED" "ERRO: Servidor $server não responde na porta 53" "error"
                                 continue
