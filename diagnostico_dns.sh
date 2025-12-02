@@ -382,6 +382,7 @@ run_dig_test() {
     echo -e "${WHITE}Modo: ${YELLOW}$test_type${NC}"
     echo -e "${WHITE}Grupo: ${PURPLE}$group${NC}"
     echo -e "${WHITE}Tempo: ${CYAN}${duration}s${NC}"
+    echo -e "${WHITE}Comando: ${CYAN}dig $options @$server $domain $record_type${NC}"
     
     # Analisar e colorir a saída do dig
     colorize_dig_output "$dig_output" "$server" "$domain" "$record_type"
