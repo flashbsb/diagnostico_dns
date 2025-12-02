@@ -583,6 +583,7 @@ main() {
     fi
     log_color "$GREEN" "Total de testes executados: $(printf "%02d" $TEST_COUNTER)" "success"
     log_color "$GREEN" "Intervalo utilizado entre comandos: ${SLEEP}s" "success"
+    log_color "$GREEN" "https://github.com/flashbsb/diagnostico_dns"
 }
 
 main "$@"
