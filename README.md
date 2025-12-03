@@ -5,7 +5,7 @@
 
 > "Porque a culpa é sempre do DNS, mas agora você tem provas coloridas em HTML."
 
-Este é um script em **Bash** "levemente" superenjeriado para realizar testes de resolução de nomes em massa contra múltiplos servidores DNS. Ele ignora a sanidade mental de quem tenta debugar DNS na mão e automatiza consultas iterativas, recursivas e validação de portas.
+Este é um script em **Bash** "levemente" ajeitadinho para realizar testes de resolução de nomes em massa contra múltiplos servidores DNS. Ele ignora a sanidade mental de quem tenta debugar DNS na mão e automatiza consultas iterativas, recursivas e validação de portas.
 
 Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar para o chefe que o firewall está bloqueando a porta 53.
 
