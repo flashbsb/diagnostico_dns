@@ -2,8 +2,8 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.1 (Pretty Help Edition)
-# "Agora com um menu de ajuda que dá gosto de ler."
+# Versão: 9.3 (Bugfix: Answer Parsing)
+# "Agora sim, matemática correta."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
@@ -81,10 +81,10 @@ TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 
 show_help() {
     echo -e "${BLUE}==========================================================${NC}"
-    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - v9.1        ${NC}"
+    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - v9.3        ${NC}"
     echo -e "${BLUE}==========================================================${NC}"
     echo -e "Ferramenta de automação para testes massivos de resolução de nomes,"
-    echo -e "latência e conectividade. Porque testar na mão é coisa do passado."
+    echo -e "latência e conectividade. Valida respostas vazias e erros de protocolo."
     echo -e ""
     echo -e "${PURPLE}USO:${NC}"
     echo -e "  $0 [opções]"
@@ -92,8 +92,8 @@ show_help() {
     echo -e "${PURPLE}OPÇÕES DISPONÍVEIS:${NC}"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Caminho do CSV de domínios (Default: domains_tests.csv)"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Caminho do CSV de grupos DNS (Default: dns_groups.csv)"
-    echo -e "  ${GREEN}-l${NC}            Gerar LOG de texto (.log) estilo forense (Auditoria)"
-    echo -e "  ${GREEN}-y${NC}            Modo Silencioso (Não interativo / Aceita defaults)"
+    echo -e "  ${GREEN}-l${NC}            Gerar LOG de texto (.log) estilo forense"
+    echo -e "  ${GREEN}-y${NC}            Modo Silencioso (Não interativo)"
     echo -e "  ${GREEN}-h${NC}            Exibe este menu de ajuda"
     echo -e ""
     echo -e "${CYAN}----------------------------------------------------------${NC}"
@@ -172,12 +172,7 @@ log_cmd_result() {
 
 init_log_file() {
     [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
-    
-    # Captura informações do sistema
-    local sys_user=$(whoami)
-    local sys_host=$(hostname)
-    local sys_kernel=$(uname -r)
-    
+    local sys_user=$(whoami); local sys_host=$(hostname); local sys_kernel=$(uname -r)
     {
         echo "################################################################################"
         echo "# DNS DIAGNOSTIC TOOL - FORENSIC LOG"
@@ -284,15 +279,12 @@ validate_connectivity() {
         cmd_used="bash /dev/tcp/$server/53"
         check_port_bash "$server" 53 "$timeout"; status=$?
     fi
-    
     CONNECTIVITY_CACHE[$server]=$status
-    
     if [[ "$status" -ne 0 ]]; then
         log_entry "CRITICAL: Falha de Conectividade ($tool) -> $server:53 | CMD: $cmd_used | RET: $status"
     else
         log_entry "INFO: Conectividade OK ($tool) -> $server:53 | Port Open"
     fi
-    
     return $status
 }
 
@@ -306,9 +298,7 @@ print_verbose_debug() {
     echo -e "    │ 🎯 Alvo    : $target"
     echo -e "    │ 🖥️  Server  : $srv"
     echo -e "    │ ⏱️  Tempo   : ${dur}ms"
-    
     log_entry "[VERBOSE_DEBUG] $label - $msg - Server: $srv - Target: $target - Dur: ${dur}ms"
-    
     echo -e "${color}    └─────────────────────────────────────────────────────────────┘${NC}"
 }
 
@@ -620,7 +610,7 @@ process_tests() {
 
     echo -e "LEGENDA DE EXECUÇÃO:"
     echo -e "  ${GREEN}.${NC} = Sucesso (NOERROR)"
-    echo -e "  ${YELLOW}!${NC} = Alerta (NXDOMAIN / SERVFAIL)"
+    echo -e "  ${YELLOW}!${NC} = Alerta (NXDOMAIN / SERVFAIL / NOANSWER)"
     echo -e "  ${RED}x${NC} = Falha Crítica (TIMEOUT / REFUSED)"
     echo ""
     
@@ -724,6 +714,10 @@ process_tests() {
                             
                             log_cmd_result "TEST #$test_id ($mode)" "$cmd" "$output" "$dur"
                             
+                            # Extração de resposta vazia (FIXED: Usando sed para garantir apenas números)
+                            local answer_count=$(echo "$output" | grep -oE ", ANSWER: [0-9]+" | sed 's/[^0-9]*//g')
+                            [[ -z "$answer_count" ]] && answer_count=0
+                            
                             local status_txt="OK"; local css_class="status-ok"; local icon="✅"
                             if [[ $ret -ne 0 ]]; then
                                 status_txt="ERR:$ret"; css_class="status-fail"; icon="❌"; FAILED_TESTS+=1; echo -ne "${RED}x${NC}"
@@ -739,6 +733,14 @@ process_tests() {
                             elif echo "$output" | grep -q "connection timed out"; then
                                 status_txt="TIMEOUT"; css_class="status-fail"; icon="⏳"; FAILED_TESTS+=1; echo -ne "${RED}x${NC}"
                                 [[ "$VERBOSE" == "true" ]] && print_verbose_debug "FAIL" "TIMEOUT (Sem resposta)" "$srv" "$target ($rec)" "$output" "$dur"
+                            elif echo "$output" | grep -q "status: NOERROR"; then
+                                # Validação inteligente: NOERROR mas com 0 respostas = Warning
+                                if [[ "$answer_count" -eq 0 ]]; then
+                                    status_txt="NOANSWER"; css_class="status-warning"; icon="⚠️"; WARNING_TESTS+=1; echo -ne "${YELLOW}!${NC}"
+                                    [[ "$VERBOSE" == "true" ]] && print_verbose_debug "WARN" "NOANSWER (Resposta Vazia)" "$srv" "$target ($rec)" "$output" "$dur"
+                                else
+                                    SUCCESS_TESTS+=1; echo -ne "${GREEN}.${NC}"
+                                fi
                             else
                                 SUCCESS_TESTS+=1; echo -ne "${GREEN}.${NC}"
                             fi
