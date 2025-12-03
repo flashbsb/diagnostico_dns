@@ -1,23 +1,28 @@
 #!/bin/bash
 
 # ==============================================
-# SCRIPT DIAGNÓSTICO DNS - MODE INFO EDITION
-# Versão: 7.3
-# "Agora mostra o modo (iterative/recursive) no console."
+# SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
+# Versão: 8.1
+# "Todas as informações de volta no banner + Ping."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
 LOG_PREFIX="dnsdiag"
-TIMEOUT=2
+TIMEOUT=5
 VALIDATE_CONNECTIVITY=true
 GENERATE_HTML=true
-SLEEP=0.30
+SLEEP=0.05
 VERBOSE=true
 IP_VERSION="ipv4"
 MAX_RETRIES=1
 CHECK_BIND_VERSION=false
+
+# Configurações de Ping
+ENABLE_PING=true
+PING_COUNT=3       # Quantos pacotes enviar
+PING_TIMEOUT=1     # Timeout por pacote (segundos)
 
 # Arquivos Padrão
 FILE_DOMAINS="domains_tests.csv"
@@ -46,9 +51,12 @@ declare -i WARNING_TESTS=0
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.html"
+
+# Arquivos Temporários
 TEMP_HEADER="logs/temp_header_${TIMESTAMP}.html"
 TEMP_STATS="logs/temp_stats_${TIMESTAMP}.html"
 TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
+TEMP_PING="logs/temp_ping_${TIMESTAMP}.html"
 TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 
 # ==============================================
@@ -56,7 +64,7 @@ TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v7.3${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.1${NC}"
     echo -e "Uso: $0 [opções]"
     echo -e "Opções:"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
@@ -77,6 +85,7 @@ print_execution_summary() {
     echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
     echo -e "  🌐 Versão IP     : ${CYAN}${IP_VERSION}${NC}"
+    echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT)${NC}"
     echo ""
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
@@ -141,12 +150,10 @@ print_verbose_debug() {
         echo -e "${color}    ├───────────────────── DADOS DO PROTOCOLO ────────────────────┤${NC}"
         local headers=$(echo "$raw_output" | grep -E ";; ->>HEADER<<-" | head -1 | sed 's/;; //')
         local flags=$(echo "$raw_output" | grep -E ";; flags:" | head -1 | sed 's/;; //')
-        local msg_size=$(echo "$raw_output" | grep -E ";; MSG SIZE" | head -1 | sed 's/;; //')
         local error_line=$(echo "$raw_output" | grep -iE "connection timed out|network is unreachable|communications error|end of file" | head -1)
 
         [[ -n "$headers" ]] && echo -e "    │ 🏷️  Header  : $headers"
         [[ -n "$flags" ]]   && echo -e "    │ 🏳️  Flags   : $flags"
-        [[ -n "$msg_size" ]] && echo -e "    │ 📦 Size    : $msg_size"
         [[ -n "$error_line" ]] && echo -e "    │ ⚠️  SysMsg  : $error_line"
     fi
     echo -e "${color}    └─────────────────────────────────────────────────────────────┘${NC}"
@@ -156,7 +163,7 @@ print_verbose_debug() {
 # GERAÇÃO HTML
 # ==============================================
 
-init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_DETAILS"; }
+init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_DETAILS"; }
 
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
@@ -187,10 +194,12 @@ cat > "$TEMP_HEADER" << EOF
         .status-warning { color: #ffcc02; }
         .status-fail { color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }
         .time-badge { font-size: 0.75em; color: #808080; margin-left: 5px; }
-        .tech-section { margin-top: 50px; border-top: 3px dashed #3e3e42; padding-top: 20px; }
+        
+        .tech-section, .ping-section { margin-top: 50px; border-top: 3px dashed #3e3e42; padding-top: 20px; }
         .tech-controls { margin-bottom: 15px; }
         .btn-ctrl { background: #3e3e42; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 10px; font-size: 0.9em; }
         .btn-ctrl:hover { background: #007acc; }
+        
         details { background: #1e1e1e; margin-bottom: 10px; border: 1px solid #333; border-radius: 4px; }
         summary { cursor: pointer; padding: 10px; background: #252526; list-style: none; font-family: monospace; }
         summary:hover { background: #2a2d2e; }
@@ -199,6 +208,7 @@ cat > "$TEMP_HEADER" << EOF
         .log-id { background: #007acc; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
         pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
         .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
+        
         .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }
         .footer a { color: #007acc; text-decoration: none; transition: color 0.3s; }
         .footer a:hover { color: #4ec9b0; }
@@ -249,10 +259,23 @@ assemble_html() {
     cat "$TEMP_HEADER" >> "$HTML_FILE"
     cat "$TEMP_STATS" >> "$HTML_FILE"
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
+    
+    # Injeta a seção de PING se ela tiver conteúdo
+    if [[ -s "$TEMP_PING" ]]; then
+        cat >> "$HTML_FILE" << EOF
+        <div class="ping-section">
+             <h2>📡 Latência e Disponibilidade (ICMP)</h2>
+             <p style="color: #808080; margin-bottom: 20px;">Testes de ping realizados após a coleta DNS. Clique nos itens para ver detalhes.</p>
+             <table><thead><tr><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
+EOF
+        cat "$TEMP_PING" >> "$HTML_FILE"
+        echo "</tbody></table></div>" >> "$HTML_FILE"
+    fi
+
     cat >> "$HTML_FILE" << EOF
         <div class="tech-section">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2>🛠️ Logs Técnicos Detalhados</h2>
+                <h2>🛠️ Logs Técnicos Detalhados (DNS)</h2>
                 <div class="tech-controls">
                     <button class="btn-ctrl" onclick="toggleDetails(true)">➕ Expandir Todos</button>
                     <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
@@ -272,7 +295,7 @@ EOF
 </body>
 </html>
 EOF
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS"
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING"
 }
 
 # ==============================================
@@ -299,6 +322,87 @@ load_dns_groups() {
     done < "$FILE_GROUPS"
 }
 
+run_ping_diagnostics() {
+    [[ "$ENABLE_PING" != "true" ]] && return
+    
+    echo -e "\n${BLUE}===========================================${NC}"
+    echo -e "${BLUE}   INICIANDO TESTES DE LATÊNCIA (PING)   ${NC}"
+    echo -e "${BLUE}===========================================${NC}"
+
+    if ! command -v ping &> /dev/null; then
+        echo -e "${RED}ERRO: Comando 'ping' não encontrado. Pulando etapa.${NC}"
+        return
+    fi
+
+    declare -A CHECKED_IPS
+    local unique_ips=()
+    
+    # Coletar IPs únicos de todos os grupos
+    for grp in "${!DNS_GROUPS[@]}"; do
+        for ip in ${DNS_GROUPS[$grp]}; do
+            if [[ -z "${CHECKED_IPS[$ip]}" ]]; then
+                CHECKED_IPS[$ip]=1
+                unique_ips+=("$ip")
+            fi
+        done
+    done
+    
+    local ping_id=0
+    for ip in "${unique_ips[@]}"; do
+        ping_id=$((ping_id + 1))
+        echo -ne "   📡 Pinging ${CYAN}$ip${NC}... "
+        
+        # Executa Ping (Linux syntax)
+        local output
+        output=$(ping -c "$PING_COUNT" -W "$PING_TIMEOUT" "$ip" 2>&1)
+        local ret=$?
+        
+        # Extrai Loss e Avg Time
+        local loss=$(echo "$output" | grep -oP '\d+(?=% packet loss)' | head -1)
+        local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
+        
+        # Fallback se grep -P não existir (Mac/BSD) ou output for diferente
+        if [[ -z "$loss" ]]; then loss=$(echo "$output" | grep -o "[0-9.]*% packet loss" | awk '{print $1}' | tr -d '%'); fi
+        if [[ -z "$rtt_avg" ]]; then rtt_avg="N/A"; fi
+        
+        # Lógica de Cores e Status
+        local status_html=""
+        local class_html=""
+        local console_res=""
+        
+        if [[ "$ret" -ne 0 ]] || [[ "$loss" == "100" ]]; then
+            status_html="❌ DOWN"
+            class_html="status-fail"
+            loss="100"
+            console_res="${RED}DOWN (100% Loss)${NC}"
+        elif [[ "$loss" != "0" ]]; then
+            status_html="⚠️ UNSTABLE"
+            class_html="status-warning"
+            console_res="${YELLOW}${rtt_avg}ms (${loss}% Loss)${NC}"
+        else
+            status_html="✅ UP"
+            class_html="status-ok"
+            console_res="${GREEN}${rtt_avg}ms${NC}"
+        fi
+        
+        echo -e "$console_res"
+        
+        # Gera Linha HTML
+        echo "<tr>" >> "$TEMP_PING"
+        echo "<td><strong>$ip</strong></td>" >> "$TEMP_PING"
+        echo "<td class=\"$class_html\">$status_html</td>" >> "$TEMP_PING"
+        echo "<td>${loss}%</td>" >> "$TEMP_PING"
+        echo "<td>${rtt_avg}ms</td>" >> "$TEMP_PING"
+        echo "</tr>" >> "$TEMP_PING"
+        
+        # Adiciona detalhe técnico na linha seguinte (full width)
+        local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+        echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output bruto do ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
+        
+    done
+    echo ""
+}
+
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
 
@@ -319,7 +423,6 @@ process_tests() {
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
-        # --- MELHORIA: EXIBE TIPO DE REGISTRO E MODO DE TESTE NO CONSOLE ---
         echo -e "${CYAN}>> Domínio: ${WHITE}${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
 
         # ----------------------------------------------------
@@ -355,10 +458,9 @@ process_tests() {
         [[ $calc_count -eq 0 ]] && range_txt=""
         # ----------------------------------------------------
         
-        # Header com o range incluído
         echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $domain <span style=\"font-size:0.8em; color:#bbb; font-weight:normal; margin-left:10px;\">$range_txt</span></span><span class=\"badge\">$test_types</span></div>" >> "$TEMP_MATRIX"
         
-        local modes=("${calc_modes[@]}") # Reutiliza array calculado
+        local modes=("${calc_modes[@]}")
         
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
@@ -493,6 +595,7 @@ main() {
     write_html_header
     load_dns_groups
     process_tests
+    run_ping_diagnostics
     assemble_html
     
     echo -e "\n${GREEN}=== DIAGNÓSTICO CONCLUÍDO ===${NC}"
