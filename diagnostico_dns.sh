@@ -1,25 +1,25 @@
 #!/bin/bash
 
 # ==============================================
-# SCRIPT DIAGNÓSTICO DNS - FULL DASHBOARD
-# Versão: 6.1
-# "Agora com telemetria completa no start."
+# SCRIPT DIAGNÓSTICO DNS - COMPLETE PACKAGE
+# Versão: 7.1
+# "Dashboard completo restaurado + Debug detalhado."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
 LOG_PREFIX="dnsdiag"
-TIMEOUT=5
+TIMEOUT=2
 VALIDATE_CONNECTIVITY=true
 GENERATE_HTML=true
-SLEEP=0.50
-VERBOSE=true
+SLEEP=0.20
+VERBOSE=true  # SE TRUE: Mostra bloco detalhado de debug no terminal em falhas
 IP_VERSION="ipv4"
-MAX_RETRIES=1          # Quantas vezes tentar se o dig falhar (implementação futura/logica de retry)
-CHECK_BIND_VERSION=false # Tentar descobrir versão do BIND (chaos txt)
+MAX_RETRIES=2
+CHECK_BIND_VERSION=false
 
-# Arquivos Padrão (Podem ser alterados via -n ou -g)
+# Arquivos Padrão
 FILE_DOMAINS="domains_tests.csv"
 FILE_GROUPS="dns_groups.csv"
 
@@ -39,32 +39,29 @@ declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
 declare -i WARNING_TESTS=0
 
-# Carregar config externa (se existir)
+# Carregar config externa
 [[ -f "script_config.cfg" ]] && source script_config.cfg
 
-# Setup Arquivos de Log
+# Setup Arquivos
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.html"
-
 TEMP_HEADER="logs/temp_header_${TIMESTAMP}.html"
 TEMP_STATS="logs/temp_stats_${TIMESTAMP}.html"
 TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
 TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 
 # ==============================================
-# HELP & BANNER
+# HELP & BANNER (Restaurado e Completo)
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v6.1${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v7.1${NC}"
     echo -e "Uso: $0 [opções]"
-    echo ""
     echo -e "Opções:"
-    echo -e "  ${GREEN}-n <arquivo>${NC}   Define o arquivo de domínios/testes (Padrão: domains_tests.csv)"
-    echo -e "  ${GREEN}-g <arquivo>${NC}   Define o arquivo de grupos DNS (Padrão: dns_groups.csv)"
-    echo -e "  ${GREEN}-h${NC}            Exibe esta ajuda e sai"
-    echo ""
+    echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
+    echo -e "  ${GREEN}-g <arquivo>${NC}   Arquivo de grupos (Default: dns_groups.csv)"
+    echo -e "  ${GREEN}-h${NC}            Ajuda"
 }
 
 print_execution_summary() {
@@ -80,12 +77,9 @@ print_execution_summary() {
     echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
     echo -e "  🌐 Versão IP     : ${CYAN}${IP_VERSION}${NC}"
-    echo -e "  🔄 Max Retries   : ${CYAN}${MAX_RETRIES}${NC}"
     echo ""
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
-    echo -e "  🕵️  Check Version : ${CYAN}${CHECK_BIND_VERSION}${NC}"
-    # Mostra apenas os primeiros 40 chars das options para não quebrar linha feio
     echo -e "  🛠️  Dig Options   : ${GRAY}${DEFAULT_DIG_OPTIONS:0:40}...${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
@@ -95,7 +89,7 @@ print_execution_summary() {
 }
 
 # ==============================================
-# FUNÇÕES DE INFRAESTRUTURA
+# INFRA & DEBUG PRINT
 # ==============================================
 
 check_port_bash() {
@@ -106,7 +100,6 @@ check_port_bash() {
 validate_connectivity() {
     local server="$1"
     local timeout="${2:-$TIMEOUT}"
-    
     [[ -n "${CONNECTIVITY_CACHE[$server]}" ]] && return ${CONNECTIVITY_CACHE[$server]}
     
     local status=1
@@ -117,21 +110,57 @@ validate_connectivity() {
         check_port_bash "$server" 53 "$timeout"
         status=$?
     fi
-
     CONNECTIVITY_CACHE[$server]=$status
     return $status
 }
 
+# FUNÇÃO DE DEBUG RICO (Mantida da v7.0)
+print_verbose_debug() {
+    local type="$1"       # FAIL, WARN, INFO
+    local msg="$2"        # Mensagem principal
+    local srv="$3"        # Servidor
+    local target="$4"     # Alvo
+    local raw_output="$5" # Output do DIG
+    local dur="$6"        # Duração
+
+    local color=$NC
+    local label=""
+    
+    case "$type" in
+        "FAIL") color=$RED; label="FALHA CRÍTICA" ;;
+        "WARN") color=$YELLOW; label="ALERTA/ATENÇÃO" ;;
+        *) color=$CYAN; label="INFO" ;;
+    esac
+
+    echo -e "\n${color}    ┌─────────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${color}    │ [DEBUG] $label: $msg ${NC}"
+    echo -e "${color}    ├─────────────────────────────────────────────────────────────┤${NC}"
+    echo -e "    │ 🎯 Alvo    : $target"
+    echo -e "    │ 🖥️  Server  : $srv"
+    echo -e "    │ ⏱️  Tempo   : ${dur}ms"
+    
+    if [[ -n "$raw_output" ]]; then
+        echo -e "${color}    ├───────────────────── DADOS DO PROTOCOLO ────────────────────┤${NC}"
+        
+        # Filtra Headers, Flags e Tamanho
+        local headers=$(echo "$raw_output" | grep -E ";; ->>HEADER<<-" | head -1 | sed 's/;; //')
+        local flags=$(echo "$raw_output" | grep -E ";; flags:" | head -1 | sed 's/;; //')
+        local msg_size=$(echo "$raw_output" | grep -E ";; MSG SIZE" | head -1 | sed 's/;; //')
+        local error_line=$(echo "$raw_output" | grep -iE "connection timed out|network is unreachable|communications error|end of file" | head -1)
+
+        [[ -n "$headers" ]] && echo -e "    │ 🏷️  Header  : $headers"
+        [[ -n "$flags" ]]   && echo -e "    │ 🏳️  Flags   : $flags"
+        [[ -n "$msg_size" ]] && echo -e "    │ 📦 Size    : $msg_size"
+        [[ -n "$error_line" ]] && echo -e "    │ ⚠️  SysMsg  : $error_line"
+    fi
+    echo -e "${color}    └─────────────────────────────────────────────────────────────┘${NC}"
+}
+
 # ==============================================
-# GERAÇÃO DE HTML
+# GERAÇÃO HTML (Blocos)
 # ==============================================
 
-init_html_parts() {
-    > "$TEMP_HEADER"
-    > "$TEMP_STATS"
-    > "$TEMP_MATRIX"
-    > "$TEMP_DETAILS"
-}
+init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_DETAILS"; }
 
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
@@ -143,36 +172,29 @@ cat > "$TEMP_HEADER" << EOF
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
-        
         h1 { color: #ce9178; text-align: center; margin-bottom: 20px; }
         .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
         .card { background: #252526; padding: 15px; border-radius: 6px; text-align: center; border-bottom: 3px solid #444; }
         .card-num { font-size: 2em; font-weight: bold; display: block; }
         .card-label { font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; color: #888; }
-        
         .st-total { border-color: #007acc; } .st-total .card-num { color: #007acc; }
         .st-ok { border-color: #4ec9b0; } .st-ok .card-num { color: #4ec9b0; }
         .st-warn { border-color: #ffcc02; } .st-warn .card-num { color: #ffcc02; }
         .st-fail { border-color: #f44747; } .st-fail .card-num { color: #f44747; }
-
         .domain-block { background: #252526; margin-bottom: 20px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); overflow: hidden; }
         .domain-header { background: #333; padding: 10px 15px; font-weight: bold; border-left: 5px solid #007acc; display: flex; justify-content: space-between; align-items: center; }
-        
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #3e3e42; font-size: 0.9em; }
         th { background: #2d2d30; color: #dcdcaa; }
-        
         .cell-link { text-decoration: none; display: block; width: 100%; height: 100%; }
         .status-ok { color: #4ec9b0; }
         .status-warning { color: #ffcc02; }
         .status-fail { color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }
         .time-badge { font-size: 0.75em; color: #808080; margin-left: 5px; }
-        
         .tech-section { margin-top: 50px; border-top: 3px dashed #3e3e42; padding-top: 20px; }
         .tech-controls { margin-bottom: 15px; }
         .btn-ctrl { background: #3e3e42; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 10px; font-size: 0.9em; }
         .btn-ctrl:hover { background: #007acc; }
-        
         details { background: #1e1e1e; margin-bottom: 10px; border: 1px solid #333; border-radius: 4px; }
         summary { cursor: pointer; padding: 10px; background: #252526; list-style: none; font-family: monospace; }
         summary:hover { background: #2a2d2e; }
@@ -181,11 +203,9 @@ cat > "$TEMP_HEADER" << EOF
         .log-id { background: #007acc; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
         pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
         .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
-        
         .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }
         .footer a { color: #007acc; text-decoration: none; transition: color 0.3s; }
         .footer a:hover { color: #4ec9b0; }
-        
         .scroll-top { position: fixed; bottom: 20px; right: 20px; background: #007acc; color: white; padding: 10px; border-radius: 50%; text-decoration: none; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
     </style>
     <script>
@@ -230,12 +250,10 @@ EOF
 
 assemble_html() {
     generate_stats_block
-    
     cat "$TEMP_HEADER" >> "$HTML_FILE"
     cat "$TEMP_STATS" >> "$HTML_FILE"
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
-    
-cat >> "$HTML_FILE" << EOF
+    cat >> "$HTML_FILE" << EOF
         <div class="tech-section">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h2>🛠️ Logs Técnicos Detalhados</h2>
@@ -246,10 +264,8 @@ cat >> "$HTML_FILE" << EOF
             </div>
             <p style="color: #808080; margin-bottom: 20px;">Clique nos itens da matriz (acima) ou use os botões para ver o output bruto.</p>
 EOF
-
     cat "$TEMP_DETAILS" >> "$HTML_FILE"
-    
-cat >> "$HTML_FILE" << EOF
+    cat >> "$HTML_FILE" << EOF
         </div>
         <div class="footer">
             Gerado automaticamente por <strong>DNS Diagnostic Tool</strong><br>
@@ -260,12 +276,11 @@ cat >> "$HTML_FILE" << EOF
 </body>
 </html>
 EOF
-
     rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS"
 }
 
 # ==============================================
-# LOGIC CORE
+# LÓGICA PRINCIPAL (CORE)
 # ==============================================
 
 load_dns_groups() {
@@ -274,11 +289,7 @@ load_dns_groups() {
     declare -gA DNS_GROUP_TYPE
     declare -gA DNS_GROUP_TIMEOUT
     
-    if [[ ! -f "$FILE_GROUPS" ]]; then 
-        echo -e "${RED}ERRO CRÍTICO: Arquivo de grupos '$FILE_GROUPS' não encontrado!${NC}"
-        echo "Use -g <arquivo> para especificar um caminho correto ou -h para ajuda."
-        exit 1
-    fi
+    [[ ! -f "$FILE_GROUPS" ]] && { echo -e "${RED}ERRO: $FILE_GROUPS não encontrado!${NC}"; exit 1; }
 
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
@@ -293,11 +304,7 @@ load_dns_groups() {
 }
 
 process_tests() {
-    if [[ ! -f "$FILE_DOMAINS" ]]; then 
-        echo -e "${RED}ERRO CRÍTICO: Arquivo de testes '$FILE_DOMAINS' não encontrado!${NC}"
-        echo "Use -n <arquivo> para especificar um caminho correto ou -h para ajuda."
-        exit 1
-    fi
+    [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
 
     echo -e "LEGENDA DE EXECUÇÃO:"
     echo -e "  ${GREEN}.${NC} = Sucesso (NOERROR)"
@@ -316,7 +323,7 @@ process_tests() {
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
-        echo -e "${CYAN}>> Domínio: ${WHITE}${domain}${NC}"
+        echo -e "${CYAN}>> Domínio: ${WHITE}${domain} ${PURPLE}[${record_types}]${NC}"
         
         echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $domain</span><span class=\"badge\">$test_types</span></div>" >> "$TEMP_MATRIX"
         
@@ -352,24 +359,26 @@ process_tests() {
                             TOTAL_TESTS+=1
                             local unique_id="test_${test_id}"
                             
-                            # Validar Conectividade
+                            # === VALIDAÇÃO CONEXÃO ===
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1
+                                    # HTML
                                     echo "<td><a href=\"#$unique_id\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
-                                    echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"color:#f44747\">FALHA CONEXÃO</span> $srv</summary><pre>Porta 53 inacessível.</pre></details>" >> "$TEMP_DETAILS"
+                                    echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"color:#f44747\">FALHA CONEXÃO</span> $srv</summary><pre>Porta 53 inacessível (TCP/UDP).</pre></details>" >> "$TEMP_DETAILS"
+                                    
+                                    # CONSOLE
                                     echo -ne "${RED}x${NC}"
+                                    if [[ "$VERBOSE" == "true" ]]; then
+                                        print_verbose_debug "FAIL" "Servidor não responde na porta 53" "$srv" "$target ($rec)" "" "N/A"
+                                    fi
                                     continue
                                 fi
                             fi
                             
-                            # Check Version (Se ativado)
+                            # === EXECUÇÃO DIG ===
                             local bind_version_info=""
-                            if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
-                                # Apenas um dig extra rapidinho, sem afetar o fluxo principal visualmente
-                                local bv=$(dig +short +time=1 +tries=1 @$srv chaos txt version.bind 2>/dev/null)
-                                [[ -n "$bv" ]] && bind_version_info=" (Ver: $bv)"
-                            fi
+                            [[ "$CHECK_BIND_VERSION" == "true" ]] && bind_version_info=" (Ver: $(dig +short +time=1 @$srv chaos txt version.bind 2>/dev/null))"
                             
                             local opts
                             [[ "$mode" == "iterative" ]] && opts="$DEFAULT_DIG_OPTIONS" || opts="$RECURSIVE_DIG_OPTIONS"
@@ -387,33 +396,43 @@ process_tests() {
                             local css_class="status-ok"
                             local icon="✅"
                             
+                            # === ANÁLISE DE RESULTADOS ===
                             if [[ $ret -ne 0 ]]; then
                                 status_txt="ERR:$ret"; css_class="status-fail"; icon="❌"; FAILED_TESTS+=1
                                 echo -ne "${RED}x${NC}"
+                                [[ "$VERBOSE" == "true" ]] && print_verbose_debug "FAIL" "Erro de Execução DIG (Code $ret)" "$srv" "$target ($rec)" "$output" "$dur"
+
                             elif echo "$output" | grep -q "status: SERVFAIL"; then
                                 status_txt="SERVFAIL"; css_class="status-warning"; icon="⚠️"; WARNING_TESTS+=1
                                 echo -ne "${YELLOW}!${NC}"
+                                [[ "$VERBOSE" == "true" ]] && print_verbose_debug "WARN" "SERVFAIL (Falha no servidor)" "$srv" "$target ($rec)" "$output" "$dur"
+
                             elif echo "$output" | grep -q "status: NXDOMAIN"; then
                                 status_txt="NXDOMAIN"; css_class="status-warning"; icon="🔸"; WARNING_TESTS+=1
                                 echo -ne "${YELLOW}!${NC}"
+                                # NXDOMAIN não gera debug verbose pois pode ser comportamento esperado
+
                             elif echo "$output" | grep -q "status: REFUSED"; then
                                 status_txt="REFUSED"; css_class="status-fail"; icon="⛔"; FAILED_TESTS+=1
                                 echo -ne "${RED}x${NC}"
+                                [[ "$VERBOSE" == "true" ]] && print_verbose_debug "FAIL" "REFUSED (Acesso negado/ACL)" "$srv" "$target ($rec)" "$output" "$dur"
+
                             elif echo "$output" | grep -q "connection timed out"; then
                                 status_txt="TIMEOUT"; css_class="status-fail"; icon="⏳"; FAILED_TESTS+=1
                                 echo -ne "${RED}x${NC}"
+                                [[ "$VERBOSE" == "true" ]] && print_verbose_debug "FAIL" "TIMEOUT (Sem resposta)" "$srv" "$target ($rec)" "$output" "$dur"
+
                             else
                                 SUCCESS_TESTS+=1
                                 echo -ne "${GREEN}.${NC}"
                             fi
                             
+                            # Escrita HTML
                             echo "<td><a href=\"#$unique_id\" class=\"cell-link $css_class\">$icon $status_txt <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
-                            
                             local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                             local log_color_style=""
                             [[ "$css_class" == "status-fail" ]] && log_color_style="color:#f44747"
                             [[ "$css_class" == "status-warning" ]] && log_color_style="color:#ffcc02"
-                            
                             echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"$log_color_style\">$status_txt</span> <strong>$srv</strong> &rarr; $target ($rec) <span class=\"badge\">${dur}ms</span>$bind_version_info</summary><pre>$cmd"$'\n\n'"$safe_output</pre></details>" >> "$TEMP_DETAILS"
                             
                             [[ "$SLEEP" != "0" ]] && sleep "$SLEEP"
@@ -430,10 +449,6 @@ process_tests() {
     done < "$FILE_DOMAINS"
 }
 
-# ==============================================
-# MAIN EXECUTION
-# ==============================================
-
 main() {
     while getopts ":n:g:h" opt; do
         case ${opt} in
@@ -445,9 +460,7 @@ main() {
     done
 
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
-    
     print_execution_summary
-    
     init_html_parts
     write_html_header
     load_dns_groups
@@ -455,10 +468,7 @@ main() {
     assemble_html
     
     echo -e "\n${GREEN}=== DIAGNÓSTICO CONCLUÍDO ===${NC}"
-    echo "Total: $TOTAL_TESTS"
-    echo "Sucesso: $SUCCESS_TESTS"
-    echo "Alertas: $WARNING_TESTS"
-    echo "Falhas: $FAILED_TESTS"
+    echo "Total: $TOTAL_TESTS | Sucesso: $SUCCESS_TESTS | Alertas: $WARNING_TESTS | Falhas: $FAILED_TESTS"
     echo -e "Relatório Gerado: ${CYAN}$HTML_FILE${NC}"
 }
 
