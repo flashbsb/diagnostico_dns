@@ -1,5 +1,3 @@
------
-
 ````markdown
 # 🔍 Diagnóstico DNS Avançado (Bash Edition)
 
@@ -120,8 +118,6 @@ O script criará uma pasta `logs/` (se não existir) e cuspirá os resultados l�
 
 Faça o que quiser. Se quebrar sua produção, eu nunca estive aqui.
 Mas se ajudar, pague um café. ☕
-
------
 
 *Mantido por [flashbsb](https://www.google.com/search?q=https://github.com/flashbsb)*
 
