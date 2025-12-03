@@ -1,6 +1,9 @@
-# Formato: NOME_GRUPO;DESCRICAO;TIPO;SERVIDORES
-# TIPO: authoritative, recursive, mixed;;;
-GRUPO1;DNS GRUPO1;mixed;ns01,ns02,ns03,etc
-GRUPO2;DNS GRUPO2;mixed;ip1,ip2,ip3,ip4,etc
-OPEN;DNS Recursivos Publicos;recursive;8.8.8.8,1.1.1.1,208.67.222.222
-OI;DNS OI;authoritative;ns01.oi.net.br,venus.oi.net.br
+# Formato: NOME_GRUPO;DESCRICAO;TIPO;TIMEOUT;SERVIDORES
+# TIPO: authoritative, recursive, mixed
+# Separar servidores por virgula
+TLB1;DNS TLB Primario;mixed;2;177.15.130.101,177.15.130.102
+TLB2;DNS TLB Secundario;mixed;2;177.15.68.10,177.15.68.11
+MOTOROLA;DNS Motorola;mixed;2;177.14.160.97,177.15.88.35,177.15.88.33
+OPEN;DNS Recursivos Publicos;recursive;2;8.8.8.8,1.1.1.1,208.67.222.222
+OI;DNS OI Autoritativo;authoritative;2;ns01.oi.net.br,venus.oi.net.br
+GLBOI;DNS GLBOI;authoritative;2;dfscnd-cglb14a.oi.net.br,dfsigd-cglb14a.oi.net.br
