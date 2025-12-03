@@ -2,8 +2,8 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 8.6 (Time Tracking + Sleep Calculation)
-# "Cronômetro ligado: saiba exatamente quanto tempo você esperou."
+# Versão: 8.7 (Smart Error Logging)
+# "Falha de conexão? Eu aviso uma vez só."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO (Incorporadas do script_config.cfg) ---
@@ -57,6 +57,8 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 declare -A CONNECTIVITY_CACHE
+# Novo array para controlar se o erro de HTML já foi gerado
+declare -A HTML_CONN_ERR_LOGGED 
 declare -i TOTAL_TESTS=0
 declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
@@ -81,7 +83,7 @@ TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.6${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.7${NC}"
     echo -e "Uso: $0 [opções]"
     echo -e "Opções:"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
@@ -238,7 +240,6 @@ cat > "$TEMP_HEADER" << EOF
         .st-warn { border-color: #ffcc02; } .st-warn .card-num { color: #ffcc02; }
         .st-fail { border-color: #f44747; } .st-fail .card-num { color: #f44747; }
         
-        /* Nova classe para o card de tempo que ocupa largura total */
         .timing-strip { background: #252526; padding: 10px; border-radius: 6px; border-left: 5px solid #666; margin-bottom: 30px; display: flex; justify-content: space-around; font-family: monospace; }
         .timing-item { text-align: center; }
         .timing-label { display: block; font-size: 0.8em; color: #888; margin-bottom: 3px; }
@@ -271,6 +272,10 @@ cat > "$TEMP_HEADER" << EOF
         .log-id { background: #007acc; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
         pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
         .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
+        
+        /* Classe especial para bloco de erro consolidado */
+        .conn-error-block summary { background: #2d0e0e; border-left: 3px solid #f44747; }
+        .conn-error-block summary:hover { background: #3d1414; }
         
         .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }
         .footer a { color: #007acc; text-decoration: none; transition: color 0.3s; }
@@ -572,19 +577,32 @@ process_tests() {
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1))
                             TOTAL_TESTS+=1
-                            local unique_id="test_${test_id}"
                             
+                            # === VALIDAÇÃO CONEXÃO ===
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1
-                                    echo "<td><a href=\"#$unique_id\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
-                                    echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"color:#f44747\">FALHA CONEXÃO</span> $srv</summary><pre>Porta 53 inacessível (TCP/UDP).</pre></details>" >> "$TEMP_DETAILS"
+                                    
+                                    # Gera um ID único para o ERRO deste IP (substitui pontos por underscore)
+                                    local conn_err_id="conn_err_${srv//./_}"
+                                    
+                                    # MATRIZ: Aponta sempre para o mesmo ID
+                                    echo "<td><a href=\"#$conn_err_id\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
+                                    
+                                    # LOGS: Só grava se ainda não foi gravado para este IP
+                                    if [[ -z "${HTML_CONN_ERR_LOGGED[$srv]}" ]]; then
+                                        echo "<details id=\"$conn_err_id\" class=\"conn-error-block\"><summary class=\"log-header\" style=\"color:#f44747\"><span class=\"log-id\">GLOBAL</span> <strong>FALHA DE CONEXÃO</strong> - Servidor: $srv</summary><pre style=\"border-top:1px solid #f44747; color:#f44747\">ERRO CRÍTICO DE CONECTIVIDADE:\n\nO servidor $srv não respondeu na porta 53 (TCP/UDP) durante o teste inicial.\nO script abortou todos os testes subsequentes para este servidor para economizar tempo.\n\nTimeout definido: ${DNS_GROUP_TIMEOUT[$grp]}s</pre></details>" >> "$TEMP_DETAILS"
+                                        HTML_CONN_ERR_LOGGED[$srv]=1
+                                    fi
+                                    
                                     echo -ne "${RED}x${NC}"
                                     if [[ "$VERBOSE" == "true" ]]; then print_verbose_debug "FAIL" "Servidor não responde na porta 53" "$srv" "$target ($rec)" "" "N/A"; fi
                                     continue
                                 fi
                             fi
                             
+                            # === SE PASSOU DA CONEXÃO, SEGUE NORMAL ===
+                            local unique_id="test_${test_id}"
                             local bind_version_info=""
                             [[ "$CHECK_BIND_VERSION" == "true" ]] && bind_version_info=" (Ver: $(dig +short +time=1 @$srv chaos txt version.bind 2>/dev/null))"
                             local opts
