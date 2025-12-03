@@ -2,8 +2,8 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.3 (Bugfix: Answer Parsing)
-# "Agora sim, matemática correta."
+# Versão: 9.4 (Interactive UI Edition)
+# "Agora com janelas flutuantes. Quase um software pago."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
@@ -74,6 +74,7 @@ TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
 TEMP_PING="logs/temp_ping_${TIMESTAMP}.html"
 TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
+TEMP_MODAL="logs/temp_modal_${TIMESTAMP}.html" # Novo
 
 # ==============================================
 # HELP & BANNER
@@ -81,10 +82,10 @@ TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 
 show_help() {
     echo -e "${BLUE}==========================================================${NC}"
-    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - v9.3        ${NC}"
+    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - v9.4        ${NC}"
     echo -e "${BLUE}==========================================================${NC}"
     echo -e "Ferramenta de automação para testes massivos de resolução de nomes,"
-    echo -e "latência e conectividade. Valida respostas vazias e erros de protocolo."
+    echo -e "latência e conectividade. Interface HTML interativa."
     echo -e ""
     echo -e "${PURPLE}USO:${NC}"
     echo -e "  $0 [opções]"
@@ -306,7 +307,7 @@ print_verbose_debug() {
 # GERAÇÃO HTML
 # ==============================================
 
-init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; }
+init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; > "$TEMP_MODAL"; }
 
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
@@ -319,6 +320,18 @@ cat > "$TEMP_HEADER" << EOF
         body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
         h1 { color: #ce9178; text-align: center; margin-bottom: 20px; }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(2px); }
+        .modal-content { background-color: #252526; margin: 5% auto; padding: 0; border: 1px solid #444; width: 80%; max-width: 1000px; border-radius: 8px; box-shadow: 0 0 30px rgba(0,0,0,0.7); animation: slideDown 0.3s; }
+        @keyframes slideDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header { padding: 15px 20px; background: #333; border-bottom: 1px solid #444; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
+        .close-btn { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; transition: 0.2s; line-height: 1; }
+        .close-btn:hover { color: #f44747; }
+        #modalTitle { font-weight: bold; font-family: monospace; color: #9cdcfe; font-size: 1.1em; }
+        #modalText { font-family: 'Consolas', 'Courier New', monospace; white-space: pre-wrap; color: #d4d4d4; background: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #333; font-size: 0.9em; margin: 0; }
+        
         .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 10px; }
         .card { background: #252526; padding: 15px; border-radius: 6px; text-align: center; border-bottom: 3px solid #444; }
         .card-num { font-size: 2em; font-weight: bold; display: block; }
@@ -338,7 +351,8 @@ cat > "$TEMP_HEADER" << EOF
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #3e3e42; font-size: 0.9em; }
         th { background: #2d2d30; color: #dcdcaa; }
-        .cell-link { text-decoration: none; display: block; width: 100%; height: 100%; }
+        .cell-link { text-decoration: none; display: block; width: 100%; height: 100%; cursor: pointer; }
+        .cell-link:hover { background: rgba(255,255,255,0.05); }
         .status-ok { color: #4ec9b0; }
         .status-warning { color: #ffcc02; }
         .status-fail { color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }
@@ -374,6 +388,45 @@ cat > "$TEMP_HEADER" << EOF
             const elements = document.querySelectorAll('details');
             elements.forEach(el => el.open = state);
         }
+        
+        function showLog(id) {
+            // Pega o elemento details original
+            var logDetails = document.getElementById(id);
+            if (!logDetails) {
+                console.error("Log ID not found: " + id);
+                return;
+            }
+            
+            // Extrai o conteudo
+            var rawText = logDetails.querySelector('pre').innerHTML;
+            var headerText = logDetails.querySelector('summary').innerText;
+            
+            // Popula o modal
+            document.getElementById('modalTitle').innerText = headerText;
+            document.getElementById('modalText').innerHTML = rawText;
+            
+            // Abre o modal
+            document.getElementById('logModal').style.display = "block";
+        }
+        
+        function closeModal() {
+            document.getElementById('logModal').style.display = "none";
+        }
+        
+        // Fecha se clicar fora da caixa
+        window.onclick = function(event) {
+            var modal = document.getElementById('logModal');
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+        
+        // Tecla ESC para fechar
+        document.addEventListener('keydown', function(event){
+            if(event.key === "Escape"){
+                closeModal();
+            }
+        });
     </script>
 </head>
 <body>
@@ -453,12 +506,33 @@ cat > "$TEMP_CONFIG" << EOF
 EOF
 }
 
+# Gera a estrutura oculta do Modal
+generate_modal_html() {
+cat > "$TEMP_MODAL" << EOF
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="modalTitle">Detalhes do Log</div>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <pre id="modalText"></pre>
+            </div>
+        </div>
+    </div>
+EOF
+}
+
 assemble_html() {
     generate_stats_block
     generate_timing_html
     generate_config_html
+    generate_modal_html
     
     cat "$TEMP_HEADER" >> "$HTML_FILE"
+    # Injeta o modal logo após o header
+    cat "$TEMP_MODAL" >> "$HTML_FILE"
+    
     cat "$TEMP_STATS" >> "$HTML_FILE"
     cat "$TEMP_TIMING" >> "$HTML_FILE" 
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
@@ -484,7 +558,7 @@ EOF
                     <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
                 </div>
             </div>
-            <p style="color: #808080; margin-bottom: 20px;">Clique nos itens da matriz (acima) ou use os botões para ver o output bruto.</p>
+            <p style="color: #808080; margin-bottom: 20px;">Estes são os logs brutos usados pelos popups acima. Útil para busca (Ctrl+F) ou auditoria completa.</p>
 EOF
     cat "$TEMP_DETAILS" >> "$HTML_FILE"
     cat >> "$HTML_FILE" << EOF
@@ -498,7 +572,7 @@ EOF
 </body>
 </html>
 EOF
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING"
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL"
 }
 
 # ==============================================
@@ -684,7 +758,8 @@ process_tests() {
                                     FAILED_TESTS+=1
                                     
                                     local conn_err_id="conn_err_${srv//./_}"
-                                    echo "<td><a href=\"#$conn_err_id\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
+                                    # [ALTERADO] Agora usa onclick para abrir modal, mesmo no erro
+                                    echo "<td><a href=\"#\" onclick=\"showLog('$conn_err_id'); return false;\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
                                     
                                     if [[ -z "${HTML_CONN_ERR_LOGGED[$srv]}" ]]; then
                                         echo "<details id=\"$conn_err_id\" class=\"conn-error-block\"><summary class=\"log-header\" style=\"color:#f44747\"><span class=\"log-id\">GLOBAL</span> <strong>FALHA DE CONEXÃO</strong> - Servidor: $srv</summary><pre style=\"border-top:1px solid #f44747; color:#f44747\">ERRO CRÍTICO DE CONECTIVIDADE:\n\nO servidor $srv não respondeu na porta 53 (TCP/UDP) durante o teste inicial.\nO script abortou todos os testes subsequentes para este servidor para economizar tempo.\n\nTimeout definido: ${DNS_GROUP_TIMEOUT[$grp]}s</pre></details>" >> "$TEMP_DETAILS"
@@ -714,7 +789,7 @@ process_tests() {
                             
                             log_cmd_result "TEST #$test_id ($mode)" "$cmd" "$output" "$dur"
                             
-                            # Extração de resposta vazia (FIXED: Usando sed para garantir apenas números)
+                            # Extração de resposta vazia
                             local answer_count=$(echo "$output" | grep -oE ", ANSWER: [0-9]+" | sed 's/[^0-9]*//g')
                             [[ -z "$answer_count" ]] && answer_count=0
                             
@@ -734,7 +809,6 @@ process_tests() {
                                 status_txt="TIMEOUT"; css_class="status-fail"; icon="⏳"; FAILED_TESTS+=1; echo -ne "${RED}x${NC}"
                                 [[ "$VERBOSE" == "true" ]] && print_verbose_debug "FAIL" "TIMEOUT (Sem resposta)" "$srv" "$target ($rec)" "$output" "$dur"
                             elif echo "$output" | grep -q "status: NOERROR"; then
-                                # Validação inteligente: NOERROR mas com 0 respostas = Warning
                                 if [[ "$answer_count" -eq 0 ]]; then
                                     status_txt="NOANSWER"; css_class="status-warning"; icon="⚠️"; WARNING_TESTS+=1; echo -ne "${YELLOW}!${NC}"
                                     [[ "$VERBOSE" == "true" ]] && print_verbose_debug "WARN" "NOANSWER (Resposta Vazia)" "$srv" "$target ($rec)" "$output" "$dur"
@@ -745,7 +819,9 @@ process_tests() {
                                 SUCCESS_TESTS+=1; echo -ne "${GREEN}.${NC}"
                             fi
                             
-                            echo "<td><a href=\"#$unique_id\" class=\"cell-link $css_class\">$icon $status_txt <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            # [ALTERADO] Aqui acontece a mágica do clique (onclick=showLog)
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $css_class\">$icon $status_txt <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            
                             local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                             local log_color_style=""
                             [[ "$css_class" == "status-fail" ]] && log_color_style="color:#f44747"
