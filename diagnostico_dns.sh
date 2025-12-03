@@ -2,16 +2,13 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 8.9 (Log Edition)
-# "Agora com provas em .txt para quem não gosta de HTML"
+# Versão: 9.1 (Pretty Help Edition)
+# "Agora com um menu de ajuda que dá gosto de ler."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
 
-# Opções padrão do DIG (Iterativo/Authoritative)
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
-
-# Opções para testes Recursivos
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
 
 # Prefixo e Arquivos
@@ -20,20 +17,20 @@ FILE_DOMAINS="domains_tests.csv"
 FILE_GROUPS="dns_groups.csv"
 
 # Configurações de Comportamento
-TIMEOUT=5                     # Timeout global de conexão (segundos)
-VALIDATE_CONNECTIVITY="true"  # Validar porta 53 antes do dig?
+TIMEOUT=5                     
+VALIDATE_CONNECTIVITY="true"  
 GENERATE_HTML="true"
-GENERATE_LOG_TEXT="false"     # Default: não gerar log de texto (ativado com -l)
-SLEEP=0.05                    # Intervalo entre testes
-VERBOSE="false"               # Exibir logs detalhados na tela
-IP_VERSION="ipv4"             # ipv4, ipv6 ou both
-MAX_RETRIES=3                 # Número de tentativas lógicas
-CHECK_BIND_VERSION="false"    # Tentar descobrir versão do BIND
+GENERATE_LOG_TEXT="false"     
+SLEEP=0.05                    
+VERBOSE="false"               
+IP_VERSION="ipv4"             
+MAX_RETRIES=3                 
+CHECK_BIND_VERSION="false"    
 
 # Configurações de Ping
 ENABLE_PING=true
-PING_COUNT=10       # Quantos pacotes enviar
-PING_TIMEOUT=2      # Timeout por pacote (segundos)
+PING_COUNT=10       
+PING_TIMEOUT=2      
 
 # Controle de Interatividade
 INTERACTIVE_MODE="true"
@@ -83,14 +80,27 @@ TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.9${NC}"
-    echo -e "Uso: $0 [opções]"
-    echo -e "Opções:"
-    echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
-    echo -e "  ${GREEN}-g <arquivo>${NC}   Arquivo de grupos (Default: dns_groups.csv)"
-    echo -e "  ${GREEN}-l${NC}            Gerar log de texto detalhado (.log)"
-    echo -e "  ${GREEN}-y${NC}            Execução não interativa (Aceita defaults)"
-    echo -e "  ${GREEN}-h${NC}            Ajuda"
+    echo -e "${BLUE}==========================================================${NC}"
+    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - v9.1        ${NC}"
+    echo -e "${BLUE}==========================================================${NC}"
+    echo -e "Ferramenta de automação para testes massivos de resolução de nomes,"
+    echo -e "latência e conectividade. Porque testar na mão é coisa do passado."
+    echo -e ""
+    echo -e "${PURPLE}USO:${NC}"
+    echo -e "  $0 [opções]"
+    echo -e ""
+    echo -e "${PURPLE}OPÇÕES DISPONÍVEIS:${NC}"
+    echo -e "  ${GREEN}-n <arquivo>${NC}   Caminho do CSV de domínios (Default: domains_tests.csv)"
+    echo -e "  ${GREEN}-g <arquivo>${NC}   Caminho do CSV de grupos DNS (Default: dns_groups.csv)"
+    echo -e "  ${GREEN}-l${NC}            Gerar LOG de texto (.log) estilo forense (Auditoria)"
+    echo -e "  ${GREEN}-y${NC}            Modo Silencioso (Não interativo / Aceita defaults)"
+    echo -e "  ${GREEN}-h${NC}            Exibe este menu de ajuda"
+    echo -e ""
+    echo -e "${CYAN}----------------------------------------------------------${NC}"
+    echo -e "🔗 ${GRAY}Repositório Oficial & Documentação:${NC}"
+    echo -e "   👉 ${YELLOW}github.com/flashbsb/diagnostico_dns${NC}"
+    echo -e "${CYAN}----------------------------------------------------------${NC}"
+    echo -e ""
 }
 
 print_execution_summary() {
@@ -126,23 +136,29 @@ print_execution_summary() {
 # ==============================================
 
 log_entry() {
-    # Só escreve se a flag -l foi ativada
     [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
-    
     local msg="$1"
     local ts=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$ts] $msg" >> "$LOG_FILE_TEXT"
 }
 
-log_cmd_result() {
-    # Helper para logar comando + output + tempo
+log_section() {
     [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
-    
+    local title="$1"
+    {
+        echo ""
+        echo "================================================================================"
+        echo ">>> $title"
+        echo "================================================================================"
+    } >> "$LOG_FILE_TEXT"
+}
+
+log_cmd_result() {
+    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
     local context="$1"
     local cmd="$2"
     local output="$3"
     local time="$4"
-    
     {
         echo "--------------------------------------------------------------------------------"
         echo "CTX: $context"
@@ -152,6 +168,37 @@ log_cmd_result() {
         echo "$output"
         echo "--------------------------------------------------------------------------------"
     } >> "$LOG_FILE_TEXT"
+}
+
+init_log_file() {
+    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    
+    # Captura informações do sistema
+    local sys_user=$(whoami)
+    local sys_host=$(hostname)
+    local sys_kernel=$(uname -r)
+    
+    {
+        echo "################################################################################"
+        echo "# DNS DIAGNOSTIC TOOL - FORENSIC LOG"
+        echo "# Date: $START_TIME_HUMAN"
+        echo "################################################################################"
+        echo ""
+        echo "[SYSTEM INFO]"
+        echo "  User     : $sys_user"
+        echo "  Hostname : $sys_host"
+        echo "  Kernel   : $sys_kernel"
+        echo ""
+        echo "[CONFIGURATION DUMP]"
+        echo "  Timeout Global : ${TIMEOUT}s"
+        echo "  Sleep Interval : ${SLEEP}s"
+        echo "  Conn Check     : ${VALIDATE_CONNECTIVITY}"
+        echo "  IP Version     : ${IP_VERSION}"
+        echo "  Dig Options    : ${DEFAULT_DIG_OPTIONS}"
+        echo "  Rec Options    : ${RECURSIVE_DIG_OPTIONS}"
+        echo "  Files          : $FILE_DOMAINS / $FILE_GROUPS"
+        echo ""
+    } > "$LOG_FILE_TEXT"
 }
 
 # ==============================================
@@ -222,24 +269,28 @@ validate_connectivity() {
     local server="$1"
     local timeout="${2:-$TIMEOUT}"
     
-    # Se já logou no cache, retorna direto
     [[ -n "${CONNECTIVITY_CACHE[$server]}" ]] && return ${CONNECTIVITY_CACHE[$server]}
     
     local status=1
     local cmd_used=""
+    local tool=""
     
     if command -v nc &> /dev/null; then 
+        tool="netcat"
         cmd_used="nc -z -w $timeout $server 53"
         nc -z -w "$timeout" "$server" 53 2>/dev/null; status=$?
     else 
-        cmd_used="bash /dev/tcp/$server/53 (timeout $timeout)"
+        tool="bash_tcp"
+        cmd_used="bash /dev/tcp/$server/53"
         check_port_bash "$server" 53 "$timeout"; status=$?
     fi
     
     CONNECTIVITY_CACHE[$server]=$status
     
     if [[ "$status" -ne 0 ]]; then
-        log_entry "FALHA CONECTIVIDADE: $server:53 (CMD: $cmd_used) - Retorno: $status"
+        log_entry "CRITICAL: Falha de Conectividade ($tool) -> $server:53 | CMD: $cmd_used | RET: $status"
+    else
+        log_entry "INFO: Conectividade OK ($tool) -> $server:53 | Port Open"
     fi
     
     return $status
@@ -256,14 +307,13 @@ print_verbose_debug() {
     echo -e "    │ 🖥️  Server  : $srv"
     echo -e "    │ ⏱️  Tempo   : ${dur}ms"
     
-    # Loga no arquivo também se estiver verbose
-    log_entry "[VERBOSE] $label - $msg - Server: $srv - Target: $target - Dur: ${dur}ms"
+    log_entry "[VERBOSE_DEBUG] $label - $msg - Server: $srv - Target: $target - Dur: ${dur}ms"
     
     echo -e "${color}    └─────────────────────────────────────────────────────────────┘${NC}"
 }
 
 # ==============================================
-# GERAÇÃO HTML (Mantida Igual)
+# GERAÇÃO HTML
 # ==============================================
 
 init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; }
@@ -473,6 +523,7 @@ load_dns_groups() {
     
     [[ ! -f "$FILE_GROUPS" ]] && { echo -e "${RED}ERRO: $FILE_GROUPS não encontrado!${NC}"; exit 1; }
 
+    local count=0
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
         name=$(echo "$name" | xargs); servers=$(echo "$servers" | tr -d '[:space:]')
@@ -482,7 +533,9 @@ load_dns_groups() {
         DNS_GROUP_DESC["$name"]="$desc"
         DNS_GROUP_TYPE["$name"]="$type"
         DNS_GROUP_TIMEOUT["$name"]="$timeout"
+        count=$((count + 1))
     done < "$FILE_GROUPS"
+    log_entry "INFO: Carregados $count grupos DNS do arquivo $FILE_GROUPS"
 }
 
 run_ping_diagnostics() {
@@ -492,7 +545,7 @@ run_ping_diagnostics() {
     echo -e "${BLUE}   INICIANDO TESTES DE LATÊNCIA (PING)   ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     
-    log_entry "--- INICIANDO TESTES DE LATENCIA (PING) ---"
+    log_section "INICIANDO TESTES DE LATENCIA (PING)"
 
     if ! command -v ping &> /dev/null; then
         echo -e "${RED}ERRO: Comando 'ping' não encontrado. Pulando etapa.${NC}"
@@ -537,7 +590,6 @@ run_ping_diagnostics() {
         local end_ts=$(date +%s%N)
         local dur=$(( (end_ts - start_ts) / 1000000 ))
         
-        # Loga resultado no arquivo
         log_cmd_result "PING TEST $groups_str" "$ping_cmd" "$output" "$dur"
         
         local loss=$(echo "$output" | grep -oP '\d+(?=% packet loss)' | head -1)
@@ -572,7 +624,7 @@ process_tests() {
     echo -e "  ${RED}x${NC} = Falha Crítica (TIMEOUT / REFUSED)"
     echo ""
     
-    log_entry "--- INICIANDO TESTES DNS ---"
+    log_section "INICIANDO TESTES DNS"
     local test_id=0
     
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
@@ -670,7 +722,6 @@ process_tests() {
                             local end_ts=$(date +%s%N)
                             local dur=$(( (end_ts - start_ts) / 1000000 ))
                             
-                            # Grava no log de texto se ativado
                             log_cmd_result "TEST #$test_id ($mode)" "$cmd" "$output" "$dur"
                             
                             local status_txt="OK"; local css_class="status-ok"; local icon="✅"
@@ -716,7 +767,6 @@ main() {
     START_TIME_EPOCH=$(date +%s)
     START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
-    # Adicionado opção -l
     while getopts ":n:g:lhy" opt; do
         case ${opt} in
             n) FILE_DOMAINS=$OPTARG ;;
@@ -731,12 +781,7 @@ main() {
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     
     # Se gerou log, inicializa o arquivo
-    if [[ "$GENERATE_LOG_TEXT" == "true" ]]; then
-        echo "=============================================" > "$LOG_FILE_TEXT"
-        echo " DNS DIAGNOSTIC TOOL - EXECUTION LOG" >> "$LOG_FILE_TEXT"
-        echo " Started: $START_TIME_HUMAN" >> "$LOG_FILE_TEXT"
-        echo "=============================================" >> "$LOG_FILE_TEXT"
-    fi
+    init_log_file
 
     interactive_configuration
     if [[ "$INTERACTIVE_MODE" == "false" ]]; then print_execution_summary; fi
@@ -758,11 +803,11 @@ main() {
     # Finaliza o log de texto
     if [[ "$GENERATE_LOG_TEXT" == "true" ]]; then
         {
-            echo "============================================="
+            echo "================================================================================"
             echo " EXECUTION FINISHED: $END_TIME_HUMAN"
             echo " DURATION: ${TOTAL_DURATION}s"
             echo " TOTAL TESTS: $TOTAL_TESTS (Success: $SUCCESS_TESTS / Fail: $FAILED_TESTS)"
-            echo "============================================="
+            echo "================================================================================"
         } >> "$LOG_FILE_TEXT"
     fi
     
