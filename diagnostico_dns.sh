@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 8.7 (Smart Error Logging)
-# "Falha de conexão? Eu aviso uma vez só."
+# Versão: 8.9 (Log Edition)
+# "Agora com provas em .txt para quem não gosta de HTML"
 # ==============================================
 
-# --- CONFIGURAÇÕES PADRÃO (Incorporadas do script_config.cfg) ---
+# --- CONFIGURAÇÕES PADRÃO ---
 
 # Opções padrão do DIG (Iterativo/Authoritative)
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
@@ -23,9 +23,9 @@ FILE_GROUPS="dns_groups.csv"
 TIMEOUT=5                     # Timeout global de conexão (segundos)
 VALIDATE_CONNECTIVITY="true"  # Validar porta 53 antes do dig?
 GENERATE_HTML="true"
-GENERATE_JSON="false"
+GENERATE_LOG_TEXT="false"     # Default: não gerar log de texto (ativado com -l)
 SLEEP=0.05                    # Intervalo entre testes
-VERBOSE="false"               # Exibir logs detalhados
+VERBOSE="false"               # Exibir logs detalhados na tela
 IP_VERSION="ipv4"             # ipv4, ipv6 ou both
 MAX_RETRIES=3                 # Número de tentativas lógicas
 CHECK_BIND_VERSION="false"    # Tentar descobrir versão do BIND
@@ -57,7 +57,6 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 declare -A CONNECTIVITY_CACHE
-# Novo array para controlar se o erro de HTML já foi gerado
 declare -A HTML_CONN_ERR_LOGGED 
 declare -i TOTAL_TESTS=0
 declare -i SUCCESS_TESTS=0
@@ -68,8 +67,9 @@ declare -i WARNING_TESTS=0
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.html"
+LOG_FILE_TEXT="logs/${LOG_PREFIX}_${TIMESTAMP}.log"
 
-# Arquivos Temporários para montagem do HTML
+# Arquivos Temporários
 TEMP_HEADER="logs/temp_header_${TIMESTAMP}.html"
 TEMP_STATS="logs/temp_stats_${TIMESTAMP}.html"
 TEMP_TIMING="logs/temp_timing_${TIMESTAMP}.html"
@@ -83,11 +83,12 @@ TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.7${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.9${NC}"
     echo -e "Uso: $0 [opções]"
     echo -e "Opções:"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Arquivo de grupos (Default: dns_groups.csv)"
+    echo -e "  ${GREEN}-l${NC}            Gerar log de texto detalhado (.log)"
     echo -e "  ${GREEN}-y${NC}            Execução não interativa (Aceita defaults)"
     echo -e "  ${GREEN}-h${NC}            Ajuda"
 }
@@ -109,14 +110,48 @@ print_execution_summary() {
     echo ""
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
-    echo -e "  🕵️  Check BIND Ver: ${CYAN}${CHECK_BIND_VERSION}${NC}"
+    echo -e "  📝 Gerar Log TXT : ${CYAN}${GENERATE_LOG_TEXT}${NC}"
     echo -e "  🛠️  Dig Options   : ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
     echo -e "  🔁 Rec Dig Opts  : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
     echo -e "  📄 Relatório HTML: ${GREEN}$HTML_FILE${NC}"
+    [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
     echo ""
+}
+
+# ==============================================
+# LOGGING (TEXTO)
+# ==============================================
+
+log_entry() {
+    # Só escreve se a flag -l foi ativada
+    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    
+    local msg="$1"
+    local ts=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "[$ts] $msg" >> "$LOG_FILE_TEXT"
+}
+
+log_cmd_result() {
+    # Helper para logar comando + output + tempo
+    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    
+    local context="$1"
+    local cmd="$2"
+    local output="$3"
+    local time="$4"
+    
+    {
+        echo "--------------------------------------------------------------------------------"
+        echo "CTX: $context"
+        echo "CMD: $cmd"
+        echo "TIME: ${time}ms"
+        echo "OUTPUT:"
+        echo "$output"
+        echo "--------------------------------------------------------------------------------"
+    } >> "$LOG_FILE_TEXT"
 }
 
 # ==============================================
@@ -164,6 +199,7 @@ interactive_configuration() {
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
         ask_variable "Versão IP (ipv4/ipv6/both)" "IP_VERSION"
         ask_boolean "Verbose Debug no terminal?" "VERBOSE"
+        ask_boolean "Gerar arquivo .log (texto)?" "GENERATE_LOG_TEXT"
         ask_boolean "Tentar descobrir versão BIND?" "CHECK_BIND_VERSION"
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
         if [[ "$ENABLE_PING" == "true" ]]; then
@@ -185,10 +221,27 @@ check_port_bash() { timeout "$3" bash -c "cat < /dev/tcp/$1/$2" &>/dev/null; ret
 validate_connectivity() {
     local server="$1"
     local timeout="${2:-$TIMEOUT}"
+    
+    # Se já logou no cache, retorna direto
     [[ -n "${CONNECTIVITY_CACHE[$server]}" ]] && return ${CONNECTIVITY_CACHE[$server]}
+    
     local status=1
-    if command -v nc &> /dev/null; then nc -z -w "$timeout" "$server" 53 2>/dev/null; status=$?; else check_port_bash "$server" 53 "$timeout"; status=$?; fi
+    local cmd_used=""
+    
+    if command -v nc &> /dev/null; then 
+        cmd_used="nc -z -w $timeout $server 53"
+        nc -z -w "$timeout" "$server" 53 2>/dev/null; status=$?
+    else 
+        cmd_used="bash /dev/tcp/$server/53 (timeout $timeout)"
+        check_port_bash "$server" 53 "$timeout"; status=$?
+    fi
+    
     CONNECTIVITY_CACHE[$server]=$status
+    
+    if [[ "$status" -ne 0 ]]; then
+        log_entry "FALHA CONECTIVIDADE: $server:53 (CMD: $cmd_used) - Retorno: $status"
+    fi
+    
     return $status
 }
 
@@ -202,20 +255,15 @@ print_verbose_debug() {
     echo -e "    │ 🎯 Alvo    : $target"
     echo -e "    │ 🖥️  Server  : $srv"
     echo -e "    │ ⏱️  Tempo   : ${dur}ms"
-    if [[ -n "$raw_output" ]]; then
-        echo -e "${color}    ├───────────────────── DADOS DO PROTOCOLO ────────────────────┤${NC}"
-        local headers=$(echo "$raw_output" | grep -E ";; ->>HEADER<<-" | head -1 | sed 's/;; //')
-        local flags=$(echo "$raw_output" | grep -E ";; flags:" | head -1 | sed 's/;; //')
-        local error_line=$(echo "$raw_output" | grep -iE "connection timed out|network is unreachable|communications error|end of file" | head -1)
-        [[ -n "$headers" ]] && echo -e "    │ 🏷️  Header  : $headers"
-        [[ -n "$flags" ]]   && echo -e "    │ 🏳️  Flags   : $flags"
-        [[ -n "$error_line" ]] && echo -e "    │ ⚠️  SysMsg  : $error_line"
-    fi
+    
+    # Loga no arquivo também se estiver verbose
+    log_entry "[VERBOSE] $label - $msg - Server: $srv - Target: $target - Dur: ${dur}ms"
+    
     echo -e "${color}    └─────────────────────────────────────────────────────────────┘${NC}"
 }
 
 # ==============================================
-# GERAÇÃO HTML
+# GERAÇÃO HTML (Mantida Igual)
 # ==============================================
 
 init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; }
@@ -273,7 +321,6 @@ cat > "$TEMP_HEADER" << EOF
         pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
         .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
         
-        /* Classe especial para bloco de erro consolidado */
         .conn-error-block summary { background: #2d0e0e; border-left: 3px solid #f44747; }
         .conn-error-block summary:hover { background: #3d1414; }
         
@@ -373,7 +420,7 @@ assemble_html() {
     
     cat "$TEMP_HEADER" >> "$HTML_FILE"
     cat "$TEMP_STATS" >> "$HTML_FILE"
-    cat "$TEMP_TIMING" >> "$HTML_FILE" # Inserido logo após stats
+    cat "$TEMP_TIMING" >> "$HTML_FILE" 
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
     cat "$TEMP_CONFIG" >> "$HTML_FILE"
     
@@ -444,9 +491,12 @@ run_ping_diagnostics() {
     echo -e "\n${BLUE}===========================================${NC}"
     echo -e "${BLUE}   INICIANDO TESTES DE LATÊNCIA (PING)   ${NC}"
     echo -e "${BLUE}===========================================${NC}"
+    
+    log_entry "--- INICIANDO TESTES DE LATENCIA (PING) ---"
 
     if ! command -v ping &> /dev/null; then
         echo -e "${RED}ERRO: Comando 'ping' não encontrado. Pulando etapa.${NC}"
+        log_entry "ERRO: Comando 'ping' não encontrado."
         return
     fi
 
@@ -478,8 +528,18 @@ run_ping_diagnostics() {
         
         echo -ne "   📡 Pinging ${YELLOW}${groups_str}${NC} ${CYAN}$ip${NC}... "
         local output
-        output=$(ping -c "$PING_COUNT" -W "$PING_TIMEOUT" "$ip" 2>&1)
+        local ping_cmd="ping -c $PING_COUNT -W $PING_TIMEOUT $ip"
+        local start_ts=$(date +%s%N)
+        
+        output=$(eval "$ping_cmd" 2>&1)
         local ret=$?
+        
+        local end_ts=$(date +%s%N)
+        local dur=$(( (end_ts - start_ts) / 1000000 ))
+        
+        # Loga resultado no arquivo
+        log_cmd_result "PING TEST $groups_str" "$ping_cmd" "$output" "$dur"
+        
         local loss=$(echo "$output" | grep -oP '\d+(?=% packet loss)' | head -1)
         local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
         
@@ -512,6 +572,7 @@ process_tests() {
     echo -e "  ${RED}x${NC} = Falha Crítica (TIMEOUT / REFUSED)"
     echo ""
     
+    log_entry "--- INICIANDO TESTES DNS ---"
     local test_id=0
     
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
@@ -524,6 +585,7 @@ process_tests() {
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
         echo -e "${CYAN}>> Domínio: ${WHITE}${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
+        log_entry "DOMINIO: $domain (Testes: $test_types | Rec: $record_types | Grupos: $groups)"
 
         local calc_count=0
         local calc_targets=("$domain")
@@ -539,8 +601,6 @@ process_tests() {
             local srv_list=(${DNS_GROUPS[$grp]})
             local num_srv=${#srv_list[@]}
             for mode in "${calc_modes[@]}"; do
-                 [[ "${DNS_GROUP_TYPE[$grp]}" == "authoritative" && "$mode" == "recursive" ]] && continue
-                 [[ "${DNS_GROUP_TYPE[$grp]}" == "recursive" && "$mode" == "iterative" ]] && continue
                  for t in "${calc_targets[@]}"; do
                      for r in "${rec_list[@]}"; do calc_count=$((calc_count + num_srv)); done
                  done
@@ -568,8 +628,6 @@ process_tests() {
             for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
             
             for mode in "${modes[@]}"; do
-                [[ "${DNS_GROUP_TYPE[$grp]}" == "authoritative" && "$mode" == "recursive" ]] && continue
-                [[ "${DNS_GROUP_TYPE[$grp]}" == "recursive" && "$mode" == "iterative" ]] && continue
                 
                 for target in "${targets[@]}"; do
                     for rec in "${rec_list[@]}"; do
@@ -583,13 +641,9 @@ process_tests() {
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1
                                     
-                                    # Gera um ID único para o ERRO deste IP (substitui pontos por underscore)
                                     local conn_err_id="conn_err_${srv//./_}"
-                                    
-                                    # MATRIZ: Aponta sempre para o mesmo ID
                                     echo "<td><a href=\"#$conn_err_id\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
                                     
-                                    # LOGS: Só grava se ainda não foi gravado para este IP
                                     if [[ -z "${HTML_CONN_ERR_LOGGED[$srv]}" ]]; then
                                         echo "<details id=\"$conn_err_id\" class=\"conn-error-block\"><summary class=\"log-header\" style=\"color:#f44747\"><span class=\"log-id\">GLOBAL</span> <strong>FALHA DE CONEXÃO</strong> - Servidor: $srv</summary><pre style=\"border-top:1px solid #f44747; color:#f44747\">ERRO CRÍTICO DE CONECTIVIDADE:\n\nO servidor $srv não respondeu na porta 53 (TCP/UDP) durante o teste inicial.\nO script abortou todos os testes subsequentes para este servidor para economizar tempo.\n\nTimeout definido: ${DNS_GROUP_TIMEOUT[$grp]}s</pre></details>" >> "$TEMP_DETAILS"
                                         HTML_CONN_ERR_LOGGED[$srv]=1
@@ -601,7 +655,7 @@ process_tests() {
                                 fi
                             fi
                             
-                            # === SE PASSOU DA CONEXÃO, SEGUE NORMAL ===
+                            # === EXECUÇÃO DO DIG ===
                             local unique_id="test_${test_id}"
                             local bind_version_info=""
                             [[ "$CHECK_BIND_VERSION" == "true" ]] && bind_version_info=" (Ver: $(dig +short +time=1 @$srv chaos txt version.bind 2>/dev/null))"
@@ -615,6 +669,9 @@ process_tests() {
                             local ret=$?
                             local end_ts=$(date +%s%N)
                             local dur=$(( (end_ts - start_ts) / 1000000 ))
+                            
+                            # Grava no log de texto se ativado
+                            log_cmd_result "TEST #$test_id ($mode)" "$cmd" "$output" "$dur"
                             
                             local status_txt="OK"; local css_class="status-ok"; local icon="✅"
                             if [[ $ret -ne 0 ]]; then
@@ -656,14 +713,15 @@ process_tests() {
 }
 
 main() {
-    # 1. Captura tempo inicial
     START_TIME_EPOCH=$(date +%s)
     START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
-    while getopts ":n:g:hy" opt; do
+    # Adicionado opção -l
+    while getopts ":n:g:lhy" opt; do
         case ${opt} in
             n) FILE_DOMAINS=$OPTARG ;;
             g) FILE_GROUPS=$OPTARG ;;
+            l) GENERATE_LOG_TEXT="true" ;;
             y) INTERACTIVE_MODE="false" ;;
             h) show_help; exit 0 ;;
             \?) echo -e "${RED}Opção inválida: -$OPTARG${NC}" >&2; show_help; exit 1 ;;
@@ -672,6 +730,14 @@ main() {
 
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     
+    # Se gerou log, inicializa o arquivo
+    if [[ "$GENERATE_LOG_TEXT" == "true" ]]; then
+        echo "=============================================" > "$LOG_FILE_TEXT"
+        echo " DNS DIAGNOSTIC TOOL - EXECUTION LOG" >> "$LOG_FILE_TEXT"
+        echo " Started: $START_TIME_HUMAN" >> "$LOG_FILE_TEXT"
+        echo "=============================================" >> "$LOG_FILE_TEXT"
+    fi
+
     interactive_configuration
     if [[ "$INTERACTIVE_MODE" == "false" ]]; then print_execution_summary; fi
     
@@ -681,16 +747,24 @@ main() {
     process_tests
     run_ping_diagnostics
     
-    # 2. Captura tempo final e calcula métricas
     END_TIME_EPOCH=$(date +%s)
     END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
     TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     
-    # Cálculo flutuante via AWK para o tempo de sleep acumulado
-    # Se sleep for 0, resultado será 0.
     TOTAL_SLEEP_TIME=$(awk "BEGIN {print $TOTAL_TESTS * $SLEEP}")
 
     assemble_html
+    
+    # Finaliza o log de texto
+    if [[ "$GENERATE_LOG_TEXT" == "true" ]]; then
+        {
+            echo "============================================="
+            echo " EXECUTION FINISHED: $END_TIME_HUMAN"
+            echo " DURATION: ${TOTAL_DURATION}s"
+            echo " TOTAL TESTS: $TOTAL_TESTS (Success: $SUCCESS_TESTS / Fail: $FAILED_TESTS)"
+            echo "============================================="
+        } >> "$LOG_FILE_TEXT"
+    fi
     
     echo -e "\n${GREEN}=== DIAGNÓSTICO CONCLUÍDO ===${NC}"
     echo -e "  📅 Início    : $START_TIME_HUMAN"
@@ -698,7 +772,8 @@ main() {
     echo -e "  ⏱️  Duração   : ${TOTAL_DURATION}s"
     echo -e "  💤 Sleep Add : ${TOTAL_SLEEP_TIME}s (Total)"
     echo -e "  📊 Stats     : Total: $TOTAL_TESTS | Sucesso: $SUCCESS_TESTS | Alertas: $WARNING_TESTS | Falhas: $FAILED_TESTS"
-    echo -e "Relatório Gerado: ${CYAN}$HTML_FILE${NC}"
+    echo -e "  📄 Relatório HTML: ${CYAN}$HTML_FILE${NC}"
+    [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Relatório LOG : ${CYAN}$LOG_FILE_TEXT${NC}"
 }
 
 main "$@"
