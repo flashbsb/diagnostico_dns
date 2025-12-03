@@ -26,10 +26,17 @@ Você precisa de um Linux e vontade de viver. Ah, e destes pacotes:
 ## 🛠️ Instalação
 
 ```bash
-# 1. Dê permissão de execução (porque o Linux não confia em você)
+# 1. baixe o arquivo e dê permissão de execução (porque o Linux não confia em você)
 chmod +x diagnostico_dns.sh
 
 # 2. Crie os arquivos CSV (veja os exemplos abaixo) ou o script vai reclamar.
+````
+
+ou git (precisa instalar o git)
+```bash
+# 1. Clone este repositório (você já deve ter feito isso)
+git clone https://github.com/flashbsb/diagnostico_dns.git
+cd diagnostico_dns
 ````
 
 ## ▶️ Como Usar
