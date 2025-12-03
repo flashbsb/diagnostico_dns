@@ -1,22 +1,22 @@
 #!/bin/bash
 
 # ==============================================
-# SCRIPT DIAGNÓSTICO DNS - COMPLETE PACKAGE
-# Versão: 7.1
-# "Dashboard completo restaurado + Debug detalhado."
+# SCRIPT DIAGNÓSTICO DNS - RANGE EDITION
+# Versão: 7.2
+# "Agora informa os IDs dos testes no cabeçalho."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
 LOG_PREFIX="dnsdiag"
-TIMEOUT=2
+TIMEOUT=5
 VALIDATE_CONNECTIVITY=true
 GENERATE_HTML=true
-SLEEP=0.20
-VERBOSE=true  # SE TRUE: Mostra bloco detalhado de debug no terminal em falhas
+SLEEP=1.50
+VERBOSE=true
 IP_VERSION="ipv4"
-MAX_RETRIES=2
+MAX_RETRIES=1
 CHECK_BIND_VERSION=false
 
 # Arquivos Padrão
@@ -52,11 +52,11 @@ TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
 TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 
 # ==============================================
-# HELP & BANNER (Restaurado e Completo)
+# HELP & BANNER
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v7.1${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v7.2${NC}"
     echo -e "Uso: $0 [opções]"
     echo -e "Opções:"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
@@ -114,18 +114,16 @@ validate_connectivity() {
     return $status
 }
 
-# FUNÇÃO DE DEBUG RICO (Mantida da v7.0)
 print_verbose_debug() {
-    local type="$1"       # FAIL, WARN, INFO
-    local msg="$2"        # Mensagem principal
-    local srv="$3"        # Servidor
-    local target="$4"     # Alvo
-    local raw_output="$5" # Output do DIG
-    local dur="$6"        # Duração
+    local type="$1"
+    local msg="$2"
+    local srv="$3"
+    local target="$4"
+    local raw_output="$5"
+    local dur="$6"
 
     local color=$NC
     local label=""
-    
     case "$type" in
         "FAIL") color=$RED; label="FALHA CRÍTICA" ;;
         "WARN") color=$YELLOW; label="ALERTA/ATENÇÃO" ;;
@@ -141,8 +139,6 @@ print_verbose_debug() {
     
     if [[ -n "$raw_output" ]]; then
         echo -e "${color}    ├───────────────────── DADOS DO PROTOCOLO ────────────────────┤${NC}"
-        
-        # Filtra Headers, Flags e Tamanho
         local headers=$(echo "$raw_output" | grep -E ";; ->>HEADER<<-" | head -1 | sed 's/;; //')
         local flags=$(echo "$raw_output" | grep -E ";; flags:" | head -1 | sed 's/;; //')
         local msg_size=$(echo "$raw_output" | grep -E ";; MSG SIZE" | head -1 | sed 's/;; //')
@@ -157,7 +153,7 @@ print_verbose_debug() {
 }
 
 # ==============================================
-# GERAÇÃO HTML (Blocos)
+# GERAÇÃO HTML
 # ==============================================
 
 init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_DETAILS"; }
@@ -324,13 +320,44 @@ process_tests() {
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
         echo -e "${CYAN}>> Domínio: ${WHITE}${domain} ${PURPLE}[${record_types}]${NC}"
+
+        # ----------------------------------------------------
+        # PRÉ-CÁLCULO DE TESTES PARA O HTML
+        # ----------------------------------------------------
+        local calc_count=0
+        local calc_targets=("$domain")
+        for ex in "${extra_list[@]}"; do calc_targets+=("$ex.$domain"); done
         
-        echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $domain</span><span class=\"badge\">$test_types</span></div>" >> "$TEMP_MATRIX"
+        local calc_modes=()
+        if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive")
+        elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive")
+        else calc_modes=("iterative"); fi
         
-        local modes=()
-        if [[ "$test_types" == *"both"* ]]; then modes=("iterative" "recursive")
-        elif [[ "$test_types" == *"recursive"* ]]; then modes=("recursive")
-        else modes=("iterative"); fi
+        for grp in "${group_list[@]}"; do
+            [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
+            local srv_list=(${DNS_GROUPS[$grp]})
+            local num_srv=${#srv_list[@]}
+            for mode in "${calc_modes[@]}"; do
+                 [[ "${DNS_GROUP_TYPE[$grp]}" == "authoritative" && "$mode" == "recursive" ]] && continue
+                 [[ "${DNS_GROUP_TYPE[$grp]}" == "recursive" && "$mode" == "iterative" ]] && continue
+                 for t in "${calc_targets[@]}"; do
+                     for r in "${rec_list[@]}"; do
+                         calc_count=$((calc_count + num_srv))
+                     done
+                 done
+            done
+        done
+        
+        local start_id=$((test_id + 1))
+        local end_id=$((test_id + calc_count))
+        local range_txt="(Tests #$start_id - #$end_id)"
+        [[ $calc_count -eq 0 ]] && range_txt=""
+        # ----------------------------------------------------
+        
+        # Header com o range incluído
+        echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $domain <span style=\"font-size:0.8em; color:#bbb; font-weight:normal; margin-left:10px;\">$range_txt</span></span><span class=\"badge\">$test_types</span></div>" >> "$TEMP_MATRIX"
+        
+        local modes=("${calc_modes[@]}") # Reutiliza array calculado
         
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
