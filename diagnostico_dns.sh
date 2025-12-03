@@ -1,48 +1,98 @@
 #!/bin/bash
 
 # ==============================================
-# SCRIPT DIAGNÓSTICO DNS AVANÇADO (Matrix Edition)
-# Versão: 3.0
-# "Agora com tabelas que o gerente consegue ler."
+# SCRIPT DIAGNÓSTICO DNS - FULL DASHBOARD
+# Versão: 6.1
+# "Agora com telemetria completa no start."
 # ==============================================
 
-# Configurações padrão
+# --- CONFIGURAÇÕES PADRÃO ---
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
 LOG_PREFIX="dnsdiag"
 TIMEOUT=5
 VALIDATE_CONNECTIVITY=true
 GENERATE_HTML=true
-GENERATE_JSON=false
-SLEEP=0.1
+SLEEP=1.50
 VERBOSE=true
-QUIET=false
 IP_VERSION="ipv4"
+MAX_RETRIES=1          # Quantas vezes tentar se o dig falhar (implementação futura/logica de retry)
+CHECK_BIND_VERSION=false # Tentar descobrir versão do BIND (chaos txt)
 
-# Cores
+# Arquivos Padrão (Podem ser alterados via -n ou -g)
+FILE_DOMAINS="domains_tests.csv"
+FILE_GROUPS="dns_groups.csv"
+
+# --- CORES DO TERMINAL ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+PURPLE='\033[0;35m'
+GRAY='\033[0;90m'
 NC='\033[0m'
 
-# Cache e Stats
 declare -A CONNECTIVITY_CACHE
 declare -i TOTAL_TESTS=0
 declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
-declare -i TIMEOUT_TESTS=0
+declare -i WARNING_TESTS=0
 
-# Carregar config
+# Carregar config externa (se existir)
 [[ -f "script_config.cfg" ]] && source script_config.cfg
 
-# Setup Logs
+# Setup Arquivos de Log
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.txt"
 HTML_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.html"
-JSON_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.json"
+
+TEMP_HEADER="logs/temp_header_${TIMESTAMP}.html"
+TEMP_STATS="logs/temp_stats_${TIMESTAMP}.html"
+TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
+TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
+
+# ==============================================
+# HELP & BANNER
+# ==============================================
+
+show_help() {
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v6.1${NC}"
+    echo -e "Uso: $0 [opções]"
+    echo ""
+    echo -e "Opções:"
+    echo -e "  ${GREEN}-n <arquivo>${NC}   Define o arquivo de domínios/testes (Padrão: domains_tests.csv)"
+    echo -e "  ${GREEN}-g <arquivo>${NC}   Define o arquivo de grupos DNS (Padrão: dns_groups.csv)"
+    echo -e "  ${GREEN}-h${NC}            Exibe esta ajuda e sai"
+    echo ""
+}
+
+print_execution_summary() {
+    echo -e "${BLUE}======================================================${NC}"
+    echo -e "${BLUE}       DIAGNÓSTICO DNS - DASHBOARD DE EXECUÇÃO        ${NC}"
+    echo -e "${BLUE}======================================================${NC}"
+    echo -e "${PURPLE}[ARQUIVOS]${NC}"
+    echo -e "  📂 Domínios      : ${YELLOW}$FILE_DOMAINS${NC}"
+    echo -e "  📂 Grupos DNS    : ${YELLOW}$FILE_GROUPS${NC}"
+    echo ""
+    echo -e "${PURPLE}[REDE & PERFORMANCE]${NC}"
+    echo -e "  ⏱️  Timeout Global: ${CYAN}${TIMEOUT}s${NC}"
+    echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
+    echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
+    echo -e "  🌐 Versão IP     : ${CYAN}${IP_VERSION}${NC}"
+    echo -e "  🔄 Max Retries   : ${CYAN}${MAX_RETRIES}${NC}"
+    echo ""
+    echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
+    echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
+    echo -e "  🕵️  Check Version : ${CYAN}${CHECK_BIND_VERSION}${NC}"
+    # Mostra apenas os primeiros 40 chars das options para não quebrar linha feio
+    echo -e "  🛠️  Dig Options   : ${GRAY}${DEFAULT_DIG_OPTIONS:0:40}...${NC}"
+    echo ""
+    echo -e "${PURPLE}[SAÍDA]${NC}"
+    echo -e "  📄 Relatório HTML: ${GREEN}$HTML_FILE${NC}"
+    echo -e "${BLUE}======================================================${NC}"
+    echo ""
+}
 
 # ==============================================
 # FUNÇÕES DE INFRAESTRUTURA
@@ -72,102 +122,150 @@ validate_connectivity() {
     return $status
 }
 
-validate_csv_file() {
-    [[ ! -s "$1" ]] && { echo "Erro: $1 vazio."; return 1; }
-    return 0
+# ==============================================
+# GERAÇÃO DE HTML
+# ==============================================
+
+init_html_parts() {
+    > "$TEMP_HEADER"
+    > "$TEMP_STATS"
+    > "$TEMP_MATRIX"
+    > "$TEMP_DETAILS"
 }
 
-json_escape() { echo "$1" | sed 's/"/\\"/g' | sed 's/\\/\\\\/g'; }
-
-# ==============================================
-# REPORTING HTML (O Pulo do Gato 😺)
-# ==============================================
-
-init_html_report() {
-    [[ "$GENERATE_HTML" != "true" ]] && return
-    cat > "$HTML_FILE" << EOF
+write_html_header() {
+cat > "$TEMP_HEADER" << EOF
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>DNS Matrix - $TIMESTAMP</title>
+    <title>DNS Report - $TIMESTAMP</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
-        h1 { color: #ce9178; text-align: center; }
         
-        /* Domain Block */
-        .domain-block { background: #252526; margin-bottom: 30px; border-radius: 8px; border-left: 5px solid #007acc; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .domain-header { background: #2d2d30; padding: 15px; font-size: 1.2em; font-weight: bold; color: #fff; border-bottom: 1px solid #3e3e42; display: flex; justify-content: space-between; }
+        h1 { color: #ce9178; text-align: center; margin-bottom: 20px; }
+        .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+        .card { background: #252526; padding: 15px; border-radius: 6px; text-align: center; border-bottom: 3px solid #444; }
+        .card-num { font-size: 2em; font-weight: bold; display: block; }
+        .card-label { font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; color: #888; }
         
-        /* Tables */
-        .group-table { width: 100%; border-collapse: collapse; margin: 0; }
-        .group-table th, .group-table td { padding: 10px; text-align: left; border-bottom: 1px solid #3e3e42; border-right: 1px solid #3e3e42; }
-        .group-table th { background: #333333; color: #9cdcfe; font-weight: 600; }
-        .group-table tr:hover { background: #2a2d2e; }
+        .st-total { border-color: #007acc; } .st-total .card-num { color: #007acc; }
+        .st-ok { border-color: #4ec9b0; } .st-ok .card-num { color: #4ec9b0; }
+        .st-warn { border-color: #ffcc02; } .st-warn .card-num { color: #ffcc02; }
+        .st-fail { border-color: #f44747; } .st-fail .card-num { color: #f44747; }
+
+        .domain-block { background: #252526; margin-bottom: 20px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); overflow: hidden; }
+        .domain-header { background: #333; padding: 10px 15px; font-weight: bold; border-left: 5px solid #007acc; display: flex; justify-content: space-between; align-items: center; }
         
-        /* Status Cells */
-        .status-ok { color: #4ec9b0; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #3e3e42; font-size: 0.9em; }
+        th { background: #2d2d30; color: #dcdcaa; }
+        
+        .cell-link { text-decoration: none; display: block; width: 100%; height: 100%; }
+        .status-ok { color: #4ec9b0; }
+        .status-warning { color: #ffcc02; }
         .status-fail { color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }
-        .status-timeout { color: #ffcc02; font-weight: bold; }
-        .meta-info { font-size: 0.8em; color: #808080; }
+        .time-badge { font-size: 0.75em; color: #808080; margin-left: 5px; }
         
-        /* Dig Output Modal/Tooltip (Simplificado como texto oculto) */
-        .dig-output { display: none; }
+        .tech-section { margin-top: 50px; border-top: 3px dashed #3e3e42; padding-top: 20px; }
+        .tech-controls { margin-bottom: 15px; }
+        .btn-ctrl { background: #3e3e42; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 10px; font-size: 0.9em; }
+        .btn-ctrl:hover { background: #007acc; }
         
-        .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.8em; background: #3e3e42; margin-right: 5px; }
-        .badge-iterative { color: #569cd6; border: 1px solid #569cd6; }
-        .badge-recursive { color: #c586c0; border: 1px solid #c586c0; }
+        details { background: #1e1e1e; margin-bottom: 10px; border: 1px solid #333; border-radius: 4px; }
+        summary { cursor: pointer; padding: 10px; background: #252526; list-style: none; font-family: monospace; }
+        summary:hover { background: #2a2d2e; }
+        summary::-webkit-details-marker { display: none; }
+        .log-header { display: flex; align-items: center; gap: 10px; }
+        .log-id { background: #007acc; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
+        pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
+        .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
+        
+        .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }
+        .footer a { color: #007acc; text-decoration: none; transition: color 0.3s; }
+        .footer a:hover { color: #4ec9b0; }
+        
+        .scroll-top { position: fixed; bottom: 20px; right: 20px; background: #007acc; color: white; padding: 10px; border-radius: 50%; text-decoration: none; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
     </style>
+    <script>
+        function toggleDetails(state) {
+            const elements = document.querySelectorAll('details');
+            elements.forEach(el => el.open = state);
+        }
+    </script>
 </head>
 <body>
     <div class="container">
-        <h1>🔍 Diagnóstico DNS - Visão Matricial</h1>
+        <h1>📊 Relatório de Diagnóstico DNS Executivo</h1>
+        <a name="top"></a>
 EOF
 }
 
-# Funções auxiliares de HTML para criar estrutura
-html_start_domain() {
-    [[ "$GENERATE_HTML" == "true" ]] && echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $1</span><span style=\"font-size:0.8em; opacity:0.7\">$2</span></div>" >> "$HTML_FILE"
-}
-
-html_end_domain() {
-    [[ "$GENERATE_HTML" == "true" ]] && echo "</div>" >> "$HTML_FILE"
-}
-
-html_start_group_table() {
-    local group_name=$1
-    local servers_arr=("${@:2}")
+generate_stats_block() {
+    local p_succ=0
+    [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
     
-    if [[ "$GENERATE_HTML" == "true" ]]; then
-        echo "<div style=\"padding: 10px; background: #1e1e1e; border-bottom: 1px solid #333;\"><strong style=\"color: #dcdcaa\">GRUPO: $group_name</strong></div>" >> "$HTML_FILE"
-        echo "<table class=\"group-table\"><thead><tr><th style=\"width: 30%\">Target / Record</th>" >> "$HTML_FILE"
-        for srv in "${servers_arr[@]}"; do
-            echo "<th>$srv</th>" >> "$HTML_FILE"
-        done
-        echo "</tr></thead><tbody>" >> "$HTML_FILE"
-    fi
+cat > "$TEMP_STATS" << EOF
+        <div class="dashboard">
+            <div class="card st-total">
+                <span class="card-num">$TOTAL_TESTS</span>
+                <span class="card-label">Total Testes</span>
+            </div>
+            <div class="card st-ok">
+                <span class="card-num">$SUCCESS_TESTS</span>
+                <span class="card-label">Sucesso ($p_succ%)</span>
+            </div>
+            <div class="card st-warn">
+                <span class="card-num">$WARNING_TESTS</span>
+                <span class="card-label">Alertas (NX/ServFail)</span>
+            </div>
+            <div class="card st-fail">
+                <span class="card-num">$FAILED_TESTS</span>
+                <span class="card-label">Falhas Críticas</span>
+            </div>
+        </div>
+EOF
 }
 
-html_end_group_table() {
-    [[ "$GENERATE_HTML" == "true" ]] && echo "</tbody></table>" >> "$HTML_FILE"
-}
+assemble_html() {
+    generate_stats_block
+    
+    cat "$TEMP_HEADER" >> "$HTML_FILE"
+    cat "$TEMP_STATS" >> "$HTML_FILE"
+    cat "$TEMP_MATRIX" >> "$HTML_FILE"
+    
+cat >> "$HTML_FILE" << EOF
+        <div class="tech-section">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>🛠️ Logs Técnicos Detalhados</h2>
+                <div class="tech-controls">
+                    <button class="btn-ctrl" onclick="toggleDetails(true)">➕ Expandir Todos</button>
+                    <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
+                </div>
+            </div>
+            <p style="color: #808080; margin-bottom: 20px;">Clique nos itens da matriz (acima) ou use os botões para ver o output bruto.</p>
+EOF
 
-finalize_html_report() {
-    [[ "$GENERATE_HTML" == "true" ]] && echo "</div></body></html>" >> "$HTML_FILE"
+    cat "$TEMP_DETAILS" >> "$HTML_FILE"
+    
+cat >> "$HTML_FILE" << EOF
+        </div>
+        <div class="footer">
+            Gerado automaticamente por <strong>DNS Diagnostic Tool</strong><br>
+            Repositório Oficial: <a href="https://github.com/flashbsb/diagnostico_dns" target="_blank">github.com/flashbsb/diagnostico_dns</a>
+        </div>
+    </div>
+    <a href="#top" class="scroll-top">⬆️</a>
+</body>
+</html>
+EOF
+
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS"
 }
 
 # ==============================================
-# LOGGING
-# ==============================================
-log_msg() {
-    local msg="$(date '+%H:%M:%S') - $1"
-    [[ "$QUIET" == "false" ]] && echo -e "$msg"
-    echo "$msg" >> "$LOG_FILE"
-}
-
-# ==============================================
-# CORE
+# LOGIC CORE
 # ==============================================
 
 load_dns_groups() {
@@ -176,6 +274,12 @@ load_dns_groups() {
     declare -gA DNS_GROUP_TYPE
     declare -gA DNS_GROUP_TIMEOUT
     
+    if [[ ! -f "$FILE_GROUPS" ]]; then 
+        echo -e "${RED}ERRO CRÍTICO: Arquivo de grupos '$FILE_GROUPS' não encontrado!${NC}"
+        echo "Use -g <arquivo> para especificar um caminho correto ou -h para ajuda."
+        exit 1
+    fi
+
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
         name=$(echo "$name" | xargs); servers=$(echo "$servers" | tr -d '[:space:]')
@@ -185,151 +289,177 @@ load_dns_groups() {
         DNS_GROUP_DESC["$name"]="$desc"
         DNS_GROUP_TYPE["$name"]="$type"
         DNS_GROUP_TIMEOUT["$name"]="$timeout"
-    done < dns_groups.csv
-}
-
-# Executa o dig e retorna o status code E o output (via variavel global temporaria ou echo)
-run_dig_capture() {
-    local srv=$1; local dom=$2; local type=$3; local mode=$4
-    local opts
-    [[ "$mode" == "iterative" ]] && opts="$DEFAULT_DIG_OPTIONS" || opts="$RECURSIVE_DIG_OPTIONS"
-    [[ "$IP_VERSION" == "ipv4" ]] && opts="$opts -4"
-    
-    local start_ts=$(date +%s%N)
-    local output=$(dig $opts @$srv $dom $type 2>&1)
-    local ret=$?
-    local end_ts=$(date +%s%N)
-    local duration_ms=$(( (end_ts - start_ts) / 1000000 ))
-    
-    # Salva no log cru
-    echo "[$srv -> $dom ($type)] Ret: $ret Time: ${duration_ms}ms" >> "$LOG_FILE"
-    
-    # Retorna string formatada para o HTML: "RET_CODE|DURATION|OUTPUT_SHORT"
-    # Pegando só o status do output para economizar bytes na string de retorno
-    local status_txt="UNKNOWN"
-    if echo "$output" | grep -q "NOERROR"; then status_txt="NOERROR"
-    elif echo "$output" | grep -q "NXDOMAIN"; then status_txt="NXDOMAIN"
-    elif echo "$output" | grep -q "SERVFAIL"; then status_txt="SERVFAIL"
-    elif echo "$output" | grep -q "REFUSED"; then status_txt="REFUSED"
-    elif echo "$output" | grep -q "timed out"; then status_txt="TIMEOUT"
-    fi
-    
-    echo "$ret|$duration_ms|$status_txt"
+    done < "$FILE_GROUPS"
 }
 
 process_tests() {
-    log_msg "${BLUE}Iniciando processamento matricial...${NC}"
+    if [[ ! -f "$FILE_DOMAINS" ]]; then 
+        echo -e "${RED}ERRO CRÍTICO: Arquivo de testes '$FILE_DOMAINS' não encontrado!${NC}"
+        echo "Use -n <arquivo> para especificar um caminho correto ou -h para ajuda."
+        exit 1
+    fi
+
+    echo -e "LEGENDA DE EXECUÇÃO:"
+    echo -e "  ${GREEN}.${NC} = Sucesso (NOERROR)"
+    echo -e "  ${YELLOW}!${NC} = Alerta (NXDOMAIN / SERVFAIL)"
+    echo -e "  ${RED}x${NC} = Falha Crítica (TIMEOUT / REFUSED)"
+    echo ""
+    
+    local test_id=0
     
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
         
-        # Limpeza
         domain=$(echo "$domain" | xargs)
         groups=$(echo "$groups" | tr -d '[:space:]')
         IFS=',' read -ra group_list <<< "$groups"
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
-        log_msg "${CYAN}>> Processando Domínio: $domain${NC}"
-        html_start_domain "$domain" "Grupos: $groups | Testes: $test_types"
+        echo -e "${CYAN}>> Domínio: ${WHITE}${domain}${NC}"
         
-        # Determina modos
+        echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $domain</span><span class=\"badge\">$test_types</span></div>" >> "$TEMP_MATRIX"
+        
         local modes=()
         if [[ "$test_types" == *"both"* ]]; then modes=("iterative" "recursive")
         elif [[ "$test_types" == *"recursive"* ]]; then modes=("recursive")
         else modes=("iterative"); fi
         
-        # --- LOOP DE GRUPOS ---
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
-            
             local srv_list=(${DNS_GROUPS[$grp]})
-            html_start_group_table "$grp" "${srv_list[@]}"
             
-            # Prepara lista de alvos (Dominio principal + Extras)
+            echo -ne "   [${PURPLE}${grp}${NC}] "
+            
+            echo "<div style=\"padding:10px; border-bottom:1px solid #333; background:#2d2d30; color:#9cdcfe;\">Grupo: $grp</div>" >> "$TEMP_MATRIX"
+            echo "<table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_MATRIX"
+            for srv in "${srv_list[@]}"; do echo "<th>$srv</th>" >> "$TEMP_MATRIX"; done
+            echo "</tr></thead><tbody>" >> "$TEMP_MATRIX"
+            
             local targets=("$domain")
             for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
             
-            # --- LOOP DE LINHAS DA TABELA (Targets * Records * Modes) ---
             for mode in "${modes[@]}"; do
-                # Validação de tipo de grupo
                 [[ "${DNS_GROUP_TYPE[$grp]}" == "authoritative" && "$mode" == "recursive" ]] && continue
                 [[ "${DNS_GROUP_TYPE[$grp]}" == "recursive" && "$mode" == "iterative" ]] && continue
                 
                 for target in "${targets[@]}"; do
                     for rec in "${rec_list[@]}"; do
+                        echo "<tr><td><span class=\"badge\">$mode</span> <strong>$target</strong> <span style=\"color:#666\">($rec)</span></td>" >> "$TEMP_MATRIX"
                         
-                        # Inicia Linha HTML
-                        [[ "$GENERATE_HTML" == "true" ]] && echo "<tr><td><span class=\"badge badge-$mode\">$mode</span> <strong>$target</strong> <span class=\"meta-info\">($rec)</span></td>" >> "$HTML_FILE"
-                        
-                        # --- LOOP DE COLUNAS (Servidores) ---
                         for srv in "${srv_list[@]}"; do
+                            test_id=$((test_id + 1))
+                            TOTAL_TESTS+=1
+                            local unique_id="test_${test_id}"
                             
-                            # Valida Conectividade
+                            # Validar Conectividade
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
-                                    [[ "$GENERATE_HTML" == "true" ]] && echo "<td><span class=\"status-fail\">DOWN</span></td>" >> "$HTML_FILE"
-                                    log_msg "${RED}Falha conexao: $srv${NC}"
+                                    FAILED_TESTS+=1
+                                    echo "<td><a href=\"#$unique_id\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
+                                    echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"color:#f44747\">FALHA CONEXÃO</span> $srv</summary><pre>Porta 53 inacessível.</pre></details>" >> "$TEMP_DETAILS"
+                                    echo -ne "${RED}x${NC}"
                                     continue
                                 fi
                             fi
                             
-                            # RODA O DIG
-                            local result_str=$(run_dig_capture "$srv" "$target" "$rec" "$mode")
-                            IFS='|' read -r ret_code duration status_txt <<< "$result_str"
+                            # Check Version (Se ativado)
+                            local bind_version_info=""
+                            if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
+                                # Apenas um dig extra rapidinho, sem afetar o fluxo principal visualmente
+                                local bv=$(dig +short +time=1 +tries=1 @$srv chaos txt version.bind 2>/dev/null)
+                                [[ -n "$bv" ]] && bind_version_info=" (Ver: $bv)"
+                            fi
                             
-                            # HTML Cell Logic
-                            local cell_class="status-ok"
+                            local opts
+                            [[ "$mode" == "iterative" ]] && opts="$DEFAULT_DIG_OPTIONS" || opts="$RECURSIVE_DIG_OPTIONS"
+                            [[ "$IP_VERSION" == "ipv4" ]] && opts="$opts -4"
+                            
+                            local cmd="dig $opts @$srv $target $rec"
+                            local start_ts=$(date +%s%N)
+                            local output
+                            output=$(eval "$cmd" 2>&1)
+                            local ret=$?
+                            local end_ts=$(date +%s%N)
+                            local dur=$(( (end_ts - start_ts) / 1000000 ))
+                            
+                            local status_txt="OK"
+                            local css_class="status-ok"
                             local icon="✅"
                             
-                            if [[ "$ret_code" -ne 0 ]] || [[ "$status_txt" == "TIMEOUT" ]]; then
-                                cell_class="status-fail"
-                                icon="❌"
-                                FAILED_TESTS+=1
+                            if [[ $ret -ne 0 ]]; then
+                                status_txt="ERR:$ret"; css_class="status-fail"; icon="❌"; FAILED_TESTS+=1
+                                echo -ne "${RED}x${NC}"
+                            elif echo "$output" | grep -q "status: SERVFAIL"; then
+                                status_txt="SERVFAIL"; css_class="status-warning"; icon="⚠️"; WARNING_TESTS+=1
+                                echo -ne "${YELLOW}!${NC}"
+                            elif echo "$output" | grep -q "status: NXDOMAIN"; then
+                                status_txt="NXDOMAIN"; css_class="status-warning"; icon="🔸"; WARNING_TESTS+=1
+                                echo -ne "${YELLOW}!${NC}"
+                            elif echo "$output" | grep -q "status: REFUSED"; then
+                                status_txt="REFUSED"; css_class="status-fail"; icon="⛔"; FAILED_TESTS+=1
+                                echo -ne "${RED}x${NC}"
+                            elif echo "$output" | grep -q "connection timed out"; then
+                                status_txt="TIMEOUT"; css_class="status-fail"; icon="⏳"; FAILED_TESTS+=1
+                                echo -ne "${RED}x${NC}"
                             else
                                 SUCCESS_TESTS+=1
+                                echo -ne "${GREEN}.${NC}"
                             fi
                             
-                            if [[ "$GENERATE_HTML" == "true" ]]; then
-                                echo "<td class=\"$cell_class\">$icon $status_txt <div class=\"meta-info\">${duration}ms</div></td>" >> "$HTML_FILE"
-                            fi
+                            echo "<td><a href=\"#$unique_id\" class=\"cell-link $css_class\">$icon $status_txt <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
                             
-                            # Console feedback minimalista (ponto progressivo)
-                            if [[ "$ret_code" -eq 0 ]]; then echo -n "."; else echo -n "x"; fi
+                            local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                            local log_color_style=""
+                            [[ "$css_class" == "status-fail" ]] && log_color_style="color:#f44747"
+                            [[ "$css_class" == "status-warning" ]] && log_color_style="color:#ffcc02"
                             
-                            TOTAL_TESTS+=1
+                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"$log_color_style\">$status_txt</span> <strong>$srv</strong> &rarr; $target ($rec) <span class=\"badge\">${dur}ms</span>$bind_version_info</summary><pre>$cmd"$'\n\n'"$safe_output</pre></details>" >> "$TEMP_DETAILS"
+                            
                             [[ "$SLEEP" != "0" ]] && sleep "$SLEEP"
                         done
-                        
-                        # Fecha Linha HTML
-                        [[ "$GENERATE_HTML" == "true" ]] && echo "</tr>" >> "$HTML_FILE"
+                        echo "</tr>" >> "$TEMP_MATRIX"
                     done
                 done
             done
-            html_end_group_table
+            echo "</tbody></table>" >> "$TEMP_MATRIX"
+            echo "" 
         done
-        
-        echo "" # Quebra de linha no console após o domínio
-        html_end_domain
-        
-    done < domains_tests.csv
+        echo "</div>" >> "$TEMP_MATRIX"
+        echo ""
+    done < "$FILE_DOMAINS"
 }
 
 # ==============================================
-# MAIN
+# MAIN EXECUTION
 # ==============================================
 
 main() {
-    if ! command -v dig &> /dev/null; then echo "Instale o dig (bind-utils)"; exit 1; fi
+    while getopts ":n:g:h" opt; do
+        case ${opt} in
+            n) FILE_DOMAINS=$OPTARG ;;
+            g) FILE_GROUPS=$OPTARG ;;
+            h) show_help; exit 0 ;;
+            \?) echo -e "${RED}Opção inválida: -$OPTARG${NC}" >&2; show_help; exit 1 ;;
+        esac
+    done
+
+    if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     
-    init_html_report
+    print_execution_summary
+    
+    init_html_parts
+    write_html_header
     load_dns_groups
     process_tests
-    finalize_html_report
+    assemble_html
     
     echo -e "\n${GREEN}=== DIAGNÓSTICO CONCLUÍDO ===${NC}"
-    echo "Total: $TOTAL_TESTS | Sucesso: $SUCCESS_TESTS | Falha: $FAILED_TESTS"
-    echo "Relatório: $HTML_FILE"
+    echo "Total: $TOTAL_TESTS"
+    echo "Sucesso: $SUCCESS_TESTS"
+    echo "Alertas: $WARNING_TESTS"
+    echo "Falhas: $FAILED_TESTS"
+    echo -e "Relatório Gerado: ${CYAN}$HTML_FILE${NC}"
 }
 
 main "$@"
