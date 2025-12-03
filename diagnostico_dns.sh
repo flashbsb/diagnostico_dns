@@ -2,31 +2,38 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 8.1
-# "Todas as informações de volta no banner + Ping."
+# Versão: 8.3 (Standalone + Group Awareness)
+# "Agora com fofoca: conta de qual grupo é o IP."
 # ==============================================
 
-# --- CONFIGURAÇÕES PADRÃO ---
+# --- CONFIGURAÇÕES PADRÃO (Incorporadas do script_config.cfg) ---
+
+# Opções padrão do DIG (Iterativo/Authoritative)
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
+
+# Opções para testes Recursivos
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
+
+# Prefixo e Arquivos
 LOG_PREFIX="dnsdiag"
-TIMEOUT=5
-VALIDATE_CONNECTIVITY=true
-GENERATE_HTML=true
-SLEEP=0.05
-VERBOSE=true
-IP_VERSION="ipv4"
-MAX_RETRIES=1
-CHECK_BIND_VERSION=false
+FILE_DOMAINS="domains_tests.csv"
+FILE_GROUPS="dns_groups.csv"
+
+# Configurações de Comportamento
+TIMEOUT=5                     # Timeout global de conexão (segundos)
+VALIDATE_CONNECTIVITY="true"  # Validar porta 53 antes do dig?
+GENERATE_HTML="true"
+GENERATE_JSON="false"
+SLEEP=0.05                    # Intervalo entre testes
+VERBOSE="false"               # Exibir logs detalhados
+IP_VERSION="ipv4"             # ipv4, ipv6 ou both
+MAX_RETRIES=3                 # Número de tentativas lógicas
+CHECK_BIND_VERSION="false"    # Tentar descobrir versão do BIND
 
 # Configurações de Ping
 ENABLE_PING=true
-PING_COUNT=3       # Quantos pacotes enviar
-PING_TIMEOUT=1     # Timeout por pacote (segundos)
-
-# Arquivos Padrão
-FILE_DOMAINS="domains_tests.csv"
-FILE_GROUPS="dns_groups.csv"
+PING_COUNT=10       # Quantos pacotes enviar
+PING_TIMEOUT=2      # Timeout por pacote (segundos)
 
 # --- CORES DO TERMINAL ---
 RED='\033[0;31m'
@@ -44,15 +51,12 @@ declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
 declare -i WARNING_TESTS=0
 
-# Carregar config externa
-[[ -f "script_config.cfg" ]] && source script_config.cfg
-
 # Setup Arquivos
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_${TIMESTAMP}.html"
 
-# Arquivos Temporários
+# Arquivos Temporários para montagem do HTML
 TEMP_HEADER="logs/temp_header_${TIMESTAMP}.html"
 TEMP_STATS="logs/temp_stats_${TIMESTAMP}.html"
 TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
@@ -64,7 +68,7 @@ TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.1${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v8.3${NC}"
     echo -e "Uso: $0 [opções]"
     echo -e "Opções:"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
@@ -90,6 +94,7 @@ print_execution_summary() {
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
     echo -e "  🛠️  Dig Options   : ${GRAY}${DEFAULT_DIG_OPTIONS:0:40}...${NC}"
+    echo -e "  🔄 Max Retries   : ${CYAN}${MAX_RETRIES}${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
     echo -e "  📄 Relatório HTML: ${GREEN}$HTML_FILE${NC}"
@@ -265,8 +270,8 @@ assemble_html() {
         cat >> "$HTML_FILE" << EOF
         <div class="ping-section">
              <h2>📡 Latência e Disponibilidade (ICMP)</h2>
-             <p style="color: #808080; margin-bottom: 20px;">Testes de ping realizados após a coleta DNS. Clique nos itens para ver detalhes.</p>
-             <table><thead><tr><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
+             <p style="color: #808080; margin-bottom: 20px;">Testes de ping realizados após a coleta DNS. Grupos identificados para facilitar sua vida.</p>
+             <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
 EOF
         cat "$TEMP_PING" >> "$HTML_FILE"
         echo "</tbody></table></div>" >> "$HTML_FILE"
@@ -335,11 +340,24 @@ run_ping_diagnostics() {
     fi
 
     declare -A CHECKED_IPS
+    declare -A IP_GROUPS_MAP  # Mapa para guardar o(s) grupo(s) de cada IP
     local unique_ips=()
     
-    # Coletar IPs únicos de todos os grupos
+    # Coletar IPs únicos de todos os grupos e Mapear Grupos
     for grp in "${!DNS_GROUPS[@]}"; do
         for ip in ${DNS_GROUPS[$grp]}; do
+            local grp_label="[$grp]"
+            
+            # Adiciona o grupo ao mapa deste IP (evita duplicatas na string)
+            if [[ -z "${IP_GROUPS_MAP[$ip]}" ]]; then
+                IP_GROUPS_MAP[$ip]="$grp_label"
+            else
+                if [[ "${IP_GROUPS_MAP[$ip]}" != *"$grp_label"* ]]; then
+                    IP_GROUPS_MAP[$ip]="${IP_GROUPS_MAP[$ip]} $grp_label"
+                fi
+            fi
+
+            # Lógica de IP Único para o teste em si
             if [[ -z "${CHECKED_IPS[$ip]}" ]]; then
                 CHECKED_IPS[$ip]=1
                 unique_ips+=("$ip")
@@ -350,7 +368,11 @@ run_ping_diagnostics() {
     local ping_id=0
     for ip in "${unique_ips[@]}"; do
         ping_id=$((ping_id + 1))
-        echo -ne "   📡 Pinging ${CYAN}$ip${NC}... "
+        
+        # Recupera os grupos formatados
+        local groups_str="${IP_GROUPS_MAP[$ip]}"
+        
+        echo -ne "   📡 Pinging ${YELLOW}${groups_str}${NC} ${CYAN}$ip${NC}... "
         
         # Executa Ping (Linux syntax)
         local output
@@ -387,17 +409,18 @@ run_ping_diagnostics() {
         
         echo -e "$console_res"
         
-        # Gera Linha HTML
+        # Gera Linha HTML com a nova coluna de GRUPO
         echo "<tr>" >> "$TEMP_PING"
+        echo "<td><span class=\"badge\">$groups_str</span></td>" >> "$TEMP_PING"
         echo "<td><strong>$ip</strong></td>" >> "$TEMP_PING"
         echo "<td class=\"$class_html\">$status_html</td>" >> "$TEMP_PING"
         echo "<td>${loss}%</td>" >> "$TEMP_PING"
         echo "<td>${rtt_avg}ms</td>" >> "$TEMP_PING"
         echo "</tr>" >> "$TEMP_PING"
         
-        # Adiciona detalhe técnico na linha seguinte (full width)
+        # Adiciona detalhe técnico na linha seguinte (full width - agora colspan 5)
         local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-        echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output bruto do ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
+        echo "<tr><td colspan=\"5\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output bruto do ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
         
     done
     echo ""
