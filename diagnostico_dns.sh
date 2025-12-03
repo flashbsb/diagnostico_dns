@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # ==============================================
-# SCRIPT DIAGNÓSTICO DNS - RANGE EDITION
-# Versão: 7.2
-# "Agora informa os IDs dos testes no cabeçalho."
+# SCRIPT DIAGNÓSTICO DNS - MODE INFO EDITION
+# Versão: 7.3
+# "Agora mostra o modo (iterative/recursive) no console."
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
 DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
 LOG_PREFIX="dnsdiag"
-TIMEOUT=5
+TIMEOUT=2
 VALIDATE_CONNECTIVITY=true
 GENERATE_HTML=true
-SLEEP=1.50
+SLEEP=0.30
 VERBOSE=true
 IP_VERSION="ipv4"
 MAX_RETRIES=1
@@ -56,7 +56,7 @@ TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}Diagnóstico DNS Avançado - v7.2${NC}"
+    echo -e "${BLUE}Diagnóstico DNS Avançado - v7.3${NC}"
     echo -e "Uso: $0 [opções]"
     echo -e "Opções:"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Arquivo de domínios (Default: domains_tests.csv)"
@@ -319,7 +319,8 @@ process_tests() {
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
-        echo -e "${CYAN}>> Domínio: ${WHITE}${domain} ${PURPLE}[${record_types}]${NC}"
+        # --- MELHORIA: EXIBE TIPO DE REGISTRO E MODO DE TESTE NO CONSOLE ---
+        echo -e "${CYAN}>> Domínio: ${WHITE}${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
 
         # ----------------------------------------------------
         # PRÉ-CÁLCULO DE TESTES PARA O HTML
