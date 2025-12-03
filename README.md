@@ -1,7 +1,3 @@
-Aqui está o `README.md` prontinho para você comitar. Mantive o tom técnico, mas com aquele sarcasmo refinado de quem sabe que, no final do dia, a culpa é sempre do DNS.
-
-O arquivo está formatado para ficar bonito no GitHub, com tabelas e blocos de código claros.
-
 -----
 
 ````markdown
