@@ -59,10 +59,11 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
 
 ### Flags Disponíveis
 
-  * `-n <arquivo>`: Define um arquivo de domínios personalizado (Default: `domains_tests.csv`).
-  * `-g <arquivo>`: Define um arquivo de grupos DNS personalizado (Default: `dns_groups.csv`).
-  * `-y`: Modo não-interativo (Silent).
-  * `-h`: Mostra o menu de ajuda.
+  * `-n <arquivo>`: Caminho do CSV de domínios (Default: domains_tests.csv)
+  * `-g <arquivo>`: Caminho do CSV de grupos DNS (Default: dns_groups.csv)
+  * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
+  * `-y`: Modo Silencioso (Não interativo / Aceita defaults)
+  * `-h`: Exibe este menu de ajuda
 
 ## ⚙️ Configuração dos CSVs
 
