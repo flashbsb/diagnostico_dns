@@ -2,16 +2,8 @@
 # TESTE: iterative, recursive, both
 # TIPOS_REGISTRO: a, aaaa, ns, mx, txt, soa, ptr (separados por virgula)
 # HOSTS_EXTRA: subdominios para testar (separados por virgula)
-
-telebras.seg.br;TLB1;iterative;ns;
-telebras.com.br;TLB2;iterative;ns;
-telebras.com.br;TLB2;iterative;a;www
-waveptx.telebras.seg.br;TLB1,MOTOROLA;iterative;ns;
-waveptx.telebras.seg.br;TLB1,MOTOROLA;iterative;a;geoamui,gmedian1,gmedian2,gpoc,kms,median1,roip,wds
-waveptx.telebras.seg.br;OPEN;recursive;ns;
-waveptx.telebras.seg.br;OPEN;recursive;a;geoamui
 meuip.com.br;TLB1,MOTOROLA;recursive;ns;
-oi.net.br;OI;iterative;ns;
+oi.net.br;OI;iterative;ns;www
 glb.oi.net.br;OI,GLBOI;iterative;ns;
 ntp-bsa.oi.net.br;OI,GLBOI;iterative;a;
 ntp-bsa.oi.net.br;OPEN;recursive;a;
