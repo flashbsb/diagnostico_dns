@@ -27,7 +27,7 @@ Você precisa de um Linux e vontade de viver. Ah, e destes pacotes:
 
 ```bash
 # 1. Clone este repositório (você já deve ter feito isso)
-git clone [https://github.com/flashbsb/diagnostico_dns.git](https://github.com/flashbsb/diagnostico_dns.git)
+git clone https://github.com/flashbsb/diagnostico_dns.git
 cd diagnostico_dns
 
 # 2. Dê permissão de execução (porque o Linux não confia em você)
