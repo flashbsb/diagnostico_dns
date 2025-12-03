@@ -67,7 +67,6 @@ Define **QUEM** você vai testar.
 **Exemplo:**
 
 ```csv
-TLB1;DNS Primario;mixed;2;177.15.130.101,177.15.130.102
 GOOGLE;Public DNS;recursive;1;8.8.8.8
 ```
 
@@ -81,7 +80,7 @@ Define **O QUE** você vai perguntar.
 | Campo | Descrição | Exemplo |
 |-------|-----------|---------|
 | Domínio | O domínio raiz | `google.com` |
-| Grupos | IDs definidos no `dns_groups.csv` | `GOOGLE,TLB1` |
+| Grupos | IDs definidos no `dns_groups.csv` | `GOOGLE` |
 | Teste | `iterative`, `recursive` ou `both` | `recursive` |
 | Registros | Tipos de record separados por vírgula | `a,ns,txt` |
 | Hosts Extra | Subdomínios (apenas o prefixo) | `www,mail` |
@@ -89,7 +88,6 @@ Define **O QUE** você vai perguntar.
 **Exemplo:**
 
 ```csv
-telebras.com.br;TLB1;iterative;ns,soa;
 google.com;GOOGLE;recursive;a;www,mail,drive
 ```
 
