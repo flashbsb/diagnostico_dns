@@ -2,7 +2,7 @@
 # TESTE: iterative, recursive, both
 # TIPOS_REGISTRO: a, aaaa, ns, mx, txt, soa, ptr (separados por virgula)
 # HOSTS_EXTRA: subdominios para testar (separados por virgula)
-meuip.com.br;TLB1,MOTOROLA;recursive;ns;
+meuip.com.br;MOTOROLA;recursive;ns;
 oi.net.br;OI;iterative;ns;www
 glb.oi.net.br;OI,GLBOI;iterative;ns;
 ntp-bsa.oi.net.br;OI,GLBOI;iterative;a;
