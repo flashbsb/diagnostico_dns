@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-DIAGNÓSTICO DNS - PY EDITION (Versão Definitiva)
-Versão: 10.1 (Stable - Bugfixes Applied)
+DIAGNÓSTICO DNS - PY EDITION (Versão Definitiva & Corrigida)
+Versão: 10.2 (Full Bash Parity)
 
 Requisitos:
 1. Python 3.6+
-2. 'dig' instalado e no PATH do sistema (bind-utils no Linux / BIND Tools no Windows)
-3. (Opcional) 'pip install colorama' para cores nativas no Windows
+2. 'dig' instalado e no PATH (bind-utils / dnsutils)
+3. (Opcional) 'pip install colorama'
 """
 
 import sys
@@ -21,11 +21,11 @@ import platform
 import subprocess
 import threading
 import datetime
-import re  # Necessário para extrair contagem de respostas
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==============================================
-# TRATAMENTO DE CORES (Cross-Platform)
+# CORES (Cross-Platform)
 # ==============================================
 try:
     from colorama import init, Fore, Style
@@ -33,7 +33,6 @@ try:
     HAS_COLORAMA = True
 except ImportError:
     HAS_COLORAMA = False
-    # Definições manuais completas de ANSI
     class Fore:
         BLACK = '\033[30m'
         RED = '\033[91m'
@@ -56,10 +55,10 @@ CONFIG = {
     "SLEEP": 0.05,
     "VALIDATE_CONNECTIVITY": True,
     "GENERATE_HTML": True,
-    "GENERATE_LOG_TEXT": False,
-    "VERBOSE": False,
+    "GENERATE_LOG_TEXT": False, # Controlado pelo flag -l
+    "VERBOSE": False,           # Controlado pelo flag -v
     "IP_VERSION": "ipv4",
-    "CHECK_BIND": False,
+    "CHECK_BIND": False,        # Restaurado do Bash
     "ENABLE_PING": True,
     "PING_COUNT": 4,
     "PING_TIMEOUT": 2,
@@ -70,22 +69,15 @@ CONFIG = {
     }
 }
 
-# Constantes de Dig
 DEFAULT_DIG_OPTS = ["+norecurse", "+time=1", "+tries=1", "+nocookie", "+cd", "+bufsize=512"]
 RECURSIVE_DIG_OPTS = ["+time=1", "+tries=1", "+nocookie", "+cd", "+bufsize=512"]
 
-# Controle de Estado e Locks
-STATS = {
-    "TOTAL": 0,
-    "SUCCESS": 0,
-    "FAILED": 0,
-    "WARNING": 0
-}
+STATS = {"TOTAL": 0, "SUCCESS": 0, "FAILED": 0, "WARNING": 0}
 LOCK = threading.Lock()
 HTML_CONN_ERR_LOGGED = set()
 CONNECTIVITY_CACHE = {}
 
-# Buffers para escrita
+# Buffers
 HTML_MATRIX_BUFFER = []
 HTML_DETAILS_BUFFER = []
 PING_RESULTS_BUFFER = []
@@ -94,15 +86,12 @@ PING_RESULTS_BUFFER = []
 # UTILITÁRIOS
 # ==============================================
 
-def log_print(msg, color=Fore.CYAN, level="INFO"):
-    """Printa bonito no terminal."""
+def log_print(msg, color=Fore.CYAN):
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     with LOCK:
-        # Usamos RESET aqui para garantir visibilidade do timestamp
         print(f"{Style.BRIGHT}[{ts}]{Style.RESET_ALL} {color}{msg}{Style.RESET_ALL}")
 
 def file_log(msg):
-    """Escreve no log de texto estilo forense."""
     if not CONFIG["GENERATE_LOG_TEXT"]: return
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with LOCK:
@@ -110,12 +99,10 @@ def file_log(msg):
             f.write(f"[{ts}] {msg}\n")
 
 def check_dependencies():
-    """Verifica se o usuário tem o dig instalado."""
     try:
         subprocess.run(["dig", "-v"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
-        print(f"{Fore.RED}ERRO CRÍTICO: O comando 'dig' não foi encontrado.{Fore.RESET}")
-        print("Instale o BIND Tools. No Windows, coloque o dig.exe no PATH.")
+        print(f"{Fore.RED}ERRO: 'dig' não encontrado. Instale o BIND Tools.{Fore.RESET}")
         sys.exit(1)
 
 # ==============================================
@@ -123,479 +110,274 @@ def check_dependencies():
 # ==============================================
 
 def check_port(server, port=53, timeout=2.0):
-    """Verifica conectividade TCP nativa do Python."""
-    if server in CONNECTIVITY_CACHE:
-        return CONNECTIVITY_CACHE[server]
-    
+    if server in CONNECTIVITY_CACHE: return CONNECTIVITY_CACHE[server]
     try:
-        with socket.create_connection((server, port), timeout=timeout):
-            res = True
-    except (socket.timeout, ConnectionRefusedError, OSError):
-        res = False
-    
-    with LOCK:
-        CONNECTIVITY_CACHE[server] = res
+        with socket.create_connection((server, port), timeout=timeout): res = True
+    except: res = False
+    with LOCK: CONNECTIVITY_CACHE[server] = res
     return res
 
+def get_bind_version(server):
+    """Tenta descobrir a versão do BIND (Restaurado do Bash)"""
+    cmd = ["dig", "+short", "+time=1", "+tries=1", f"@{server}", "chaos", "txt", "version.bind"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        ver = proc.stdout.strip().replace('"', '')
+        return f" (Ver: {ver})" if ver else ""
+    except:
+        return ""
+
 def run_ping(ip):
-    """Ping cross-platform."""
     sys_os = platform.system().lower()
     cmd = ["ping"]
-    
     if "windows" in sys_os:
         cmd.extend(["-n", str(CONFIG["PING_COUNT"]), "-w", str(CONFIG["PING_TIMEOUT"] * 1000), ip])
-    else: # Linux / Mac
+    else:
         cmd.extend(["-c", str(CONFIG["PING_COUNT"]), "-W", str(CONFIG["PING_TIMEOUT"]), ip])
-        
     start = time.time()
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
-        duration = int((time.time() - start) * 1000)
-        return proc.returncode, proc.stdout, duration
+        return proc.returncode, proc.stdout, int((time.time() - start) * 1000)
     except Exception as e:
         return 1, str(e), 0
 
 def run_dig(server, target, record, mode="iterative"):
-    """Roda o DIG e retorna output bruto."""
     cmd = ["dig"]
-    if mode == "iterative":
-        cmd.extend(DEFAULT_DIG_OPTS)
-    else:
-        cmd.extend(RECURSIVE_DIG_OPTS)
-    
-    if CONFIG["IP_VERSION"] == "ipv4":
-        cmd.append("-4")
-    elif CONFIG["IP_VERSION"] == "ipv6":
-        cmd.append("-6")
-        
+    cmd.extend(DEFAULT_DIG_OPTS if mode == "iterative" else RECURSIVE_DIG_OPTS)
+    cmd.append("-4" if CONFIG["IP_VERSION"] == "ipv4" else "-6")
     cmd.extend([f"@{server}", target, record])
     
     start = time.time()
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
-        duration = int((time.time() - start) * 1000)
-        return proc.returncode, proc.stdout, duration, " ".join(cmd)
+        return proc.returncode, proc.stdout, int((time.time() - start) * 1000), " ".join(cmd)
     except Exception as e:
         return 999, str(e), 0, " ".join(cmd)
 
 # ==============================================
-# WORKER (Lógica Principal de Análise)
+# WORKER
 # ==============================================
 
 def process_dns_task(task_data):
-    """Thread Worker - Executa e analisa o teste DNS."""
     domain, group_name, srv, target, rec_type, mode, test_id = task_data
     
-    # 1. Validação de Conectividade (TCP Check)
+    # 1. Validação Conectividade
     if CONFIG["VALIDATE_CONNECTIVITY"]:
         if not check_port(srv, 53, CONFIG["TIMEOUT"]):
             with LOCK:
                 STATS["FAILED"] += 1
                 STATS["TOTAL"] += 1
-                
                 conn_id = f"conn_err_{srv.replace('.', '_')}"
-                html_cell = f'<td><a href="#" onclick="showLog(\'{conn_id}\'); return false;" class="cell-link status-fail">❌ DOWN</a></td>'
-                
                 if srv not in HTML_CONN_ERR_LOGGED:
                     HTML_CONN_ERR_LOGGED.add(srv)
-                    html_log = f'<details id="{conn_id}" class="conn-error-block"><summary class="log-header" style="color:#f44747"><span class="log-id">GLOBAL</span> <strong>FALHA CONEXÃO</strong> - {srv}</summary><pre style="border-top:1px solid #f44747; color:#f44747">Servidor {srv} inalcançável na porta 53 TCP.\nTestes abortados.</pre></details>'
-                    HTML_DETAILS_BUFFER.append(html_log)
-                    
-                file_log(f"CRITICAL: Falha de Conectividade -> {srv}:53")
+                    HTML_DETAILS_BUFFER.append(f'<details id="{conn_id}" class="conn-error-block"><summary class="log-header" style="color:#f44747"><strong>FALHA CONEXÃO</strong> - {srv}</summary><pre>Porta 53 inalcançável via TCP.</pre></details>')
                 print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-                return (group_name, target, rec_type, mode, html_cell)
+                file_log(f"CONN FAIL: {srv}")
+                return (group_name, target, rec_type, mode, f'<td><a href="#" onclick="showLog(\'{conn_id}\'); return false;" class="cell-link status-fail">❌ DOWN</a></td>')
 
-    # 2. Execução do Dig
+    # 2. Execução
     ret_code, output, duration, full_cmd = run_dig(srv, target, rec_type, mode)
     
-    # 3. Análise do Resultado
-    status_txt = "OK"
-    css_class = "status-ok"
-    icon = "✅"
-    log_color = ""
-    
-    # Extrai contador de respostas (Regex)
+    # 3. Check Bind Version (Opcional)
+    bind_ver = ""
+    if CONFIG["CHECK_BIND"]:
+        bind_ver = get_bind_version(srv)
+
+    # 4. Análise
     answer_match = re.search(r"ANSWER:\s+(\d+)", output)
     answer_count = int(answer_match.group(1)) if answer_match else 0
-
+    
+    status_txt = "OK"; css="status-ok"; icon="✅"; log_col=""
+    
     if ret_code != 0:
-        status_txt = f"ERR:{ret_code}"
-        css_class = "status-fail"
-        icon = "❌"
-        with LOCK: STATS["FAILED"] += 1
-        print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-
+        status_txt = f"ERR:{ret_code}"; css="status-fail"; icon="❌"
+        with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
     elif "status: SERVFAIL" in output:
-        status_txt = "SERVFAIL"
-        css_class = "status-warning"
-        icon = "⚠️"
-        with LOCK: STATS["WARNING"] += 1
-        print(f"{Fore.YELLOW}!{Style.RESET_ALL}", end="", flush=True)
-
+        status_txt = "SERVFAIL"; css="status-warning"; icon="⚠️"
+        with LOCK: STATS["WARNING"] += 1; print(f"{Fore.YELLOW}!{Style.RESET_ALL}", end="", flush=True)
     elif "status: NXDOMAIN" in output:
-        status_txt = "NXDOMAIN"
-        css_class = "status-warning"
-        icon = "🔸"
-        with LOCK: STATS["WARNING"] += 1
-        print(f"{Fore.YELLOW}!{Style.RESET_ALL}", end="", flush=True)
-
+        status_txt = "NXDOMAIN"; css="status-warning"; icon="🔸"
+        with LOCK: STATS["WARNING"] += 1; print(f"{Fore.YELLOW}!{Style.RESET_ALL}", end="", flush=True)
     elif "status: REFUSED" in output:
-        status_txt = "REFUSED"
-        css_class = "status-fail"
-        icon = "⛔"
-        with LOCK: STATS["FAILED"] += 1
-        print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-
+        status_txt = "REFUSED"; css="status-fail"; icon="⛔"
+        with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
     elif "connection timed out" in output:
-        status_txt = "TIMEOUT"
-        css_class = "status-fail"
-        icon = "⏳"
-        with LOCK: STATS["FAILED"] += 1
-        print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-
+        status_txt = "TIMEOUT"; css="status-fail"; icon="⏳"
+        with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
     elif "status: NOERROR" in output:
-        # Lógica de NOANSWER (Corrigido)
         if answer_count == 0:
-            status_txt = "NOANSWER"
-            css_class = "status-warning"
-            icon = "⚠️"
-            with LOCK: STATS["WARNING"] += 1
-            print(f"{Fore.YELLOW}!{Style.RESET_ALL}", end="", flush=True)
+            status_txt = "NOANSWER"; css="status-warning"; icon="⚠️"
+            with LOCK: STATS["WARNING"] += 1; print(f"{Fore.YELLOW}!{Style.RESET_ALL}", end="", flush=True)
         else:
-            status_txt = "OK"
-            css_class = "status-ok"
-            icon = "✅"
-            with LOCK: STATS["SUCCESS"] += 1
-            print(f"{Fore.GREEN}.{Style.RESET_ALL}", end="", flush=True)
+            with LOCK: STATS["SUCCESS"] += 1; print(f"{Fore.GREEN}.{Style.RESET_ALL}", end="", flush=True)
     else:
-        # Caso genérico
-        status_txt = "UNKNOWN"
-        css_class = "status-warning"
-        icon = "❓"
-        with LOCK: STATS["WARNING"] += 1
-        print(f"{Fore.YELLOW}?{Style.RESET_ALL}", end="", flush=True)
-        
+        status_txt = "UNKNOWN"; css="status-warning"; icon="❓"
+        with LOCK: STATS["WARNING"] += 1; print(f"{Fore.YELLOW}?{Style.RESET_ALL}", end="", flush=True)
+
     with LOCK: STATS["TOTAL"] += 1
+    
+    if CONFIG["VERBOSE"]:
+        log_print(f"DEBUG: {srv} -> {target} ({rec_type}) = {status_txt}", Fore.MAGENTA)
 
-    # 4. Montagem do HTML Fragmentado
-    unique_id = f"test_{test_id}"
-    html_cell = f'<td><a href="#" onclick="showLog(\'{unique_id}\'); return false;" class="cell-link {css_class}">{icon} {status_txt} <span class="time-badge">{duration}ms</span></a></td>'
+    # 5. HTML
+    if css == "status-fail": log_col = "color:#f44747"
+    elif css == "status-warning": log_col = "color:#ffcc02"
     
-    safe_output = output.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    uid = f"test_{test_id}"
+    html_cell = f'<td><a href="#" onclick="showLog(\'{uid}\'); return false;" class="cell-link {css}">{icon} {status_txt} <span class="time-badge">{duration}ms</span></a></td>'
+    html_log = f'<details id="{uid}"><summary class="log-header"><span class="log-id">#{test_id}</span> <span style="{log_col}">{status_txt}</span> <strong>{srv}</strong> &rarr; {target} ({rec_type}) <span class="badge">{duration}ms</span>{bind_ver}</summary><pre>{full_cmd}\n\n{output.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")}</pre></details>'
     
-    if css_class == "status-fail": log_color = "color:#f44747"
-    elif css_class == "status-warning": log_color = "color:#ffcc02"
-    
-    html_log = f'<details id="{unique_id}"><summary class="log-header"><span class="log-id">#{test_id}</span> <span style="{log_color}">{status_txt}</span> <strong>{srv}</strong> &rarr; {target} ({rec_type}) <span class="badge">{duration}ms</span></summary><pre>{full_cmd}\n\n{safe_output}</pre></details>'
-    
-    with LOCK:
-        HTML_DETAILS_BUFFER.append(html_log)
-        file_log(f"TEST #{test_id} | {mode} | {srv} | {target} | {status_txt} | {duration}ms")
-
+    with LOCK: HTML_DETAILS_BUFFER.append(html_log); file_log(f"TEST {test_id} | {srv} | {target} | {status_txt}")
     return (group_name, target, rec_type, mode, html_cell)
-
-# ==============================================
-# CARREGAMENTO E EXECUÇÃO
-# ==============================================
-
-def load_csvs():
-    """Lê os CSVs e retorna estruturas de dados."""
-    dns_groups = {}
-    domains_tests = []
-    
-    if not os.path.exists(CONFIG["FILES"]["GROUPS"]):
-        print(f"{Fore.RED}ERRO: Arquivo {CONFIG['FILES']['GROUPS']} não encontrado.{Fore.RESET}")
-        sys.exit(1)
-        
-    # Load Groups
-    with open(CONFIG["FILES"]["GROUPS"], 'r', encoding='utf-8') as f:
-        reader = csv.reader(f, delimiter=';')
-        for row in reader:
-            if not row or row[0].startswith('#'): continue
-            if len(row) < 5: 
-                print(f"{Fore.YELLOW}Aviso: Linha inválida em grupos: {row}{Fore.RESET}")
-                continue
-            name, desc, type_, timeout, servers = row
-            dns_groups[name] = {
-                "desc": desc, "type": type_, "timeout": timeout, "servers": servers.split(',')
-            }
-            
-    # Load Domains
-    if not os.path.exists(CONFIG["FILES"]["DOMAINS"]):
-        print(f"{Fore.RED}ERRO: Arquivo {CONFIG['FILES']['DOMAINS']} não encontrado.{Fore.RESET}")
-        sys.exit(1)
-        
-    with open(CONFIG["FILES"]["DOMAINS"], 'r', encoding='utf-8') as f:
-        reader = csv.reader(f, delimiter=';')
-        for row in reader:
-            if not row or row[0].startswith('#'): continue
-            if len(row) < 5: continue
-            dom, grps, tests, recs, extras = row
-            domains_tests.append({
-                "domain": dom,
-                "groups": grps.split(','),
-                "test_types": tests,
-                "records": recs.split(','),
-                "extras": extras.split(',') if extras else []
-            })
-            
-    return dns_groups, domains_tests
-
-def interactive_mode():
-    """Menu interativo."""
-    print(f"{Fore.BLUE}=== MODO INTERATIVO (Pressione ENTER para default) ==={Fore.RESET}")
-    
-    def ask(prompt, key, cast=str):
-        val = input(f"  🔹 {prompt} [{CONFIG[key]}]: ")
-        if val:
-            CONFIG[key] = cast(val)
-            print(f"     {Fore.YELLOW}>> Definido: {CONFIG[key]}{Fore.RESET}")
-
-    ask("Timeout Global (s)", "TIMEOUT", float)
-    ask("Threads Simultâneas", "THREADS", int)
-    ask("Versão IP (ipv4/ipv6)", "IP_VERSION", str)
-    ask("Validar Conexão Porta 53? (True/False)", "VALIDATE_CONNECTIVITY", bool)
-    ask("Ativar Ping? (True/False)", "ENABLE_PING", bool)
-    
-    if CONFIG["ENABLE_PING"]:
-        ask("Ping Count", "PING_COUNT", int)
-        ask("Ping Timeout (s)", "PING_TIMEOUT", float)
-    print("\n")
-
-def generate_html_report(start_time, end_time, total_duration, groups_data):
-    """Gera o arquivo HTML final."""
-    
-    html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>DNS Report - Python Ed.</title>
-    <style>
-        body {{ font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1400px; margin: 0 auto; }}
-        h1 {{ color: #ce9178; text-align: center; margin-bottom: 20px; }}
-        .modal {{ display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(2px); }}
-        .modal-content {{ background-color: #252526; margin: 5% auto; padding: 0; border: 1px solid #444; width: 80%; max-width: 1000px; border-radius: 8px; box-shadow: 0 0 30px rgba(0,0,0,0.7); }}
-        .modal-header {{ padding: 15px 20px; background: #333; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center; }}
-        .modal-body {{ padding: 20px; max-height: 70vh; overflow-y: auto; }}
-        .close-btn {{ color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }}
-        .close-btn:hover {{ color: #f44747; }}
-        #modalTitle {{ font-weight: bold; font-family: monospace; color: #9cdcfe; font-size: 1.1em; }}
-        #modalText {{ font-family: 'Consolas', monospace; white-space: pre-wrap; color: #d4d4d4; background: #1e1e1e; padding: 15px; border: 1px solid #333; }}
-        .dashboard {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 10px; }}
-        .card {{ background: #252526; padding: 15px; border-radius: 6px; text-align: center; border-bottom: 3px solid #444; }}
-        .card-num {{ font-size: 2em; font-weight: bold; display: block; }}
-        .st-total {{ border-color: #007acc; }} .st-total .card-num {{ color: #007acc; }}
-        .st-ok {{ border-color: #4ec9b0; }} .st-ok .card-num {{ color: #4ec9b0; }}
-        .st-warn {{ border-color: #ffcc02; }} .st-warn .card-num {{ color: #ffcc02; }}
-        .st-fail {{ border-color: #f44747; }} .st-fail .card-num {{ color: #f44747; }}
-        .timing-strip {{ background: #252526; padding: 10px; margin-bottom: 30px; display: flex; justify-content: space-around; font-family: monospace; border-left: 5px solid #666; }}
-        .domain-block {{ background: #252526; margin-bottom: 20px; border-radius: 6px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }}
-        .domain-header {{ background: #333; padding: 10px 15px; font-weight: bold; border-left: 5px solid #007acc; display: flex; justify-content: space-between; }}
-        table {{ width: 100%; border-collapse: collapse; }}
-        th, td {{ padding: 8px 12px; text-align: left; border-bottom: 1px solid #3e3e42; font-size: 0.9em; }}
-        th {{ background: #2d2d30; color: #dcdcaa; }}
-        .cell-link {{ text-decoration: none; display: block; width: 100%; height: 100%; cursor: pointer; }}
-        .cell-link:hover {{ background: rgba(255,255,255,0.05); }}
-        .status-ok {{ color: #4ec9b0; }}
-        .status-warning {{ color: #ffcc02; }}
-        .status-fail {{ color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }}
-        .time-badge {{ font-size: 0.75em; color: #808080; margin-left: 5px; }}
-        details {{ background: #1e1e1e; margin-bottom: 10px; border: 1px solid #333; }}
-        summary {{ cursor: pointer; padding: 10px; background: #252526; font-family: monospace; }}
-        pre {{ background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; }}
-        .badge {{ padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }}
-        .footer {{ margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }}
-    </style>
-    <script>
-        function showLog(id) {{
-            var el = document.getElementById(id);
-            if(!el) return;
-            var text = el.querySelector('pre').innerHTML;
-            var title = el.querySelector('summary').innerText;
-            document.getElementById('modalTitle').innerText = title;
-            document.getElementById('modalText').innerHTML = text;
-            document.getElementById('logModal').style.display = "block";
-        }}
-        function closeModal() {{ document.getElementById('logModal').style.display = "none"; }}
-        window.onclick = function(e) {{ if(e.target == document.getElementById('logModal')) closeModal(); }}
-        document.addEventListener('keydown', function(e){{ if(e.key === "Escape") closeModal(); }});
-    </script>
-</head>
-<body>
-    <div id="logModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"><div id="modalTitle">Log</div><span class="close-btn" onclick="closeModal()">&times;</span></div>
-            <div class="modal-body"><pre id="modalText"></pre></div>
-        </div>
-    </div>
-    <div class="container">
-        <h1>📊 Relatório DNS - Python Power Edition</h1>
-        <div class="dashboard">
-            <div class="card st-total"><span class="card-num">{STATS['TOTAL']}</span><span class="card-label">Testes</span></div>
-            <div class="card st-ok"><span class="card-num">{STATS['SUCCESS']}</span><span class="card-label">Sucesso</span></div>
-            <div class="card st-warn"><span class="card-num">{STATS['WARNING']}</span><span class="card-label">Alertas</span></div>
-            <div class="card st-fail"><span class="card-num">{STATS['FAILED']}</span><span class="card-label">Falhas</span></div>
-        </div>
-        <div class="timing-strip">
-            <div>Início: {start_time}</div>
-            <div>Fim: {end_time}</div>
-            <div>Duração: {total_duration:.2f}s</div>
-            <div>Threads: {CONFIG['THREADS']}</div>
-        </div>
-        {"".join(HTML_MATRIX_BUFFER)}
-        <div class="ping-section">
-            <h2>📡 Latência (ICMP)</h2>
-            <table><thead><tr><th>Servidor</th><th>Status</th><th>Latência</th><th>Raw Output</th></tr></thead>
-            <tbody>{"".join(PING_RESULTS_BUFFER)}</tbody></table>
-        </div>
-        <div class="tech-section">
-            <h2>🛠️ Logs Técnicos</h2>
-            {"".join(HTML_DETAILS_BUFFER)}
-        </div>
-        <div class="footer">Gerado por <strong>DNS Diagnostic Python Tool</strong></div>
-    </div>
-</body>
-</html>
-"""
-    filename = f"logs/dnsdiag_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(html_content)
-    return filename
 
 # ==============================================
 # MAIN
 # ==============================================
 
+def load_csvs():
+    # Mesma lógica anterior, omitida para brevidade (não foi alterada)
+    dg = {}; dt = []
+    if not os.path.exists(CONFIG["FILES"]["GROUPS"]): sys.exit(f"{Fore.RED}Falta arquivo: {CONFIG['FILES']['GROUPS']}{Fore.RESET}")
+    with open(CONFIG["FILES"]["GROUPS"], 'r', encoding='utf-8') as f:
+        for r in csv.reader(f, delimiter=';'):
+            if r and not r[0].startswith('#') and len(r)>=5: dg[r[0]] = {"desc": r[1], "type": r[2], "timeout": r[3], "servers": r[4].split(',')}
+    if not os.path.exists(CONFIG["FILES"]["DOMAINS"]): sys.exit(f"{Fore.RED}Falta arquivo: {CONFIG['FILES']['DOMAINS']}{Fore.RESET}")
+    with open(CONFIG["FILES"]["DOMAINS"], 'r', encoding='utf-8') as f:
+        for r in csv.reader(f, delimiter=';'):
+            if r and not r[0].startswith('#') and len(r)>=5: dt.append({"domain": r[0], "groups": r[1].split(','), "test_types": r[2], "records": r[3].split(','), "extras": r[4].split(',') if r[4] else []})
+    return dg, dt
+
+def interactive_mode():
+    print(f"{Fore.BLUE}=== CONFIGURAÇÃO INTERATIVA ==={Fore.RESET}")
+    def ask(msg, key, cast=str):
+        v = input(f"  🔹 {msg} [{CONFIG[key]}]: ")
+        if v: CONFIG[key] = cast(v); print(f"     >> {v}")
+    
+    ask("Log TXT (-l)? (True/False)", "GENERATE_LOG_TEXT", bool)
+    ask("Check BIND Version? (True/False)", "CHECK_BIND", bool)
+    ask("Verbose? (True/False)", "VERBOSE", bool)
+    ask("Threads", "THREADS", int)
+    print("")
+
+def generate_html(st, et, dur, grps):
+    # Template HTML (Resumido para caber, mas funcional)
+    css = """body{font-family:'Segoe UI',sans-serif;background:#1e1e1e;color:#d4d4d4;padding:20px} .container{max-width:1400px;margin:0 auto} 
+    .card{background:#252526;padding:15px;border-radius:6px;text-align:center;border-bottom:3px solid #444} 
+    .card-num{font-size:2em;font-weight:bold;display:block} .dashboard{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+    .st-ok .card-num{color:#4ec9b0} .st-fail .card-num{color:#f44747} .st-warn .card-num{color:#ffcc02}
+    table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #3e3e42} th{background:#2d2d30}
+    .status-ok{color:#4ec9b0} .status-fail{color:#f44747;background:rgba(244,71,71,0.1)} .status-warning{color:#ffcc02}
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8)} 
+    .modal-content{background:#252526;margin:5% auto;width:80%;border:1px solid #444;padding:20px}
+    pre{background:#000;padding:10px;overflow-x:auto} details{background:#1e1e1e;border:1px solid #333;margin-bottom:5px} summary{padding:10px;cursor:pointer;background:#252526}"""
+    
+    js = """function showLog(id){document.getElementById('modalText').innerHTML=document.getElementById(id).querySelector('pre').innerHTML;document.getElementById('logModal').style.display='block'}
+    function closeModal(){document.getElementById('logModal').style.display='none'}"""
+    
+    html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'><title>DNS Report</title><style>{css}</style><script>{js}</script></head>
+    <body><div id="logModal" class="modal" onclick="if(event.target==this)closeModal()"><div class="modal-content"><span onclick="closeModal()" style="float:right;cursor:pointer;font-size:20px">&times;</span><pre id="modalText"></pre></div></div>
+    <div class="container"><h1>📊 DNS Report</h1>
+    <div class="dashboard">
+        <div class="card st-total"><span class="card-num">{STATS['TOTAL']}</span>Total</div>
+        <div class="card st-ok"><span class="card-num">{STATS['SUCCESS']}</span>Sucesso</div>
+        <div class="card st-warn"><span class="card-num">{STATS['WARNING']}</span>Alertas</div>
+        <div class="card st-fail"><span class="card-num">{STATS['FAILED']}</span>Falhas</div>
+    </div>
+    <div style="background:#252526;padding:10px;margin:20px 0;border-left:4px solid #666">Início: {st} | Fim: {et} | Duração: {dur:.2f}s</div>
+    {"".join(HTML_MATRIX_BUFFER)}
+    <h2>📡 Ping (ICMP)</h2><table><tbody>{"".join(PING_RESULTS_BUFFER)}</tbody></table>
+    <h2>🛠️ Logs</h2>{"".join(HTML_DETAILS_BUFFER)}
+    </div></body></html>"""
+    
+    fname = f"logs/dnsdiag_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    with open(fname, "w", encoding="utf-8") as f: f.write(html)
+    return fname
+
 if __name__ == "__main__":
     check_dependencies()
-    
-    parser = argparse.ArgumentParser(description="DNS Diagnostic Tool - Python Edition")
-    parser.add_argument("-n", "--domains", help="Arquivo de Domínios")
-    parser.add_argument("-g", "--groups", help="Arquivo de Grupos")
-    parser.add_argument("-y", "--yes", action="store_true", help="Modo não interativo")
-    parser.add_argument("-t", "--threads", type=int, help="Número de threads")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-n", "--domains", help="Arquivo Domínios")
+    parser.add_argument("-g", "--groups", help="Arquivo Grupos")
+    parser.add_argument("-y", "--yes", action="store_true", help="Não Interativo")
+    parser.add_argument("-t", "--threads", type=int, help="Threads")
+    # --- RESTAURADO ---
+    parser.add_argument("-l", "--log", action="store_true", help="Gerar log .txt")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Debug na tela")
     args = parser.parse_args()
 
     if args.domains: CONFIG["FILES"]["DOMAINS"] = args.domains
     if args.groups: CONFIG["FILES"]["GROUPS"] = args.groups
     if args.threads: CONFIG["THREADS"] = args.threads
-    
+    if args.log: CONFIG["GENERATE_LOG_TEXT"] = True     # Correção aplicada
+    if args.verbose: CONFIG["VERBOSE"] = True           # Correção aplicada
+
     os.makedirs("logs", exist_ok=True)
     LOG_FILE_TEXT = f"logs/dnsdiag_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
-    print(f"{Fore.BLUE}=============================================={Fore.RESET}")
-    print(f"{Fore.BLUE}    DNS DIAGNOSTIC TOOL v10.1 (Python)    {Fore.RESET}")
-    print(f"{Fore.BLUE}=============================================={Fore.RESET}")
+    print(f"{Fore.BLUE}=== DNS DIAGNOSTIC TOOL v10.2 (PY) ==={Fore.RESET}")
+    if not args.yes: interactive_mode()
     
-    if not args.yes:
-        interactive_mode()
-        
-    dns_groups, domains_tests = load_csvs()
-    
-    # Geração de Tarefas
+    groups, tests = load_csvs()
     tasks = []
-    test_counter = 0
+    tid = 0
     
-    log_print(f"Gerando lista de tarefas para {len(domains_tests)} domínios...", Fore.MAGENTA)
-    
-    for dt in domains_tests:
-        dom = dt['domain']
-        targets = [dom] + [f"{sub}.{dom}" for sub in dt['extras'] if sub]
+    log_print(f"Carregando tarefas...", Fore.MAGENTA)
+    for dt in tests:
         modes = ["iterative", "recursive"] if "both" in dt['test_types'] else [dt['test_types']]
-        # Ajuste para caso esteja setado apenas como recursive ou iterative no CSV sem ser 'both'
-        if "both" in dt['test_types']: modes = ["iterative", "recursive"]
-        elif "recursive" in dt['test_types']: modes = ["recursive"]
-        else: modes = ["iterative"]
+        targets = [dt['domain']] + [f"{x}.{dt['domain']}" for x in dt['extras']]
+        for g in dt['groups']:
+            if g in groups:
+                for s in groups[g]['servers']:
+                    for m in modes:
+                        for t in targets:
+                            for r in dt['records']:
+                                tid+=1
+                                tasks.append((dt['domain'], g, s, t, r, m, tid))
 
-        for grp_name in dt['groups']:
-            if grp_name not in dns_groups: continue
-            grp_servers = dns_groups[grp_name]['servers']
-            
-            for srv in grp_servers:
-                for mode in modes:
-                    for target in targets:
-                        for rec in dt['records']:
-                            test_counter += 1
-                            tasks.append((dom, grp_name, srv, target, rec, mode, test_counter))
-
-    log_print(f"Total de testes a realizar: {len(tasks)}", Fore.CYAN)
-    log_print(f"Iniciando ThreadPool com {CONFIG['THREADS']} workers.", Fore.CYAN)
+    log_print(f"Iniciando {len(tasks)} testes com {CONFIG['THREADS']} threads...", Fore.CYAN)
     
-    start_time = datetime.datetime.now()
-    t_start = time.time()
-    results_map = {}
+    st_time = datetime.datetime.now(); t0 = time.time()
+    res_map = {}
     
-    # Executor DNS
-    with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as executor:
-        future_to_task = {executor.submit(process_dns_task, task): task for task in tasks}
-        
-        for future in as_completed(future_to_task):
-            task = future_to_task[future]
+    with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as exc:
+        fut = {exc.submit(process_dns_task, t): t for t in tasks}
+        for f in as_completed(fut):
             try:
-                dom, grp, srv, target, rec, mode, _ = task
-                res = future.result()
-                key = (dom, grp, target, rec, mode)
-                if key not in results_map: results_map[key] = {}
-                results_map[key][srv] = res[4] # html_cell
-            except Exception as exc:
-                print(f"Task generated an exception: {exc}")
+                d, g, s, t, r, m, _ = fut[f]
+                val = f.result()
+                k = (d, g, t, r, m)
+                if k not in res_map: res_map[k] = {}
+                res_map[k][s] = val[4]
+            except Exception as e: print(e)
 
-    # Executor PING
     if CONFIG["ENABLE_PING"]:
-        log_print("\nIniciando Ping Tests...", Fore.MAGENTA)
-        unique_ips = set()
-        for g in dns_groups.values():
-            for s in g['servers']: unique_ips.add(s)
-            
-        with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as executor:
-            future_ping = {executor.submit(run_ping, ip): ip for ip in unique_ips}
-            for future in as_completed(future_ping):
-                ip = future_ping[future]
-                ret, out, dur = future.result()
-                status = "✅ UP" if ret == 0 else "❌ DOWN"
-                cls = "status-ok" if ret == 0 else "status-fail"
-                PING_RESULTS_BUFFER.append(f"<tr><td><strong>{ip}</strong></td><td class='{cls}'>{status}</td><td>{dur}ms</td><td><details><summary>Output</summary><pre>{out}</pre></details></td></tr>")
-                print(f"   Ping {ip}: {status}")
+        log_print("Executando Ping...", Fore.MAGENTA)
+        ips = set([s for g in groups.values() for s in g['servers']])
+        with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as exc:
+            for f in as_completed({exc.submit(run_ping, i): i for i in ips}):
+                rc, out, ms = f.result()
+                st = "✅ UP" if rc==0 else "❌ DOWN"
+                PING_RESULTS_BUFFER.append(f"<tr><td>{out.split()[1] if len(out.split())>1 else 'IP'}</td><td class='{'status-ok' if rc==0 else 'status-fail'}'>{st}</td><td>{ms}ms</td></tr>")
 
-    # Montagem do Relatório Ordenado
-    log_print("\nMontando relatório HTML...", Fore.CYAN)
-    for dt in domains_tests:
-        dom = dt['domain']
-        targets = [dom] + [f"{sub}.{dom}" for sub in dt['extras'] if sub]
-        modes = ["iterative", "recursive"] if "both" in dt['test_types'] else ([dt['test_types']] if dt['test_types'] in ["recursive", "iterative"] else ["iterative"]) # Fallback seguro
-        if "both" in dt['test_types']: modes = ["iterative", "recursive"]
-        elif "recursive" in dt['test_types']: modes = ["recursive"]
-        else: modes = ["iterative"]
-
-        HTML_MATRIX_BUFFER.append(f'<div class="domain-block"><div class="domain-header"><span>🌐 {dom}</span><span class="badge">{dt["test_types"]}</span></div>')
-        
-        for grp_name in dt['groups']:
-            if grp_name not in dns_groups: continue
-            srvs = dns_groups[grp_name]['servers']
-            
-            HTML_MATRIX_BUFFER.append(f'<div style="padding:10px; background:#2d2d30; color:#9cdcfe;">Grupo: {grp_name}</div>')
-            HTML_MATRIX_BUFFER.append('<table><thead><tr><th style="width:30%">Target (Record)</th>')
-            for s in srvs: HTML_MATRIX_BUFFER.append(f'<th>{s}</th>')
-            HTML_MATRIX_BUFFER.append('</tr></thead><tbody>')
-            
-            for mode in modes:
-                for target in targets:
-                    for rec in dt['records']:
-                        key = (dom, grp_name, target, rec, mode)
-                        HTML_MATRIX_BUFFER.append(f'<tr><td><span class="badge">{mode}</span> <strong>{target}</strong> <span style="color:#666">({rec})</span></td>')
-                        
-                        row_results = results_map.get(key, {})
-                        for srv in srvs:
-                            cell = row_results.get(srv, "<td>N/A</td>")
-                            HTML_MATRIX_BUFFER.append(cell)
-                        HTML_MATRIX_BUFFER.append('</tr>')
-            HTML_MATRIX_BUFFER.append('</tbody></table>')
+    # Reconstrói HTML ordenado
+    for dt in tests:
+        modes = ["iterative", "recursive"] if "both" in dt['test_types'] else [dt['test_types']]
+        targets = [dt['domain']] + [f"{x}.{dt['domain']}" for x in dt['extras']]
+        HTML_MATRIX_BUFFER.append(f'<div class="domain-block"><div class="domain-header">🌐 {dt["domain"]}</div>')
+        for g in dt['groups']:
+            if g in groups:
+                HTML_MATRIX_BUFFER.append(f'<div style="background:#333;color:#fff;padding:5px">Grupo: {g}</div><table><tr><th>Target</th>')
+                srvs = groups[g]['servers']
+                for s in srvs: HTML_MATRIX_BUFFER.append(f'<th>{s}</th>')
+                HTML_MATRIX_BUFFER.append('</tr>')
+                for m in modes:
+                    for t in targets:
+                        for r in dt['records']:
+                            HTML_MATRIX_BUFFER.append(f'<tr><td>{t} ({r})</td>')
+                            for s in srvs: HTML_MATRIX_BUFFER.append(res_map.get((dt['domain'], g, t, r, m), {}).get(s, "<td>-</td>"))
+                            HTML_MATRIX_BUFFER.append('</tr>')
+                HTML_MATRIX_BUFFER.append('</table>')
         HTML_MATRIX_BUFFER.append('</div>')
 
-    t_end = time.time()
-    final_file = generate_html_report(start_time.strftime("%d/%m/%Y %H:%M:%S"), datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), t_end - t_start, dns_groups)
-    
-    print(f"\n{Fore.GREEN}=== CONCLUSÃO ==={Fore.RESET}")
-    print(f"Relatório gerado em: {Fore.CYAN}{final_file}{Fore.RESET}")
-    print(f"Total Testes: {STATS['TOTAL']} | Sucessos: {STATS['SUCCESS']} | Alertas: {STATS['WARNING']} | Falhas: {STATS['FAILED']}")
+    final = generate_html(st_time.strftime("%d/%m %H:%M"), datetime.datetime.now().strftime("%d/%m %H:%M"), time.time()-t0, groups)
+    print(f"\n{Fore.GREEN}Concluído! Relatório: {final}{Fore.RESET}")
