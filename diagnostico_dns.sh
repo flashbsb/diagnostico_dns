@@ -8,8 +8,8 @@
 
 # --- CONFIGURAÇÕES PADRÃO ---
 
-DEFAULT_DIG_OPTIONS="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
-RECURSIVE_DIG_OPTIONS="+time=1 +tries=1 +nocookie +cd +bufsize=512"
+DEFAULT_DIG_OPTIONS="+norecurse +time=3 +tries=2 +nocookie +cd +bufsize=512"
+RECURSIVE_DIG_OPTIONS="+time=3 +tries=2 +nocookie +cd +bufsize=512"
 
 # Prefixo e Arquivos
 LOG_PREFIX="dnsdiag"
