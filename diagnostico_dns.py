@@ -2,13 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-DIAGNÓSTICO DNS - PY EDITION (Versão 12.0 - High Fidelity Replica)
-Objetivo: Produzir arquivos .log e .html ESTRUTURALMENTE IDÊNTICOS ao script Bash original.
-
-Correções:
-1. Log de Texto (.log) agora inclui cabeçalho, info do sistema e OUTPUT BRUTO do dig.
-2. Correção na exibição de IPs no teste de Ping (evita "Ping Timeout").
-3. Ajuste fino na regex de captura de ANSWER.
+DIAGNÓSTICO DNS - PY EDITION (Versão 13.0 - Thread Safe & Explicit Flags)
+Correções Finais:
+1. Thread Safety Absoluta: Uso de Lock na escrita do dicionário de resultados (res_map) para evitar Race Condition.
+2. Flags Explícitas: Adicionado '+recurse' explicitamente para evitar ambiguidade.
+3. Isolamento: Garantia que variáveis de uma thread não vazam para outra.
 """
 
 import sys
@@ -52,17 +50,21 @@ CONFIG = {
     "IP_VERSION": "ipv4",
     "CHECK_BIND": False,
     "ENABLE_PING": True,
-    "PING_COUNT": 4, # Bash era 10, mantive 4 para rapidez, mas ajustavel
+    "PING_COUNT": 4,
     "PING_TIMEOUT": 2,
     "THREADS": 10,
     "FILES": {"DOMAINS": "domains_tests.csv", "GROUPS": "dns_groups.csv"}
 }
 
-DEFAULT_DIG_OPTS = ["+norecurse", "+time=1", "+tries=1", "+nocookie", "+cd", "+bufsize=512"]
-RECURSIVE_DIG_OPTS = ["+time=1", "+tries=1", "+nocookie", "+cd", "+bufsize=512"]
+# --- PARÂMETROS DO DIG REVISADOS ---
+# Iterativo: +norecurse (RD=0). O servidor não deve resolver, apenas responder o que sabe.
+DEFAULT_DIG_OPTS = ["+norecurse", "+time=3", "+tries=2", "+nocookie", "+cd", "+bufsize=512"]
+
+# Recursivo: +recurse (RD=1). Adicionado explicitamente para garantir o comportamento.
+RECURSIVE_DIG_OPTS = ["+recurse", "+time=3", "+tries=2", "+nocookie", "+cd", "+bufsize=512"]
 
 STATS = {"TOTAL": 0, "SUCCESS": 0, "FAILED": 0, "WARNING": 0}
-LOCK = threading.RLock() # RLock para evitar Deadlock no log
+LOCK = threading.RLock() 
 
 HTML_CONN_ERR_LOGGED = set()
 CONNECTIVITY_CACHE = {}
@@ -71,7 +73,7 @@ HTML_DETAILS_BUFFER = []
 PING_RESULTS_BUFFER = []
 
 # ==============================================
-# LOGGING AVANÇADO (Estilo Bash)
+# LOGGING
 # ==============================================
 
 def log_print(msg, color=Fore.CYAN):
@@ -80,45 +82,26 @@ def log_print(msg, color=Fore.CYAN):
         print(f"{Style.BRIGHT}[{ts}]{Style.RESET_ALL} {color}{msg}{Style.RESET_ALL}")
 
 def init_log_file():
-    """Cria o cabeçalho do log idêntico ao Bash."""
     if not CONFIG["GENERATE_LOG_TEXT"]: return
-    
     sys_user = os.getenv('USER', os.getenv('USERNAME', 'user'))
     sys_host = platform.node()
-    sys_kernel = platform.platform()
     ts = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    
     header = f"""################################################################################
 # DNS DIAGNOSTIC TOOL - FORENSIC LOG
 # Date: {ts}
+# User: {sys_user} @ {sys_host}
 ################################################################################
-
-[SYSTEM INFO]
-  User     : {sys_user}
-  Hostname : {sys_host}
-  Kernel   : {sys_kernel}
-
-[CONFIGURATION DUMP]
-  Timeout Global : {CONFIG['TIMEOUT']}s
-  Sleep Interval : {CONFIG['SLEEP']}s
-  Conn Check     : {CONFIG['VALIDATE_CONNECTIVITY']}
-  IP Version     : {CONFIG['IP_VERSION']}
-  Files          : {CONFIG['FILES']['DOMAINS']} / {CONFIG['FILES']['GROUPS']}
-
+[CONFIG] Threads: {CONFIG['THREADS']} | Ping: {CONFIG['ENABLE_PING']} | Valid Conn: {CONFIG['VALIDATE_CONNECTIVITY']}
 ================================================================================
 >>> INICIANDO TESTES DNS
 ================================================================================
 """
     try:
-        with open(LOG_FILE_TEXT, "w", encoding="utf-8") as f:
-            f.write(header)
-    except Exception as e:
-        print(f"Erro ao criar log: {e}")
+        with open(LOG_FILE_TEXT, "w", encoding="utf-8") as f: f.write(header)
+    except: pass
 
 def log_cmd_result_text(context, cmd, output, duration_ms):
-    """Escreve o bloco detalhado no log de texto."""
     if not CONFIG["GENERATE_LOG_TEXT"]: return
-    
     block = f"""--------------------------------------------------------------------------------
 CTX: {context}
 CMD: {cmd}
@@ -129,24 +112,20 @@ OUTPUT:
 """
     try:
         with LOCK:
-            with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f:
-                f.write(block)
-    except Exception as e:
-        print(f"Erro escrita log: {e}")
+            with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f: f.write(block)
+    except: pass
 
 def log_simple_entry(msg):
-    """Log simples de linha."""
     if not CONFIG["GENERATE_LOG_TEXT"]: return
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with LOCK:
-        with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] {msg}\n")
+        with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f: f.write(f"[{ts}] {msg}\n")
 
 def check_dependencies():
     try:
         subprocess.run(["dig", "-v"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
-        print(f"{Fore.RED}ERRO CRÍTICO: 'dig' não encontrado.{Fore.RESET}")
+        print(f"{Fore.RED}ERRO: 'dig' não encontrado.{Fore.RESET}")
         sys.exit(1)
 
 # ==============================================
@@ -159,16 +138,15 @@ def check_port(server, port=53, timeout=2.0):
         with socket.create_connection((server, port), timeout=timeout): res = True
     except: res = False
     with LOCK: CONNECTIVITY_CACHE[server] = res
-    if not res:
-        log_simple_entry(f"CRITICAL: Falha Conectividade TCP -> {server}:53")
+    if not res: log_simple_entry(f"CRITICAL: Falha Conectividade TCP -> {server}:53")
     return res
 
 def get_bind_version(server):
     cmd = ["dig", "+short", "+time=1", "+tries=1", f"@{server}", "chaos", "txt", "version.bind"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=3)
-        ver = proc.stdout.strip().replace('"', '')
-        return f" (Ver: {ver})" if ver else ""
+        v = proc.stdout.strip().replace('"', '')
+        return f" (Ver: {v})" if v else ""
     except: return ""
 
 def run_ping(ip):
@@ -185,23 +163,24 @@ def run_ping(ip):
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=safe_timeout)
         return proc.returncode, proc.stdout, int((time.time() - start) * 1000)
     except subprocess.TimeoutExpired:
-        return 1, f"Ping Timeout ({safe_timeout}s exceeded)", 0
+        return 1, f"Ping Timeout ({safe_timeout}s)", 0
     except Exception as e:
         return 1, str(e), 0
 
 def run_dig(server, target, record, mode="iterative"):
     cmd = ["dig"]
+    # Flags explícitas aqui
     cmd.extend(DEFAULT_DIG_OPTS if mode == "iterative" else RECURSIVE_DIG_OPTS)
     cmd.append("-4" if CONFIG["IP_VERSION"] == "ipv4" else "-6")
     cmd.extend([f"@{server}", target, record])
     
     start = time.time()
     try:
-        # Timeout do Python DEVE ser maior que o do dig (+time=1)
+        # Timeout do Python > Timeout do Dig
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=CONFIG["TIMEOUT"] + 1)
         return proc.returncode, proc.stdout, int((time.time() - start) * 1000), " ".join(cmd)
     except subprocess.TimeoutExpired:
-        return 999, ";; CONNECTION TIMED OUT (PYTHON KILL)", int((time.time() - start) * 1000), " ".join(cmd)
+        return 999, ";; CONNECTION TIMED OUT (PYTHON WATCHDOG)", int((time.time() - start) * 1000), " ".join(cmd)
     except Exception as e:
         return 999, str(e), 0, " ".join(cmd)
 
@@ -210,9 +189,9 @@ def run_dig(server, target, record, mode="iterative"):
 # ==============================================
 
 def process_dns_task(task_data):
+    # Desempacota variáveis LOCAIS (Seguro contra poluição)
     domain, group_name, srv, target, rec_type, mode, test_id = task_data
     
-    # 1. Connectivity Check
     if CONFIG["VALIDATE_CONNECTIVITY"]:
         if not check_port(srv, 53, CONFIG["TIMEOUT"]):
             with LOCK:
@@ -224,12 +203,9 @@ def process_dns_task(task_data):
                 print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
                 return (group_name, target, rec_type, mode, f'<td><a href="#" onclick="showLog(\'{conn_id}\'); return false;" class="cell-link status-fail">❌ DOWN</a></td>')
 
-    # 2. Exec Dig
     ret_code, output, duration, full_cmd = run_dig(srv, target, rec_type, mode)
     bind_ver = get_bind_version(srv) if CONFIG["CHECK_BIND"] else ""
 
-    # 3. Analyze Logic (Bash Replica)
-    # Procura ANSWER: X (pode ter virgula ou espaço depois)
     answer_match = re.search(r"ANSWER:\s+(\d+)", output)
     answer_count = int(answer_match.group(1)) if answer_match else 0
     
@@ -247,7 +223,7 @@ def process_dns_task(task_data):
     elif "status: REFUSED" in output:
         status_txt = "REFUSED"; css="status-fail"; icon="⛔"
         with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-    elif "connection timed out" in output or "PYTHON KILL" in output:
+    elif "timed out" in output or "WATCHDOG" in output:
         status_txt = "TIMEOUT"; css="status-fail"; icon="⏳"
         with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
     elif "status: NOERROR" in output:
@@ -262,8 +238,6 @@ def process_dns_task(task_data):
 
     with LOCK: 
         STATS["TOTAL"] += 1
-        
-        # HTML Log
         if css == "status-fail": log_col = "color:#f44747"
         elif css == "status-warning": log_col = "color:#ffcc02"
         
@@ -273,14 +247,12 @@ def process_dns_task(task_data):
         safe_output = output.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
         html_log = f'<details id="{uid}"><summary class="log-header"><span class="log-id">#{test_id}</span> <span style="{log_col}">{status_txt}</span> <strong>{srv}</strong> &rarr; {target} ({rec_type}) <span class="badge">{duration}ms</span>{bind_ver}</summary><pre>{full_cmd}\n\n{safe_output}</pre></details>'
         HTML_DETAILS_BUFFER.append(html_log)
-        
-        # TXT Log (FULL OUTPUT - Bash Style)
         log_cmd_result_text(f"TEST #{test_id} ({mode}) - {srv} -> {target}", full_cmd, output, duration)
 
     return (group_name, target, rec_type, mode, html_cell)
 
 # ==============================================
-# MAIN & HTML GEN
+# MAIN
 # ==============================================
 
 def load_csvs():
@@ -366,13 +338,10 @@ if __name__ == "__main__":
 
     os.makedirs("logs", exist_ok=True)
     LOG_FILE_TEXT = f"logs/dnsdiag_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-
-    # Se estiver gerando log texto, cria o cabeçalho agora
-    if CONFIG["GENERATE_LOG_TEXT"]:
-        init_log_file()
+    if CONFIG["GENERATE_LOG_TEXT"]: init_log_file()
 
     print(f"{Fore.BLUE}=============================================={Fore.RESET}")
-    print(f"{Fore.BLUE}   DNS DIAGNOSTIC TOOL v12.0 (High Fidelity)  {Fore.RESET}")
+    print(f"{Fore.BLUE}   DNS DIAGNOSTIC TOOL v13.0 (Final Safe)     {Fore.RESET}")
     print(f"{Fore.BLUE}=============================================={Fore.RESET}")
     
     if not args.yes: interactive_mode()
@@ -406,14 +375,12 @@ if __name__ == "__main__":
                 try:
                     d, g, s, t, r, m, _ = fut[f]
                     val = f.result()
-                    res_map[(d, g, t, r, m)] = {s: val[4]}
-                    # Merge results for multi-server groups later...
-                    # Wait, simpler logic:
-                    # Key needs to be unique per cell, but matrix building iterates per server.
-                    # We just store by unique tuple.
-                    k = (d, g, t, r, m)
-                    if k not in res_map: res_map[k] = {}
-                    res_map[k][s] = val[4]
+                    # THREAD SAFETY FIX:
+                    # Usamos Lock para garantir que a escrita no dicionário compartilhado seja atômica
+                    with LOCK:
+                        k = (d, g, t, r, m)
+                        if k not in res_map: res_map[k] = {}
+                        res_map[k][s] = val[4]
                 except Exception as e:
                     print(f"\n{Fore.RED}Erro Thread: {e}{Fore.RESET}")
         except KeyboardInterrupt:
@@ -424,31 +391,21 @@ if __name__ == "__main__":
         log_print("\nIniciando Ping Tests...", Fore.MAGENTA)
         ips = set([s for g in groups.values() for s in g['servers']])
         with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as exc:
-            # Passando IP como key para saber qual falhou
             fut_ping = {exc.submit(run_ping, i): i for i in ips}
             for f in as_completed(fut_ping):
-                ip_alvo = fut_ping[f] # Recupera o IP que foi enviado
+                ip_alvo = fut_ping[f]
                 rc, out, ms = f.result()
                 st = "✅ UP" if rc==0 else "❌ DOWN"
                 cls = "status-ok" if rc==0 else "status-fail"
-                
-                # Se falhou e o output é mensagem de erro, mostramos o IP alvo no print
-                display_name = ip_alvo
-                print(f"  Ping {display_name}: {st}")
-                
-                PING_RESULTS_BUFFER.append(f"<tr><td>{display_name}</td><td class='{cls}'>{st}</td><td>{ms}ms</td></tr>")
-                
-                if CONFIG["GENERATE_LOG_TEXT"]:
-                     log_simple_entry(f"PING TEST | {ip_alvo} | {st} | {ms}ms")
+                print(f"  Ping {ip_alvo}: {st}")
+                PING_RESULTS_BUFFER.append(f"<tr><td>{ip_alvo}</td><td class='{cls}'>{st}</td><td>{ms}ms</td></tr>")
+                log_simple_entry(f"PING TEST | {ip_alvo} | {st} | {ms}ms")
 
     log_print("\nGerando Relatório HTML...", Fore.CYAN)
-    
     for dt in tests:
         modes = ["iterative", "recursive"] if "both" in dt['test_types'] else [dt['test_types']]
         targets = [dt['domain']] + [f"{x}.{dt['domain']}" for x in dt['extras']]
-        
         HTML_MATRIX_BUFFER.append(f'<div class="domain-block"><div class="domain-header">🌐 {dt["domain"]} <span class="badge">{dt["test_types"]}</span></div>')
-        
         for g in dt['groups']:
             if g in groups:
                 srvs = groups[g]['servers']
@@ -456,13 +413,11 @@ if __name__ == "__main__":
                 HTML_MATRIX_BUFFER.append('<table><thead><tr><th style="width:30%">Target (Record)</th>')
                 for s in srvs: HTML_MATRIX_BUFFER.append(f'<th>{s}</th>')
                 HTML_MATRIX_BUFFER.append('</tr></thead><tbody>')
-                
                 for m in modes:
                     for t in targets:
                         for r in dt['records']:
                             HTML_MATRIX_BUFFER.append(f'<tr><td><span class="badge">{m}</span> <strong>{t}</strong> <span style="color:#888">({r})</span></td>')
                             for s in srvs:
-                                # Recupera célula correta
                                 cell = res_map.get((dt['domain'], g, t, r, m), {}).get(s, '<td style="color:#666">-</td>')
                                 HTML_MATRIX_BUFFER.append(cell)
                             HTML_MATRIX_BUFFER.append('</tr>')
@@ -470,9 +425,7 @@ if __name__ == "__main__":
         HTML_MATRIX_BUFFER.append('</div>')
 
     final_file = generate_html(st_time.strftime("%d/%m %H:%M:%S"), datetime.datetime.now().strftime("%d/%m %H:%M:%S"), time.time()-t0, groups)
-    
     print(f"\n{Fore.GREEN}=== SUCESSO ==={Fore.RESET}")
     print(f"Relatório HTML: {Fore.CYAN}{final_file}{Fore.RESET}")
-    if CONFIG["GENERATE_LOG_TEXT"]:
-        print(f"Relatório TXT : {Fore.CYAN}{LOG_FILE_TEXT}{Fore.RESET}")
+    if CONFIG["GENERATE_LOG_TEXT"]: print(f"Relatório TXT : {Fore.CYAN}{LOG_FILE_TEXT}{Fore.RESET}")
     print(f"Stats: Total {STATS['TOTAL']} | OK {STATS['SUCCESS']} | Alertas {STATS['WARNING']} | Falhas {STATS['FAILED']}")
