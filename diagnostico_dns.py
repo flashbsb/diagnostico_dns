@@ -2,13 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-DIAGNÓSTICO DNS - PY EDITION (Versão Definitiva & Corrigida)
-Versão: 10.2 (Full Bash Parity)
-
-Requisitos:
-1. Python 3.6+
-2. 'dig' instalado e no PATH (bind-utils / dnsutils)
-3. (Opcional) 'pip install colorama'
+DIAGNÓSTICO DNS - PY EDITION (Versão 10.3 - Anti-Freeze)
+Correções:
+- Timeout forçado no subprocess (evita travamentos se o dig/ping pendurar)
+- Tratamento robusto de erros de I/O
+- Flags -l e -y 100% funcionais
 """
 
 import sys
@@ -25,7 +23,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==============================================
-# CORES (Cross-Platform)
+# CORES (Cross-Platform Fallback)
 # ==============================================
 try:
     from colorama import init, Fore, Style
@@ -34,39 +32,28 @@ try:
 except ImportError:
     HAS_COLORAMA = False
     class Fore:
-        BLACK = '\033[30m'
-        RED = '\033[91m'
-        GREEN = '\033[92m'
-        YELLOW = '\033[93m'
-        BLUE = '\033[94m'
-        CYAN = '\033[96m'
-        MAGENTA = '\033[95m'
-        WHITE = '\033[97m'
-        RESET = '\033[0m'
+        BLACK = '\033[30m'; RED = '\033[91m'; GREEN = '\033[92m'; YELLOW = '\033[93m'
+        BLUE = '\033[94m'; CYAN = '\033[96m'; MAGENTA = '\033[95m'; WHITE = '\033[97m'; RESET = '\033[0m'
     class Style:
-        BRIGHT = '\033[1m'
-        RESET_ALL = '\033[0m'
+        BRIGHT = '\033[1m'; RESET_ALL = '\033[0m'
 
 # ==============================================
-# CONFIGURAÇÕES GLOBAIS
+# CONFIGURAÇÕES
 # ==============================================
 CONFIG = {
     "TIMEOUT": 5.0,
     "SLEEP": 0.05,
     "VALIDATE_CONNECTIVITY": True,
     "GENERATE_HTML": True,
-    "GENERATE_LOG_TEXT": False, # Controlado pelo flag -l
-    "VERBOSE": False,           # Controlado pelo flag -v
+    "GENERATE_LOG_TEXT": False,
+    "VERBOSE": False,
     "IP_VERSION": "ipv4",
-    "CHECK_BIND": False,        # Restaurado do Bash
+    "CHECK_BIND": False,
     "ENABLE_PING": True,
     "PING_COUNT": 4,
     "PING_TIMEOUT": 2,
     "THREADS": 10,
-    "FILES": {
-        "DOMAINS": "domains_tests.csv",
-        "GROUPS": "dns_groups.csv"
-    }
+    "FILES": {"DOMAINS": "domains_tests.csv", "GROUPS": "dns_groups.csv"}
 }
 
 DEFAULT_DIG_OPTS = ["+norecurse", "+time=1", "+tries=1", "+nocookie", "+cd", "+bufsize=512"]
@@ -76,14 +63,12 @@ STATS = {"TOTAL": 0, "SUCCESS": 0, "FAILED": 0, "WARNING": 0}
 LOCK = threading.Lock()
 HTML_CONN_ERR_LOGGED = set()
 CONNECTIVITY_CACHE = {}
-
-# Buffers
 HTML_MATRIX_BUFFER = []
 HTML_DETAILS_BUFFER = []
 PING_RESULTS_BUFFER = []
 
 # ==============================================
-# UTILITÁRIOS
+# UTILITÁRIOS & LOGS
 # ==============================================
 
 def log_print(msg, color=Fore.CYAN):
@@ -94,9 +79,13 @@ def log_print(msg, color=Fore.CYAN):
 def file_log(msg):
     if not CONFIG["GENERATE_LOG_TEXT"]: return
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with LOCK:
-        with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] {msg}\n")
+    # Otimização: Try/Except para evitar crash se disco estiver ocupado
+    try:
+        with LOCK:
+            with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] {msg}\n")
+    except Exception as e:
+        print(f"Erro ao escrever log: {e}")
 
 def check_dependencies():
     try:
@@ -106,7 +95,7 @@ def check_dependencies():
         sys.exit(1)
 
 # ==============================================
-# NETWORK CORE
+# NETWORK CORE (Com Anti-Freeze)
 # ==============================================
 
 def check_port(server, port=53, timeout=2.0):
@@ -118,12 +107,14 @@ def check_port(server, port=53, timeout=2.0):
     return res
 
 def get_bind_version(server):
-    """Tenta descobrir a versão do BIND (Restaurado do Bash)"""
     cmd = ["dig", "+short", "+time=1", "+tries=1", f"@{server}", "chaos", "txt", "version.bind"]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        # Timeout python side: 3s max
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=3)
         ver = proc.stdout.strip().replace('"', '')
         return f" (Ver: {ver})" if ver else ""
+    except subprocess.TimeoutExpired:
+        return " (Ver: Timeout)"
     except:
         return ""
 
@@ -134,10 +125,15 @@ def run_ping(ip):
         cmd.extend(["-n", str(CONFIG["PING_COUNT"]), "-w", str(CONFIG["PING_TIMEOUT"] * 1000), ip])
     else:
         cmd.extend(["-c", str(CONFIG["PING_COUNT"]), "-W", str(CONFIG["PING_TIMEOUT"]), ip])
+    
     start = time.time()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        # Timeout de segurança: Tempo do ping * count + 2 segundos de margem
+        safe_timeout = (CONFIG["PING_TIMEOUT"] * CONFIG["PING_COUNT"]) + 2
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=safe_timeout)
         return proc.returncode, proc.stdout, int((time.time() - start) * 1000)
+    except subprocess.TimeoutExpired:
+        return 1, "Process killed by Python Timeout", 0
     except Exception as e:
         return 1, str(e), 0
 
@@ -149,8 +145,11 @@ def run_dig(server, target, record, mode="iterative"):
     
     start = time.time()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        # Timeout forçado: Configuração + 2s de margem. Se o dig travar, o Python mata.
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=CONFIG["TIMEOUT"] + 2)
         return proc.returncode, proc.stdout, int((time.time() - start) * 1000), " ".join(cmd)
+    except subprocess.TimeoutExpired:
+        return 999, f";; CONNECTION TIMED OUT (PYTHON KILL)", int((time.time() - start) * 1000), " ".join(cmd)
     except Exception as e:
         return 999, str(e), 0, " ".join(cmd)
 
@@ -165,8 +164,7 @@ def process_dns_task(task_data):
     if CONFIG["VALIDATE_CONNECTIVITY"]:
         if not check_port(srv, 53, CONFIG["TIMEOUT"]):
             with LOCK:
-                STATS["FAILED"] += 1
-                STATS["TOTAL"] += 1
+                STATS["FAILED"] += 1; STATS["TOTAL"] += 1
                 conn_id = f"conn_err_{srv.replace('.', '_')}"
                 if srv not in HTML_CONN_ERR_LOGGED:
                     HTML_CONN_ERR_LOGGED.add(srv)
@@ -175,13 +173,11 @@ def process_dns_task(task_data):
                 file_log(f"CONN FAIL: {srv}")
                 return (group_name, target, rec_type, mode, f'<td><a href="#" onclick="showLog(\'{conn_id}\'); return false;" class="cell-link status-fail">❌ DOWN</a></td>')
 
-    # 2. Execução
+    # 2. Execução (Com proteção anti-freeze no run_dig)
     ret_code, output, duration, full_cmd = run_dig(srv, target, rec_type, mode)
     
-    # 3. Check Bind Version (Opcional)
-    bind_ver = ""
-    if CONFIG["CHECK_BIND"]:
-        bind_ver = get_bind_version(srv)
+    # 3. Check Bind (Opcional)
+    bind_ver = get_bind_version(srv) if CONFIG["CHECK_BIND"] else ""
 
     # 4. Análise
     answer_match = re.search(r"ANSWER:\s+(\d+)", output)
@@ -201,7 +197,7 @@ def process_dns_task(task_data):
     elif "status: REFUSED" in output:
         status_txt = "REFUSED"; css="status-fail"; icon="⛔"
         with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-    elif "connection timed out" in output:
+    elif "connection timed out" in output or "PYTHON KILL" in output:
         status_txt = "TIMEOUT"; css="status-fail"; icon="⏳"
         with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
     elif "status: NOERROR" in output:
@@ -215,11 +211,9 @@ def process_dns_task(task_data):
         with LOCK: STATS["WARNING"] += 1; print(f"{Fore.YELLOW}?{Style.RESET_ALL}", end="", flush=True)
 
     with LOCK: STATS["TOTAL"] += 1
-    
-    if CONFIG["VERBOSE"]:
-        log_print(f"DEBUG: {srv} -> {target} ({rec_type}) = {status_txt}", Fore.MAGENTA)
+    if CONFIG["VERBOSE"]: log_print(f"DEBUG: {srv} -> {status_txt}", Fore.MAGENTA)
 
-    # 5. HTML
+    # 5. HTML Logging
     if css == "status-fail": log_col = "color:#f44747"
     elif css == "status-warning": log_col = "color:#ffcc02"
     
@@ -227,20 +221,23 @@ def process_dns_task(task_data):
     html_cell = f'<td><a href="#" onclick="showLog(\'{uid}\'); return false;" class="cell-link {css}">{icon} {status_txt} <span class="time-badge">{duration}ms</span></a></td>'
     html_log = f'<details id="{uid}"><summary class="log-header"><span class="log-id">#{test_id}</span> <span style="{log_col}">{status_txt}</span> <strong>{srv}</strong> &rarr; {target} ({rec_type}) <span class="badge">{duration}ms</span>{bind_ver}</summary><pre>{full_cmd}\n\n{output.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")}</pre></details>'
     
-    with LOCK: HTML_DETAILS_BUFFER.append(html_log); file_log(f"TEST {test_id} | {srv} | {target} | {status_txt}")
+    with LOCK:
+        HTML_DETAILS_BUFFER.append(html_log)
+        file_log(f"TEST {test_id} | {srv} | {target} | {status_txt}")
+        
     return (group_name, target, rec_type, mode, html_cell)
 
 # ==============================================
-# MAIN
+# MAIN FLOW
 # ==============================================
 
 def load_csvs():
-    # Mesma lógica anterior, omitida para brevidade (não foi alterada)
     dg = {}; dt = []
     if not os.path.exists(CONFIG["FILES"]["GROUPS"]): sys.exit(f"{Fore.RED}Falta arquivo: {CONFIG['FILES']['GROUPS']}{Fore.RESET}")
     with open(CONFIG["FILES"]["GROUPS"], 'r', encoding='utf-8') as f:
         for r in csv.reader(f, delimiter=';'):
             if r and not r[0].startswith('#') and len(r)>=5: dg[r[0]] = {"desc": r[1], "type": r[2], "timeout": r[3], "servers": r[4].split(',')}
+    
     if not os.path.exists(CONFIG["FILES"]["DOMAINS"]): sys.exit(f"{Fore.RED}Falta arquivo: {CONFIG['FILES']['DOMAINS']}{Fore.RESET}")
     with open(CONFIG["FILES"]["DOMAINS"], 'r', encoding='utf-8') as f:
         for r in csv.reader(f, delimiter=';'):
@@ -260,7 +257,6 @@ def interactive_mode():
     print("")
 
 def generate_html(st, et, dur, grps):
-    # Template HTML (Resumido para caber, mas funcional)
     css = """body{font-family:'Segoe UI',sans-serif;background:#1e1e1e;color:#d4d4d4;padding:20px} .container{max-width:1400px;margin:0 auto} 
     .card{background:#252526;padding:15px;border-radius:6px;text-align:center;border-bottom:3px solid #444} 
     .card-num{font-size:2em;font-weight:bold;display:block} .dashboard{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
@@ -300,7 +296,6 @@ if __name__ == "__main__":
     parser.add_argument("-g", "--groups", help="Arquivo Grupos")
     parser.add_argument("-y", "--yes", action="store_true", help="Não Interativo")
     parser.add_argument("-t", "--threads", type=int, help="Threads")
-    # --- RESTAURADO ---
     parser.add_argument("-l", "--log", action="store_true", help="Gerar log .txt")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug na tela")
     args = parser.parse_args()
@@ -308,13 +303,13 @@ if __name__ == "__main__":
     if args.domains: CONFIG["FILES"]["DOMAINS"] = args.domains
     if args.groups: CONFIG["FILES"]["GROUPS"] = args.groups
     if args.threads: CONFIG["THREADS"] = args.threads
-    if args.log: CONFIG["GENERATE_LOG_TEXT"] = True     # Correção aplicada
-    if args.verbose: CONFIG["VERBOSE"] = True           # Correção aplicada
+    if args.log: CONFIG["GENERATE_LOG_TEXT"] = True
+    if args.verbose: CONFIG["VERBOSE"] = True
 
     os.makedirs("logs", exist_ok=True)
     LOG_FILE_TEXT = f"logs/dnsdiag_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
-    print(f"{Fore.BLUE}=== DNS DIAGNOSTIC TOOL v10.2 (PY) ==={Fore.RESET}")
+    print(f"{Fore.BLUE}=== DNS DIAGNOSTIC TOOL v10.3 (Anti-Freeze) ==={Fore.RESET}")
     if not args.yes: interactive_mode()
     
     groups, tests = load_csvs()
@@ -334,32 +329,40 @@ if __name__ == "__main__":
                                 tid+=1
                                 tasks.append((dt['domain'], g, s, t, r, m, tid))
 
-    log_print(f"Iniciando {len(tasks)} testes com {CONFIG['THREADS']} threads...", Fore.CYAN)
+    log_print(f"Iniciando {len(tasks)} testes DNS com {CONFIG['THREADS']} threads...", Fore.CYAN)
     
     st_time = datetime.datetime.now(); t0 = time.time()
     res_map = {}
     
+    # EXECUÇÃO DNS
     with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as exc:
         fut = {exc.submit(process_dns_task, t): t for t in tasks}
-        for f in as_completed(fut):
-            try:
-                d, g, s, t, r, m, _ = fut[f]
-                val = f.result()
-                k = (d, g, t, r, m)
-                if k not in res_map: res_map[k] = {}
-                res_map[k][s] = val[4]
-            except Exception as e: print(e)
+        try:
+            for f in as_completed(fut):
+                try:
+                    d, g, s, t, r, m, _ = fut[f]
+                    val = f.result()
+                    k = (d, g, t, r, m)
+                    if k not in res_map: res_map[k] = {}
+                    res_map[k][s] = val[4]
+                except Exception as e:
+                    print(f"\n{Fore.RED}Erro na Thread: {e}{Fore.RESET}")
+        except KeyboardInterrupt:
+            print(f"\n{Fore.RED}Interrompido pelo usuário! Gerando relatório parcial...{Fore.RESET}")
 
+    # EXECUÇÃO PING
     if CONFIG["ENABLE_PING"]:
-        log_print("Executando Ping...", Fore.MAGENTA)
+        log_print("\nIniciando Ping Tests...", Fore.MAGENTA)
         ips = set([s for g in groups.values() for s in g['servers']])
         with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as exc:
             for f in as_completed({exc.submit(run_ping, i): i for i in ips}):
                 rc, out, ms = f.result()
                 st = "✅ UP" if rc==0 else "❌ DOWN"
+                print(f"  Ping {out.split()[1] if len(out.split())>1 else 'Target'}: {st}")
                 PING_RESULTS_BUFFER.append(f"<tr><td>{out.split()[1] if len(out.split())>1 else 'IP'}</td><td class='{'status-ok' if rc==0 else 'status-fail'}'>{st}</td><td>{ms}ms</td></tr>")
 
-    # Reconstrói HTML ordenado
+    # MONTAGEM HTML
+    log_print("\nGerando HTML...", Fore.CYAN)
     for dt in tests:
         modes = ["iterative", "recursive"] if "both" in dt['test_types'] else [dt['test_types']]
         targets = [dt['domain']] + [f"{x}.{dt['domain']}" for x in dt['extras']]
@@ -381,3 +384,5 @@ if __name__ == "__main__":
 
     final = generate_html(st_time.strftime("%d/%m %H:%M"), datetime.datetime.now().strftime("%d/%m %H:%M"), time.time()-t0, groups)
     print(f"\n{Fore.GREEN}Concluído! Relatório: {final}{Fore.RESET}")
+    if CONFIG["GENERATE_LOG_TEXT"]:
+        print(f"Log de Texto: {LOG_FILE_TEXT}")
