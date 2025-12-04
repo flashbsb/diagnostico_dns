@@ -2,14 +2,14 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - BASH EDITION
-# Versão: 13.0 (Logic Parity with Python v13)
+# Versão: 13.1 (Parity Complete & Bugfix)
 # ==============================================
 
 # --- CONFIGURAÇÕES PADRÃO ---
 
-# [CORREÇÃO] Definição explícita de flags para evitar ambiguidade
-DIG_OPTS_ITERATIVE="+norecurse +time=3 +tries=2 +nocookie +cd +bufsize=512"
-DIG_OPTS_RECURSIVE="+recurse +time=3 +tries=2 +nocookie +cd +bufsize=512"
+# Flags explícitas para evitar ambiguidade (Igual ao Python)
+DIG_OPTS_ITERATIVE="+norecurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
+DIG_OPTS_RECURSIVE="+recurse +time=1 +tries=1 +nocookie +cd +bufsize=512"
 
 # Prefixo e Arquivos
 LOG_PREFIX="dnsdiag"
@@ -76,8 +76,11 @@ TEMP_MODAL="logs/temp_modal_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}DNS DIAGNOSTIC TOOL - v13.0 (Bash)${NC}"
+    echo -e "${BLUE}DNS DIAGNOSTIC TOOL - v13.1 (Bash)${NC}"
     echo -e "Uso: $0 [-n domains.csv] [-g groups.csv] [-l (log)] [-y (yes)]"
+    echo -e "  -l: Gerar log de texto"
+    echo -e "  -y: Modo não interativo"
+    echo -e "  -v: Verbose (Debug na tela)"
 }
 
 # ==============================================
@@ -147,6 +150,19 @@ validate_connectivity() {
     return $status
 }
 
+# Função que faltava no Bash anterior:
+get_bind_version() {
+    local server="$1"
+    local output
+    output=$(dig +short +time=1 +tries=1 @"$server" chaos txt version.bind 2>/dev/null)
+    output=$(echo "$output" | tr -d '"')
+    if [[ -n "$output" ]]; then
+        echo " (Ver: $output)"
+    else
+        echo ""
+    fi
+}
+
 # ==============================================
 # LÓGICA PRINCIPAL (Loop de Testes)
 # ==============================================
@@ -154,7 +170,7 @@ validate_connectivity() {
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
     
-    # [CORREÇÃO] Carrega grupos para memória para acesso rápido
+    # Carrega grupos para memória
     declare -A GROUP_SERVERS
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
@@ -231,8 +247,14 @@ process_tests() {
                             local ret=$?
                             local end_ts=$(date +%s%N)
                             local dur=$(( (end_ts - start_ts) / 1000000 ))
+
+                            # 2.1 Verifica Versão Bind (Se ativado)
+                            local bind_ver_str=""
+                            if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
+                                bind_ver_str=$(get_bind_version "$srv")
+                            fi
                             
-                            # 3. Análise de Resposta (LÓGICA CORRIGIDA)
+                            # 3. Análise de Resposta (PARIDADE PYTHON V13)
                             local answer_count=$(echo "$output" | grep -o "ANSWER: [0-9]*" | awk '{print $2}')
                             [[ -z "$answer_count" ]] && answer_count=0
                             
@@ -247,178 +269,4 @@ process_tests() {
                             elif echo "$output" | grep -q "status: REFUSED"; then
                                 status_txt="REFUSED"; css="status-fail"; icon="⛔"; FAILED_TESTS=$((FAILED_TESTS + 1)); echo -ne "${RED}x${NC}"
                             elif echo "$output" | grep -q "connection timed out"; then
-                                status_txt="TIMEOUT"; css="status-fail"; icon="⏳"; FAILED_TESTS=$((FAILED_TESTS + 1)); echo -ne "${RED}x${NC}"
-                            elif echo "$output" | grep -q "status: NOERROR"; then
-                                # [CORREÇÃO CRÍTICA] NOERROR com 0 respostas é ALERTA (NOANSWER)
-                                if [[ "$answer_count" -eq 0 ]]; then
-                                    status_txt="NOANSWER"; css="status-warning"; icon="⚠️"; WARNING_TESTS=$((WARNING_TESTS + 1)); echo -ne "${YELLOW}!${NC}"
-                                else
-                                    SUCCESS_TESTS=$((SUCCESS_TESTS + 1)); echo -ne "${GREEN}.${NC}"
-                                fi
-                            else
-                                status_txt="UNKNOWN"; css="status-warning"; icon="❓"; WARNING_TESTS=$((WARNING_TESTS + 1)); echo -ne "${YELLOW}?${NC}"
-                            fi
-                            
-                            # Logging
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $css\">$icon $status_txt <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
-                            
-                            local log_col=""
-                            [[ "$css" == "status-fail" ]] && log_col="color:#f44747"
-                            [[ "$css" == "status-warning" ]] && log_col="color:#ffcc02"
-                            
-                            local safe_out=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span style=\"$log_col\">$status_txt</span> <strong>$srv</strong> &rarr; $target ($rec) <span class=\"badge\">${dur}ms</span></summary><pre>$cmd"$'\n\n'"$safe_out</pre></details>" >> "$TEMP_DETAILS"
-                            
-                            log_cmd_result "TEST #$test_id ($mode) - $srv -> $target" "$cmd" "$output" "$dur"
-                            [[ "$SLEEP" != "0" ]] && sleep "$SLEEP"
-                        done
-                    done
-                done
-            done
-            echo "</tbody></table>" >> "$TEMP_MATRIX"
-        done
-        echo "</div>" >> "$TEMP_MATRIX"
-    done < "$FILE_DOMAINS"
-}
-
-# ==============================================
-# PING (IDÊNTICO AO PYTHON)
-# ==============================================
-
-run_ping_diagnostics() {
-    [[ "$ENABLE_PING" != "true" ]] && return
-    echo -e "\n${BLUE}Iniciando Ping Tests...${NC}"
-    
-    # Coleta IPs únicos
-    local ips=""
-    while IFS=';' read -r name d t tm servers || [ -n "$name" ]; do
-        [[ "$name" =~ ^# ]] && continue
-        ips="$ips ${servers//,/ }"
-    done < "$FILE_GROUPS"
-    local unique_ips=$(echo "$ips" | tr ' ' '\n' | sort -u | tr '\n' ' ')
-    
-    for ip in $unique_ips; do
-        [[ -z "$ip" ]] && continue
-        local st="✅ UP"
-        local cls="status-ok"
-        local ms="0"
-        
-        # Ping com timeout seguro
-        local output
-        output=$(ping -c "$PING_COUNT" -W "$PING_TIMEOUT" "$ip" 2>&1)
-        local ret=$?
-        
-        if [[ $ret -ne 0 ]]; then
-            st="❌ DOWN"; cls="status-fail"
-            echo -e "  Ping $ip: ${RED}DOWN${NC}"
-        else
-            ms=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
-            [[ -z "$ms" ]] && ms="0"
-            echo -e "  Ping $ip: ${GREEN}UP${NC}"
-        fi
-        
-        echo "<tr><td>$ip</td><td class=\"$cls\">$st</td><td>${ms}ms</td></tr>" >> "$TEMP_PING"
-        log_simple "PING TEST | $ip | $st | ${ms}ms"
-    done
-}
-
-# ==============================================
-# GERAÇÃO HTML & MAIN
-# ==============================================
-
-write_html() {
-    cat > "$TEMP_HEADER" << EOF
-<!DOCTYPE html><html><head><meta charset='UTF-8'><title>DNS Report</title>
-<style>
-body{font-family:'Segoe UI',sans-serif;background:#1e1e1e;color:#d4d4d4;padding:20px} .container{max-width:1400px;margin:0 auto} 
-.card{background:#252526;padding:15px;border-radius:6px;text-align:center;border-bottom:3px solid #444} 
-.card-num{font-size:2em;font-weight:bold;display:block} .dashboard{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
-.st-ok .card-num{color:#4ec9b0} .st-fail .card-num{color:#f44747} .st-warn .card-num{color:#ffcc02}
-table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #3e3e42} th{background:#2d2d30}
-.status-ok{color:#4ec9b0} .status-fail{color:#f44747;background:rgba(244,71,71,0.1)} .status-warning{color:#ffcc02}
-.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);backdrop-filter:blur(2px)} 
-.modal-content{background:#252526;margin:5% auto;width:80%;max-width:1000px;border:1px solid #444;padding:0;box-shadow:0 0 30px rgba(0,0,0,0.7)}
-.modal-header{padding:15px;background:#333;display:flex;justify-content:space-between} .close-btn{cursor:pointer;font-size:24px}
-.modal-body{padding:20px;max-height:70vh;overflow-y:auto}
-pre{background:#000;color:#ccc;padding:15px;overflow-x:auto} details{background:#1e1e1e;border:1px solid #333;margin-bottom:5px} summary{padding:10px;cursor:pointer;background:#252526}
-.log-header{display:flex;align-items:center;gap:10px} .badge{border:1px solid #444;padding:2px 5px;font-size:0.8em;border-radius:3px}
-</style>
-<script>
-function showLog(id){document.getElementById('modalText').innerHTML=document.getElementById(id).querySelector('pre').innerHTML;document.getElementById('logModal').style.display='block'}
-function closeModal(){document.getElementById('logModal').style.display='none'}
-window.onclick=function(e){if(e.target==document.getElementById('logModal'))closeModal()}
-document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()})
-</script>
-</head><body>
-<div id="logModal" class="modal"><div class="modal-content"><div class="modal-header"><strong>Log Detail</strong><span class="close-btn" onclick="closeModal()">&times;</span></div><div class="modal-body"><pre id="modalText"></pre></div></div>
-<div class="container"><h1>📊 DNS Report (Bash)</h1>
-<div class="dashboard">
-<div class="card st-total"><span class="card-num">$TOTAL_TESTS</span>Total</div>
-<div class="card st-ok"><span class="card-num">$SUCCESS_TESTS</span>Sucesso</div>
-<div class="card st-warn"><span class="card-num">$WARNING_TESTS</span>Alertas</div>
-<div class="card st-fail"><span class="card-num">$FAILED_TESTS</span>Falhas</div>
-</div>
-<div style="background:#252526;padding:10px;margin:20px 0;border-left:4px solid #666;font-family:monospace">
-Início: $START_TIME_HUMAN &nbsp;|&nbsp; Fim: $END_TIME_HUMAN &nbsp;|&nbsp; Duração: ${TOTAL_DURATION}s
-</div>
-EOF
-
-    cat "$TEMP_HEADER" > "$HTML_FILE"
-    cat "$TEMP_MATRIX" >> "$HTML_FILE"
-    
-    if [[ -s "$TEMP_PING" ]]; then
-        echo "<h2 style=\"margin-top:40px\">📡 Latência (Ping)</h2><table><thead><tr><th>Host</th><th>Status</th><th>Latência</th></tr></thead><tbody>" >> "$HTML_FILE"
-        cat "$TEMP_PING" >> "$HTML_FILE"
-        echo "</tbody></table>" >> "$HTML_FILE"
-    fi
-    
-    echo "<h2 style=\"margin-top:40px\">🛠️ Logs Técnicos</h2>" >> "$HTML_FILE"
-    cat "$TEMP_DETAILS" >> "$HTML_FILE"
-    echo "</div></body></html>" >> "$HTML_FILE"
-    
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL"
-}
-
-main() {
-    START_TIME_EPOCH=$(date +%s)
-    START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
-
-    while getopts ":n:g:lhy" opt; do
-        case ${opt} in
-            n) FILE_DOMAINS=$OPTARG ;;
-            g) FILE_GROUPS=$OPTARG ;;
-            l) GENERATE_LOG_TEXT="true" ;;
-            y) INTERACTIVE_MODE="false" ;;
-            h) show_help; exit 0 ;;
-            \?) echo "Opção inválida: -$OPTARG"; exit 1 ;;
-        esac
-    done
-    
-    if [[ "$INTERACTIVE_MODE" == "true" ]]; then
-        echo -e "${BLUE}=== CONFIGURAÇÃO INTERATIVA ===${NC}"
-        read -p "  🔹 Gerar Log TXT (-l)? (s/N): " resp
-        [[ "$resp" =~ ^[sS] ]] && GENERATE_LOG_TEXT="true"
-    fi
-
-    init_log_file
-    
-    # Limpa temps
-    > "$TEMP_MATRIX"; > "$TEMP_DETAILS"; > "$TEMP_PING"
-
-    echo -e "${BLUE}=== INICIANDO TESTES (BASH v13.0) ===${NC}"
-    process_tests
-    run_ping_diagnostics
-    
-    END_TIME_EPOCH=$(date +%s)
-    END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
-    TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
-    
-    write_html
-    
-    echo -e "\n${GREEN}=== SUCESSO ===${NC}"
-    echo -e "Relatório HTML: ${CYAN}$HTML_FILE${NC}"
-    [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "Relatório TXT : ${CYAN}$LOG_FILE_TEXT${NC}"
-    echo -e "Stats: Total $TOTAL_TESTS | OK $SUCCESS_TESTS | Alertas $WARNING_TESTS | Falhas $FAILED_TESTS"
-}
-
-main "$@"
+                                status_txt="TIMEOUT"; css="status-fail"; icon="⏳"; FAILED_TESTS=$((FAILED_TESTS +
