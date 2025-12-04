@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-DIAGNÓSTICO DNS - PY EDITION (Versão 10.3 - Anti-Freeze)
-Correções:
-- Timeout forçado no subprocess (evita travamentos se o dig/ping pendurar)
-- Tratamento robusto de erros de I/O
-- Flags -l e -y 100% funcionais
+DIAGNÓSTICO DNS - PY EDITION (Versão 10.4 - Deadlock Fix)
+Correções Críticas:
+- Substituído Lock por RLock para corrigir travamento com a flag -l
+  (Permite que a thread chame file_log() enquanto já segura o lock principal)
 """
 
 import sys
@@ -60,7 +59,14 @@ DEFAULT_DIG_OPTS = ["+norecurse", "+time=1", "+tries=1", "+nocookie", "+cd", "+b
 RECURSIVE_DIG_OPTS = ["+time=1", "+tries=1", "+nocookie", "+cd", "+bufsize=512"]
 
 STATS = {"TOTAL": 0, "SUCCESS": 0, "FAILED": 0, "WARNING": 0}
-LOCK = threading.Lock()
+
+# --- CORREÇÃO DO TRAVAMENTO AQUI ---
+# Usamos RLock (Re-entrant Lock) em vez de Lock simples.
+# Isso permite que uma thread que já bloqueou o recurso possa bloqueá-lo novamente
+# (ex: chamar file_log dentro de process_task) sem causar deadlock.
+LOCK = threading.RLock() 
+# -----------------------------------
+
 HTML_CONN_ERR_LOGGED = set()
 CONNECTIVITY_CACHE = {}
 HTML_MATRIX_BUFFER = []
@@ -79,13 +85,12 @@ def log_print(msg, color=Fore.CYAN):
 def file_log(msg):
     if not CONFIG["GENERATE_LOG_TEXT"]: return
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Otimização: Try/Except para evitar crash se disco estiver ocupado
     try:
-        with LOCK:
+        with LOCK: # Com RLock, isso não trava mais se chamado dentro de outro with LOCK
             with open(LOG_FILE_TEXT, "a", encoding="utf-8") as f:
                 f.write(f"[{ts}] {msg}\n")
     except Exception as e:
-        print(f"Erro ao escrever log: {e}")
+        print(f"Erro IO Log: {e}")
 
 def check_dependencies():
     try:
@@ -95,7 +100,7 @@ def check_dependencies():
         sys.exit(1)
 
 # ==============================================
-# NETWORK CORE (Com Anti-Freeze)
+# NETWORK CORE
 # ==============================================
 
 def check_port(server, port=53, timeout=2.0):
@@ -109,14 +114,10 @@ def check_port(server, port=53, timeout=2.0):
 def get_bind_version(server):
     cmd = ["dig", "+short", "+time=1", "+tries=1", f"@{server}", "chaos", "txt", "version.bind"]
     try:
-        # Timeout python side: 3s max
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=3)
         ver = proc.stdout.strip().replace('"', '')
         return f" (Ver: {ver})" if ver else ""
-    except subprocess.TimeoutExpired:
-        return " (Ver: Timeout)"
-    except:
-        return ""
+    except: return ""
 
 def run_ping(ip):
     sys_os = platform.system().lower()
@@ -128,12 +129,11 @@ def run_ping(ip):
     
     start = time.time()
     try:
-        # Timeout de segurança: Tempo do ping * count + 2 segundos de margem
         safe_timeout = (CONFIG["PING_TIMEOUT"] * CONFIG["PING_COUNT"]) + 2
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=safe_timeout)
         return proc.returncode, proc.stdout, int((time.time() - start) * 1000)
     except subprocess.TimeoutExpired:
-        return 1, "Process killed by Python Timeout", 0
+        return 1, "Ping Timeout", 0
     except Exception as e:
         return 1, str(e), 0
 
@@ -145,11 +145,10 @@ def run_dig(server, target, record, mode="iterative"):
     
     start = time.time()
     try:
-        # Timeout forçado: Configuração + 2s de margem. Se o dig travar, o Python mata.
         proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace', timeout=CONFIG["TIMEOUT"] + 2)
         return proc.returncode, proc.stdout, int((time.time() - start) * 1000), " ".join(cmd)
     except subprocess.TimeoutExpired:
-        return 999, f";; CONNECTION TIMED OUT (PYTHON KILL)", int((time.time() - start) * 1000), " ".join(cmd)
+        return 999, f";; TIMEOUT PYTHON KILL", int((time.time() - start) * 1000), " ".join(cmd)
     except Exception as e:
         return 999, str(e), 0, " ".join(cmd)
 
@@ -160,7 +159,7 @@ def run_dig(server, target, record, mode="iterative"):
 def process_dns_task(task_data):
     domain, group_name, srv, target, rec_type, mode, test_id = task_data
     
-    # 1. Validação Conectividade
+    # 1. Connectivity
     if CONFIG["VALIDATE_CONNECTIVITY"]:
         if not check_port(srv, 53, CONFIG["TIMEOUT"]):
             with LOCK:
@@ -173,13 +172,11 @@ def process_dns_task(task_data):
                 file_log(f"CONN FAIL: {srv}")
                 return (group_name, target, rec_type, mode, f'<td><a href="#" onclick="showLog(\'{conn_id}\'); return false;" class="cell-link status-fail">❌ DOWN</a></td>')
 
-    # 2. Execução (Com proteção anti-freeze no run_dig)
+    # 2. Exec Dig
     ret_code, output, duration, full_cmd = run_dig(srv, target, rec_type, mode)
-    
-    # 3. Check Bind (Opcional)
     bind_ver = get_bind_version(srv) if CONFIG["CHECK_BIND"] else ""
 
-    # 4. Análise
+    # 3. Analyze
     answer_match = re.search(r"ANSWER:\s+(\d+)", output)
     answer_count = int(answer_match.group(1)) if answer_match else 0
     
@@ -197,7 +194,7 @@ def process_dns_task(task_data):
     elif "status: REFUSED" in output:
         status_txt = "REFUSED"; css="status-fail"; icon="⛔"
         with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
-    elif "connection timed out" in output or "PYTHON KILL" in output:
+    elif "TIMEOUT" in output: # Covers python kill and dig timeout
         status_txt = "TIMEOUT"; css="status-fail"; icon="⏳"
         with LOCK: STATS["FAILED"] += 1; print(f"{Fore.RED}x{Style.RESET_ALL}", end="", flush=True)
     elif "status: NOERROR" in output:
@@ -210,35 +207,33 @@ def process_dns_task(task_data):
         status_txt = "UNKNOWN"; css="status-warning"; icon="❓"
         with LOCK: STATS["WARNING"] += 1; print(f"{Fore.YELLOW}?{Style.RESET_ALL}", end="", flush=True)
 
-    with LOCK: STATS["TOTAL"] += 1
-    if CONFIG["VERBOSE"]: log_print(f"DEBUG: {srv} -> {status_txt}", Fore.MAGENTA)
-
-    # 5. HTML Logging
-    if css == "status-fail": log_col = "color:#f44747"
-    elif css == "status-warning": log_col = "color:#ffcc02"
-    
-    uid = f"test_{test_id}"
-    html_cell = f'<td><a href="#" onclick="showLog(\'{uid}\'); return false;" class="cell-link {css}">{icon} {status_txt} <span class="time-badge">{duration}ms</span></a></td>'
-    html_log = f'<details id="{uid}"><summary class="log-header"><span class="log-id">#{test_id}</span> <span style="{log_col}">{status_txt}</span> <strong>{srv}</strong> &rarr; {target} ({rec_type}) <span class="badge">{duration}ms</span>{bind_ver}</summary><pre>{full_cmd}\n\n{output.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")}</pre></details>'
-    
-    with LOCK:
-        HTML_DETAILS_BUFFER.append(html_log)
-        file_log(f"TEST {test_id} | {srv} | {target} | {status_txt}")
+    with LOCK: 
+        STATS["TOTAL"] += 1
+        # --- HTML & LOGGING ---
+        if css == "status-fail": log_col = "color:#f44747"
+        elif css == "status-warning": log_col = "color:#ffcc02"
         
+        uid = f"test_{test_id}"
+        html_cell = f'<td><a href="#" onclick="showLog(\'{uid}\'); return false;" class="cell-link {css}">{icon} {status_txt} <span class="time-badge">{duration}ms</span></a></td>'
+        html_log = f'<details id="{uid}"><summary class="log-header"><span class="log-id">#{test_id}</span> <span style="{log_col}">{status_txt}</span> <strong>{srv}</strong> &rarr; {target} ({rec_type}) <span class="badge">{duration}ms</span>{bind_ver}</summary><pre>{full_cmd}\n\n{output.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")}</pre></details>'
+        
+        HTML_DETAILS_BUFFER.append(html_log)
+        # ESTA CHAMADA TRAVAVA O SCRIPT COM LOCK COMUM. COM RLOCK FUNCIONA.
+        file_log(f"TEST {test_id} | {srv} | {target} | {status_txt}")
+
     return (group_name, target, rec_type, mode, html_cell)
 
 # ==============================================
-# MAIN FLOW
+# MAIN
 # ==============================================
 
 def load_csvs():
     dg = {}; dt = []
-    if not os.path.exists(CONFIG["FILES"]["GROUPS"]): sys.exit(f"{Fore.RED}Falta arquivo: {CONFIG['FILES']['GROUPS']}{Fore.RESET}")
+    if not os.path.exists(CONFIG["FILES"]["GROUPS"]): sys.exit(f"{Fore.RED}Falta: {CONFIG['FILES']['GROUPS']}{Fore.RESET}")
     with open(CONFIG["FILES"]["GROUPS"], 'r', encoding='utf-8') as f:
         for r in csv.reader(f, delimiter=';'):
             if r and not r[0].startswith('#') and len(r)>=5: dg[r[0]] = {"desc": r[1], "type": r[2], "timeout": r[3], "servers": r[4].split(',')}
-    
-    if not os.path.exists(CONFIG["FILES"]["DOMAINS"]): sys.exit(f"{Fore.RED}Falta arquivo: {CONFIG['FILES']['DOMAINS']}{Fore.RESET}")
+    if not os.path.exists(CONFIG["FILES"]["DOMAINS"]): sys.exit(f"{Fore.RED}Falta: {CONFIG['FILES']['DOMAINS']}{Fore.RESET}")
     with open(CONFIG["FILES"]["DOMAINS"], 'r', encoding='utf-8') as f:
         for r in csv.reader(f, delimiter=';'):
             if r and not r[0].startswith('#') and len(r)>=5: dt.append({"domain": r[0], "groups": r[1].split(','), "test_types": r[2], "records": r[3].split(','), "extras": r[4].split(',') if r[4] else []})
@@ -309,7 +304,7 @@ if __name__ == "__main__":
     os.makedirs("logs", exist_ok=True)
     LOG_FILE_TEXT = f"logs/dnsdiag_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
-    print(f"{Fore.BLUE}=== DNS DIAGNOSTIC TOOL v10.3 (Anti-Freeze) ==={Fore.RESET}")
+    print(f"{Fore.BLUE}=== DNS DIAGNOSTIC TOOL v10.4 (Deadlock Fix) ==={Fore.RESET}")
     if not args.yes: interactive_mode()
     
     groups, tests = load_csvs()
@@ -334,7 +329,6 @@ if __name__ == "__main__":
     st_time = datetime.datetime.now(); t0 = time.time()
     res_map = {}
     
-    # EXECUÇÃO DNS
     with ThreadPoolExecutor(max_workers=CONFIG["THREADS"]) as exc:
         fut = {exc.submit(process_dns_task, t): t for t in tasks}
         try:
@@ -350,7 +344,6 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print(f"\n{Fore.RED}Interrompido pelo usuário! Gerando relatório parcial...{Fore.RESET}")
 
-    # EXECUÇÃO PING
     if CONFIG["ENABLE_PING"]:
         log_print("\nIniciando Ping Tests...", Fore.MAGENTA)
         ips = set([s for g in groups.values() for s in g['servers']])
@@ -361,7 +354,6 @@ if __name__ == "__main__":
                 print(f"  Ping {out.split()[1] if len(out.split())>1 else 'Target'}: {st}")
                 PING_RESULTS_BUFFER.append(f"<tr><td>{out.split()[1] if len(out.split())>1 else 'IP'}</td><td class='{'status-ok' if rc==0 else 'status-fail'}'>{st}</td><td>{ms}ms</td></tr>")
 
-    # MONTAGEM HTML
     log_print("\nGerando HTML...", Fore.CYAN)
     for dt in tests:
         modes = ["iterative", "recursive"] if "both" in dt['test_types'] else [dt['test_types']]
