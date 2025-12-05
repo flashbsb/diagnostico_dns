@@ -341,16 +341,24 @@ cat > "$TEMP_HEADER" << EOF
         .timing-label { display: block; font-size: 0.8em; color: #888; margin-bottom: 3px; }
         .timing-val { font-weight: bold; color: #fff; }
 
-        .disclaimer-box { background: rgba(50, 40, 0, 0.4); border: 1px solid #ffcc02; border-left: 5px solid #ffcc02; padding: 15px; margin-bottom: 30px; border-radius: 4px; font-size: 0.95em; line-height: 1.5; color: #e0e0e0; }
-        .disclaimer-box strong { color: #ffcc02; }
-        .disclaimer-box ul { margin: 5px 0; padding-left: 20px; color: #ccc; }
-        .disclaimer-box li { margin-bottom: 3px; }
         
         /* Legenda de Criterios */
         .criteria-legend { margin-top: 10px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; border: 1px dashed #444; }
         .criteria-item { margin-bottom: 5px; font-family: monospace; }
         .crit-true { color: #f44747; font-weight: bold; }
         .crit-false { color: #4ec9b0; font-weight: bold; }
+        
+        /* Disclaimer Collapsible */
+        details.disclaimer-details { margin-bottom: 30px; border: 1px solid #ffcc02; border-left: 5px solid #ffcc02; border-radius: 4px; background: rgba(50, 40, 0, 0.4); }
+        summary.disclaimer-summary { background: rgba(50, 40, 0, 0.6); color: #ffcc02; font-weight: bold; padding: 15px; cursor: pointer; list-style: none; display: flex; align-items: center; }
+        summary.disclaimer-summary:hover { background: rgba(50, 40, 0, 0.8); }
+        summary.disclaimer-summary::after { content: '+'; margin-left: auto; font-size: 1.2em; }
+        details.disclaimer-details[open] summary.disclaimer-summary::after { content: '-'; }
+        .disclaimer-content { padding: 15px; font-size: 0.95em; line-height: 1.5; color: #e0e0e0; border-top: 1px solid rgba(255, 204, 2, 0.3); }
+        .disclaimer-content strong { color: #ffcc02; }
+        .disclaimer-content ul { margin: 5px 0; padding-left: 20px; color: #ccc; }
+        .disclaimer-content li { margin-bottom: 3px; }
+
         
         .domain-block { background: #252526; margin-bottom: 20px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); overflow: hidden; }
         .domain-header { background: #333; padding: 10px 15px; font-weight: bold; border-left: 5px solid #007acc; display: flex; justify-content: space-between; align-items: center; }
@@ -477,31 +485,34 @@ generate_disclaimer_html() {
     local ttl_color="crit-false"; [[ "$STRICT_TTL_CHECK" == "true" ]] && ttl_color="crit-true"
 
 cat > "$TEMP_DISCLAIMER" << EOF
-        <div class="disclaimer-box">
-            <strong>⚠️ AVISO DE ISENÇÃO DE RESPONSABILIDADE (E MANUTENÇÃO DA SANIDADE) ⚠️</strong><br>
-            Este relatório reflete apenas o que <strong>sobreviveu</strong> à viagem de volta para este script, e não necessariamente a Verdade Absoluta do Universo™.<br>
-            Lembre-se que entre o seu terminal e o servidor DNS existe uma selva hostil habitada por:
-            <ul>
-                <li><strong>Firewalls Paranoicos:</strong> Que bloqueiam até pensamento positivo (e pacotes UDP legítimos).</li>
-                <li><strong>Middleboxes Criativos:</strong> Filtros de segurança que acham que sua query DNS é um ataque nuclear.</li>
-                <li><strong>Rate Limits:</strong> Porque ninguém gosta de <em>spam</em>, nem mesmo o servidor.</li>
-                <li><strong>Balanceamento de Carga:</strong> Onde servidores diferentes respondem com humores diferentes.</li>
-            </ul>
-            
-            <hr style="border: 0; border-top: 1px solid #ffcc02; margin: 15px 0;">
-            
-            <strong>🧐 CRITÉRIOS DE DIVERGÊNCIA ATIVOS (v$SCRIPT_VERSION):</strong><br>
-            Além dos erros padrões, este relatório aplicou as seguintes regras de consistência (${CONSISTENCY_CHECKS} tentativas):
-            <div class="criteria-legend">
-                <div class="criteria-item">Strict IP Check: <span class="$ip_color">$STRICT_IP_CHECK</span> (True = Requer mesmo IP sempre)</div>
-                <div class="criteria-item">Strict Order Check: <span class="$order_color">$STRICT_ORDER_CHECK</span> (True = Requer mesma ordem)</div>
-                <div class="criteria-item">Strict TTL Check: <span class="$ttl_color">$STRICT_TTL_CHECK</span> (True = Requer mesmo TTL)</div>
+        <details class="disclaimer-details">
+            <summary class="disclaimer-summary">⚠️ AVISO DE ISENÇÃO DE RESPONSABILIDADE (CLIQUE PARA EXPANDIR) ⚠️</summary>
+            <div class="disclaimer-content">
+                Este relatório reflete apenas o que <strong>sobreviveu</strong> à viagem de volta para este script, e não necessariamente a Verdade Absoluta do Universo™.<br>
+                Lembre-se que entre o seu terminal e o servidor DNS existe uma selva hostil habitada por:
+                <ul>
+                    <li><strong>Firewalls Paranoicos:</strong> Que bloqueiam até pensamento positivo (e pacotes UDP legítimos).</li>
+                    <li><strong>Middleboxes Criativos:</strong> Filtros de segurança que acham que sua query DNS é um ataque nuclear.</li>
+                    <li><strong>Rate Limits:</strong> Porque ninguém gosta de <em>spam</em>, nem mesmo o servidor.</li>
+                    <li><strong>Balanceamento de Carga:</strong> Onde servidores diferentes respondem com humores diferentes.</li>
+                </ul>
+                
+                <hr style="border: 0; border-top: 1px solid #ffcc02; margin: 15px 0;">
+                
+                <strong>🧐 CRITÉRIOS DE DIVERGÊNCIA ATIVOS (v$SCRIPT_VERSION):</strong><br>
+                Além dos erros padrões, este relatório aplicou as seguintes regras de consistência (${CONSISTENCY_CHECKS} tentativas):
+                <div class="criteria-legend">
+                    <div class="criteria-item">Strict IP Check: <span class="$ip_color">$STRICT_IP_CHECK</span> (True = Requer mesmo IP sempre)</div>
+                    <div class="criteria-item">Strict Order Check: <span class="$order_color">$STRICT_ORDER_CHECK</span> (True = Requer mesma ordem)</div>
+                    <div class="criteria-item">Strict TTL Check: <span class="$ttl_color">$STRICT_TTL_CHECK</span> (True = Requer mesmo TTL)</div>
+                </div>
+                <div style="margin-top:5px; font-size:0.85em; font-style:italic;">
+                    (Se <strong>false</strong>, variações no campo foram ignoradas para evitar divergências irrelevantes em cenários dinâmicos).
+                </div>
             </div>
-            <div style="margin-top:5px; font-size:0.85em; font-style:italic;">
-                (Se <strong>false</strong>, variações no campo foram ignoradas para evitar divergências irrelevantes em cenários dinâmicos).
-            </div>
-        </div>
+        </details>
 EOF
+
 }
 
 generate_config_html() {
