@@ -199,7 +199,10 @@ ask_variable() {
     local prompt_text="$1"; local var_name="$2"; local current_val="${!var_name}"
     echo -ne "  🔹 $prompt_text [${CYAN}$current_val${NC}]: "
     read -r user_input
-    if [[ -n "$user_input" ]]; then eval "$var_name=\"$user_input\""; echo -e "     ${YELLOW}>> Atualizado para: $user_input${NC}"; fi
+    if [[ -n "$user_input" ]]; then 
+        printf -v "$var_name" "%s" "$user_input"
+        echo -e "     ${YELLOW}>> Atualizado para: $user_input${NC}"
+    fi
 }
 
 ask_boolean() {
@@ -208,8 +211,12 @@ ask_boolean() {
     read -r user_input
     if [[ -n "$user_input" ]]; then
         case "$user_input" in
-            1|true|True|TRUE|s|S) eval "$var_name=\"true\""; echo -e "     ${YELLOW}>> Definido como: true${NC}" ;;
-            0|false|False|FALSE|n|N) eval "$var_name=\"false\""; echo -e "     ${YELLOW}>> Definido como: false${NC}" ;;
+            1|true|True|TRUE|s|S) 
+                printf -v "$var_name" "true"
+                echo -e "     ${YELLOW}>> Definido como: true${NC}" ;;
+            0|false|False|FALSE|n|N) 
+                printf -v "$var_name" "false"
+                echo -e "     ${YELLOW}>> Definido como: false${NC}" ;;
             *) echo -e "     ${RED}⚠️  Entrada inválida.${NC}" ;;
         esac
     fi
@@ -594,6 +601,7 @@ EOF
 </html>
 EOF
     rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER"
+    # Trap will handle final cleanup, but we can keep explicit removal here too to be sure
 }
 
 # ==============================================
@@ -701,11 +709,13 @@ process_tests() {
                             local final_status="OK"; local final_dur=0; local final_class=""
                             
                             for (( iter=1; iter<=CONSISTENCY_CHECKS; iter++ )); do
-                                local opts; [[ "$mode" == "iterative" ]] && opts="$DEFAULT_DIG_OPTIONS" || opts="$RECURSIVE_DIG_OPTIONS"
-                                [[ "$IP_VERSION" == "ipv4" ]] && opts="$opts -4"
-                                local cmd="dig $opts @$srv $target $rec"
+                                local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
+                                local opts_arr; read -ra opts_arr <<< "$opts_str"
+                                [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
                                 
-                                local start_ts=$(date +%s%N); local output; output=$(eval "$cmd" 2>&1); local ret=$?
+                                local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "$rec")
+                                
+                                local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
                                 local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 )); final_dur=$dur
                                 
                                 # --- NORMALIZAÇÃO PARA COMPARAÇÃO ---
@@ -768,6 +778,10 @@ process_tests() {
 
 main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
+
+    # Define cleanup trap
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" 2>/dev/null' EXIT
+
     while getopts ":n:g:lhy" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
