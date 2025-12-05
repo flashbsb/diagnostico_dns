@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.9.3 (Visual Fix Edition)
+# Versão: 9.9.4 (Visual Fix Edition)
 # "Correção das quebras de linha nas tentativas (Logs)."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.9.3"
+SCRIPT_VERSION="9.9.4"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -412,7 +412,7 @@ cat > "$TEMP_HEADER" << EOF
 </head>
 <body>
     <div class="container">
-        <h1>📊 Relatório de Diagnóstico DNS Executivo (v$SCRIPT_VERSION)</h1>
+        <h1>📊 Relatório de Diagnóstico DNS (v$SCRIPT_VERSION)</h1>
         <a name="top"></a>
 EOF
 }
