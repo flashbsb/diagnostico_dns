@@ -8,10 +8,12 @@ Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar tecnicam
 
 ## 🚀 Funcionalidades
 
+* **Verificação de Consistência:** Por que testar uma vez se você pode testar 10? O script repete as queries para garantir que o resultado é estável (pega DNS fazendo Load Balance com dados desatualizados).
+* **Critérios de Divergência (Strict Mode):** Você define o que é erro. Mudança de IP no Round-Robin deve alarmar? Ordem dos registros importa? TTL mudando é problema? Você decide.
 * **HTML Dashboard:** Gera um relatório visual com matriz de falhas, tempos de resposta e CSS "Dark Mode" embutido.
 * **Validação de Conectividade:** Testa a porta 53 (TCP/UDP) antes de tentar o DNS. Se a porta estiver fechada, ele nem perde tempo tentando resolver (Smart Error Logging).
 * **Latência (ICMP):** Roda testes de ping contra os servidores DNS para saber se o problema é resolução ou se o link caiu mesmo.
-* **Modo Interativo:** Pergunta se você quer mudar os timeouts na hora da execução, sem precisar editar código.
+* **Modo Interativo:** Pergunta se você quer mudar os timeouts, número de tentativas de consistência e critérios rigorosos (Strict IP/TTL/Order).
 * **Agnóstico:** Se não tiver `nc` (netcat), ele usa `/dev/tcp` do Bash. Se não tiver `dig`, bem... aí você não devia estar rodando um script de DNS.
 
 ## 📋 Pré-requisitos
@@ -43,7 +45,7 @@ cd diagnostico_dns
 
 ### Modo Interativo (Recomendado para Debug)
 
-Rode sem argumentos. O script vai te entrevistar sobre timeouts, retries e se deve usar IPv6.
+Rode sem argumentos. O script vai te entrevistar sobre timeouts, retries, se deve usar IPv6, e ativar os modos rigorosos de verificação (Strict Mode).
 
 ```bash
 ./diagnostico_dns.sh
@@ -64,6 +66,16 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
   * `-y`: Modo Silencioso (Não interativo / Aceita defaults)
   * `-h`: Exibe este menu de ajuda
+
+## 🕵️‍♂️ Critérios de Divergência (Strict Mode)
+
+O script possui um sistema inteligente para detectar "flapping" ou inconsistências entre as múltiplas tentativas (`CONSISTENCY_CHECKS`):
+
+* **Strict IP Check:** Se `true`, qualquer alteração no IP de resposta entre as tentativas é marcada como DIVERGÊNCIA. Se `false` (padrão), ele entende que Round-Robin é normal.
+* **Strict Order Check:** Se `true`, a ordem dos registros na resposta deve ser idêntica. Se `false` (padrão), a ordem é ignorada (sort) antes de comparar.
+* **Strict TTL Check:** Se `true`, o TTL deve ser idêntico em todas as respostas. Se `false` (padrão), diferenças de TTL (comuns em propagação/cache) são ignoradas.
+
+> Esses critérios podem ser configurados no início do modo interativo.
 
 ## ⚙️ Configuração dos CSVs
 
