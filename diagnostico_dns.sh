@@ -2,7 +2,7 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.9.4 (Visual Fix Edition)
+# Versão: 9.9.6 (Visual Fix Edition)
 # "Correção das quebras de linha nas tentativas (Logs)."
 # ==============================================
 
