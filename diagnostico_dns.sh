@@ -7,7 +7,7 @@
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.9.5"
+SCRIPT_VERSION="9.9.6"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -572,6 +572,15 @@ assemble_html() {
     cat "$TEMP_DISCLAIMER" >> "$HTML_FILE"
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
     
+    cat >> "$HTML_FILE" << EOF
+    <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
+        <div class="tech-controls">
+            <button class="btn-ctrl" onclick="toggleDetails(true)">➕ Expandir Todos</button>
+            <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
+        </div>
+    </div>
+EOF
+
     if [[ -s "$TEMP_PING" ]]; then
         cat >> "$HTML_FILE" << EOF
         <div class="ping-section">
@@ -584,13 +593,7 @@ EOF
 
     cat >> "$HTML_FILE" << EOF
         <div class="tech-section">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2>🛠️ Logs Técnicos Detalhados</h2>
-                <div class="tech-controls">
-                    <button class="btn-ctrl" onclick="toggleDetails(true)">➕ Expandir Todos</button>
-                    <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
-                </div>
-            </div>
+            <h2>🛠️ Logs Técnicos Detalhados</h2>
             <p style="color: #808080;">Logs brutos de execução. Mesmo em testes consistentes, variações ignoradas (IP/TTL) podem ser vistas aqui.</p>
 EOF
     cat "$TEMP_DETAILS" >> "$HTML_FILE"
