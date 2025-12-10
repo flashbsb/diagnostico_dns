@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.3 (HTML)
-# "Apresentacao HTML."
+# Versão: 9.11.4 (resumo na cli)
+# "Resumo da CLI."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.3"
+SCRIPT_VERSION="9.11.4"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -1191,6 +1191,22 @@ process_tests() {
     rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY"
 }
 
+print_final_terminal_summary() {
+    echo -e "\n${BLUE}======================================================${NC}"
+    echo -e "${BLUE}       RESUMO DA EXECUÇÃO (DASHBOARD TERMINAL)${NC}"
+    echo -e "${BLUE}======================================================${NC}"
+    echo -e "  🔢 Total de Testes : ${TOTAL_TESTS}"
+    echo -e "  ✅ Sucesso         : ${GREEN}${SUCCESS_TESTS}${NC}"
+    echo -e "  ⚠️  Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
+    echo -e "  ❌ Falhas Críticas : ${RED}${FAILED_TESTS}${NC}"
+    echo -e "  🔀 Divergências    : ${PURPLE}${DIVERGENT_TESTS}${NC}"
+    
+    local p_succ=0
+    [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
+    echo -e "  📊 Taxa de Sucesso : ${p_succ}%"
+    echo -e "${BLUE}======================================================${NC}"
+}
+
 main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
@@ -1206,6 +1222,7 @@ main() {
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     assemble_html
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
+    print_final_terminal_summary
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC} Relatório: $HTML_FILE"
 }
 
