@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.7 (sumario nomes)
-# "sumario nomes com tipos de record"
+# Versão: 9.11.8 (Variáveis de configuração)
+# "Novas variaveis de configuracao latency, packet loss limit e color output"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.7"
+SCRIPT_VERSION="9.11.8"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -47,6 +47,11 @@ ENABLE_TCP_CHECK="true"
 ENABLE_DNSSEC_CHECK="true"
 ENABLE_TRACE_CHECK="true"
 
+# --- CONFIGURAÇÕES ANALÍTICAS ---
+LATENCY_WARNING_THRESHOLD=300  # ms - Acima disso gera alerta
+PING_PACKET_LOSS_LIMIT=0       # % - Tolerância de perda de pacotes
+COLOR_OUTPUT="true"            # true/false - Cores no terminal
+
 # Controle de Interatividade
 INTERACTIVE_MODE="true"
 
@@ -59,14 +64,17 @@ TOTAL_SLEEP_TIME=0
 TOTAL_DURATION=0
 
 # --- CORES DO TERMINAL ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-PURPLE='\033[0;35m'
-GRAY='\033[0;90m'
-NC='\033[0m'
+RED=""; GREEN=""; YELLOW=""; BLUE=""; CYAN=""; PURPLE=""; GRAY=""; NC=""
+if [[ "$COLOR_OUTPUT" == "true" ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    PURPLE='\033[0;35m'
+    GRAY='\033[0;90m'
+    NC='\033[0m'
+fi
 
 declare -A CONNECTIVITY_CACHE
 declare -A HTML_CONN_ERR_LOGGED 
@@ -1118,37 +1126,40 @@ process_tests() {
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_${test_id}"
-                            
+
                             # Connectivity
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
-                                    FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}"; 
-                                    echo "<td><a href=\"#\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_GROUP_BODY"
+                                    FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}";
+                                    echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_GROUP_BODY"
+                                    local safe_log=$(echo "Server $srv is unreachable via ping." | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                    echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                                    echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id DOWN | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
                                     continue
                                 fi
                             fi
-                            
+
                             # Consistency Loop
                             local attempts_log=""; local last_normalized=""
                             local is_divergent="false"; local consistent_count=0
                             local final_status="OK"; local final_dur=0; local final_class=""
-                            
+
                             for (( iter=1; iter<=CONSISTENCY_CHECKS; iter++ )); do
                                 local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
                                 local opts_arr; read -ra opts_arr <<< "$opts_str"
                                 [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
-                                
+
                                 local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "$rec")
-                                
+
                                 local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
                                 local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 )); final_dur=$dur
-                                
+
                                 # Normalization
                                 local normalized=$(normalize_dig_output "$output")
                                 if [[ $iter -gt 1 ]]; then
                                     if [[ "$normalized" != "$last_normalized" ]]; then is_divergent="true"; else consistent_count=$((consistent_count + 1)); fi
                                 else last_normalized="$normalized"; consistent_count=1; fi
-                                
+
                                 # Status Check
                                 local iter_status="OK"; local answer_count=$(echo "$output" | grep -oE ", ANSWER: [0-9]+" | sed 's/[^0-9]*//g')
                                 [[ -z "$answer_count" ]] && answer_count=0
@@ -1160,14 +1171,20 @@ process_tests() {
                                 elif echo "$output" | grep -q "status: NOERROR"; then
                                     [[ "$answer_count" -eq 0 ]] && iter_status="NOANSWER" || iter_status="NOERROR"
                                 fi
-                                
+
                                 attempts_log="${attempts_log}"$'\n\n'"=== TENTATIVA #$iter ($iter_status) === "$'\n'"[Normalized Check: $(echo "$normalized" | tr '\n' ' ')]"$'\n'"$output"
                                 final_status="$iter_status"
                                 [[ "$iter_status" == "NOERROR" ]] && final_class="status-ok" || { [[ "$iter_status" == "SERVFAIL" || "$iter_status" == "NXDOMAIN" || "$iter_status" == "NOANSWER" ]] && final_class="status-warning" || final_class="status-fail"; }
-                                
+
                                 [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && sleep "$SLEEP"
                             done
-                            
+
+                            # Latency Check Override
+                            if [[ "$final_class" == "status-ok" && $final_dur -gt $LATENCY_WARNING_THRESHOLD ]]; then
+                                final_class="status-warning"
+                                final_status="SLOW"
+                            fi
+
                             local badge=""
                             if [[ "$is_divergent" == "true" ]]; then
                                 DIVERGENT_TESTS+=1; g_div=$((g_div+1))
