@@ -2,58 +2,29 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.13 (timeout e help)
-# "timeout unification (global and group-specific) e help"
+# Versão: 9.14 (External config)
+# "Configurações externas"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.13"
+SCRIPT_VERSION="9.14"
 
-DEFAULT_DIG_OPTIONS="+norecurse +tries=1 +nocookie +cd +bufsize=1232 +nsid"
-RECURSIVE_DIG_OPTIONS="+tries=1 +nocookie +cd +bufsize=1232 +nsid"
 
-# Prefixo e Arquivos
-LOG_PREFIX="dnsdiag"
-FILE_DOMAINS="domains_tests.csv"
-FILE_GROUPS="dns_groups.csv"
+# Carrega configurações externas
+CONFIG_FILE="diagnostico.conf"
+SCRIPT_DIR="$(dirname "$0")"
 
-# Configurações de Comportamento
-TIMEOUT=2                     
-VALIDATE_CONNECTIVITY="true"  
+# Tenta carregar do diretório atual ou do diretório do script
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+elif [[ -f "$SCRIPT_DIR/$CONFIG_FILE" ]]; then
+    source "$SCRIPT_DIR/$CONFIG_FILE"
+else
+    echo "ERRO CRÍTICO: Arquivo de configuração '$CONFIG_FILE' não encontrado!"
+    echo "Por favor, certifique-se de que o arquivo 'diagnostico.conf' esteja no mesmo diretório."
+    exit 1
+fi
 
-GENERATE_LOG_TEXT="false"     
-SLEEP=0.05                    
-VERBOSE="false"               
-IP_VERSION="ipv4"             
-CHECK_BIND_VERSION="false"    
-
-# --- CONFIGURAÇÃO DE CONSISTÊNCIA ---
-CONSISTENCY_CHECKS=10          # Quantas vezes perguntar?
-
-# --- CRITÉRIOS DE DIVERGÊNCIA (TOLERÂNCIA) ---
-# "true" = Qualquer alteração causa DIVERGÊNCIA (Rigoroso)
-# "false" = Ignora alterações neste campo (Permissivo/Padrão)
-STRICT_IP_CHECK="false"       # Se false: Ignora se o IP mudou (Round Robin)
-STRICT_ORDER_CHECK="false"    # Se false: Ordena as respostas antes de comparar
-STRICT_TTL_CHECK="false"      # Se false: Ignora diferenças de TTL (recomendado)
-
-# Configurações de Ping
-ENABLE_PING=true
-PING_COUNT=10       
-PING_TIMEOUT=2      
-
-# Configurações de Testes Especiais
-ENABLE_TCP_CHECK="true"
-ENABLE_DNSSEC_CHECK="true"
-ENABLE_TRACE_CHECK="true"
-
-# --- CONFIGURAÇÕES ANALÍTICAS ---
-LATENCY_WARNING_THRESHOLD=300  # ms - Acima disso gera alerta
-PING_PACKET_LOSS_LIMIT=0       # % - Tolerância de perda de pacotes
-COLOR_OUTPUT="true"            # true/false - Cores no terminal
-
-# Controle de Interatividade
-INTERACTIVE_MODE="true"
 
 # Variáveis de Tempo
 START_TIME_EPOCH=0
