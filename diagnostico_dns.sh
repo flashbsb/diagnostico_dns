@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.4 (resumo na cli)
-# "Resumo da CLI."
+# Versão: 9.11.6 (TCP/DNSSEC)
+# "TCP/DNSSEC movidos para o final."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.4"
+SCRIPT_VERSION="9.11.6"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -93,6 +93,7 @@ TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 TEMP_MODAL="logs/temp_modal_${TIMESTAMP}.html"
 TEMP_DISCLAIMER="logs/temp_disclaimer_${TIMESTAMP}.html"
 TEMP_TRACE="logs/temp_trace_${TIMESTAMP}.html"
+TEMP_SERVICES="logs/temp_services_${TIMESTAMP}.html"
 
 # ==============================================
 # HELP & BANNER
@@ -838,6 +839,16 @@ EOF
         echo "</div></details>" >> "$HTML_FILE"
     fi
 
+    if [[ -s "$TEMP_SERVICES" ]]; then
+         cat >> "$HTML_FILE" << EOF
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid #8b5cf6;">
+             <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Serviços DNS & Capabilities (TCP/DNSSEC)</summary>
+             <div class="table-responsive" style="padding:15px;">
+EOF
+        cat "$TEMP_SERVICES" >> "$HTML_FILE"
+        echo "</div></details>" >> "$HTML_FILE"
+    fi
+
     cat >> "$HTML_FILE" << EOF
         <div style="display:none;">
 EOF
@@ -862,7 +873,7 @@ EOF
 </body>
 </html>
 EOF
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER"
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES"
     # Trap will handle final cleanup, but we can keep explicit removal here too to be sure
 }
 
@@ -965,6 +976,102 @@ run_trace_diagnostics() {
         echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver rota completa #$trace_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_TRACE"
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
+}
+
+run_service_diagnostics() {
+    [[ "$ENABLE_TCP_CHECK" != "true" && "$ENABLE_DNSSEC_CHECK" != "true" ]] && return
+    echo -e "\n${BLUE}=== INICIANDO TESTES DE SERVIÇO (TCP/DNSSEC) ===${NC}"
+    log_section "SERVICE CAPABILITIES TEST"
+
+    # Mapear qual dominio usar para testar cada grupo (primeiro disponivel)
+    declare -A GROUP_SAMPLE_DOMAIN
+    while IFS=';' read -r domain groups rest || [ -n "$domain" ]; do
+        [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+        domain=$(echo "$domain" | xargs); groups=$(echo "$groups" | tr -d '[:space:]')
+        IFS=',' read -ra group_list <<< "$groups"
+        for grp in "${group_list[@]}"; do
+            [[ -z "${GROUP_SAMPLE_DOMAIN[$grp]}" ]] && GROUP_SAMPLE_DOMAIN[$grp]="$domain"
+        done
+    done < "$FILE_DOMAINS"
+
+    declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
+    for grp in "${!DNS_GROUPS[@]}"; do
+        for ip in ${DNS_GROUPS[$grp]}; do
+            local grp_label="[$grp]"
+            [[ -z "${IP_GROUPS_MAP[$ip]}" ]] && IP_GROUPS_MAP[$ip]="$grp_label" || { [[ "${IP_GROUPS_MAP[$ip]}" != *"$grp_label"* ]] && IP_GROUPS_MAP[$ip]="${IP_GROUPS_MAP[$ip]} $grp_label"; }
+            if [[ -z "${CHECKED_IPS[$ip]}" ]]; then CHECKED_IPS[$ip]=1; unique_ips+=("$ip"); fi
+        done
+    done
+
+    echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Target Utilizado</th><th>Status TCP</th><th>Status DNSSEC</th></tr></thead><tbody>" >> "$TEMP_SERVICES"
+
+    local svc_id=0
+    for ip in "${unique_ips[@]}"; do
+        svc_id=$((svc_id + 1))
+        local groups_str="${IP_GROUPS_MAP[$ip]}"
+        
+        # Determina target: pega o primeiro grupo mapeado este IP
+        local first_grp=$(echo "$groups_str" | grep -oP '(?<=\[).+?(?=\])' | head -1)
+        local target="${GROUP_SAMPLE_DOMAIN[$first_grp]}"
+        [[ -z "$target" ]] && target="google.com" # Fallback
+
+        echo -ne "   🛡️ $ip (Target: $target) ... "
+        
+        # --- TCP Check ---
+        local tcp_html="<span class=\"status-cell\" style=\"color:#ccc;\">N/A</span>"
+        local tcp_console=""
+        if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+             local opts_tcp="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"; opts_tcp+=" +tcp"
+             local out_tcp=$(dig $opts_tcp @$ip $target A 2>&1)
+             # Logic: If dig FAILS to connect (timeout, etc), then TCP broken. If dig connects but returns SERVFAIL/REFUSED, TCP IS WORKING.
+             if echo "$out_tcp" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
+                 tcp_html="<a href=\"#\" onclick=\"showLog('svc_tcp_${svc_id}'); return false;\" class=\"status-cell status-fail\">❌ FAIL (Conn)</a>"
+                 tcp_console="${RED}TCP:FAIL${NC}"
+             else
+                 # Connection established OK
+                 tcp_html="<a href=\"#\" onclick=\"showLog('svc_tcp_${svc_id}'); return false;\" class=\"status-cell status-ok\">✅ OK</a>"
+                 tcp_console="${GREEN}TCP:OK${NC}"
+             fi
+             local safe_log=$(echo "$out_tcp" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+             echo "<div id=\"svc_tcp_${svc_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+             echo "<div id=\"svc_tcp_${svc_id}_title\" style=\"display:none\">TCP CHECK | $ip &rarr; $target</div>" >> "$TEMP_DETAILS"
+        fi
+
+        # --- DNSSEC Check ---
+        local dnssec_html="<span class=\"status-cell\" style=\"color:#ccc;\">N/A</span>"
+        local dnssec_console=""
+        if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+             local opts_sec="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"; opts_sec+=" +dnssec"
+             local out_sec=$(dig $opts_sec @$ip $target A 2>&1)
+             
+             # Logic: First check connectivity.
+             if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
+                 dnssec_html="<a href=\"#\" onclick=\"showLog('svc_sec_${svc_id}'); return false;\" class=\"status-cell status-fail\">❌ Error</a>"
+                 dnssec_console="${RED}DNSSEC:ERR${NC}"
+             else
+                 # Connection OK, check for DNSSEC indicators
+                 local is_secure="false"
+                 if echo "$out_sec" | grep -q ";; flags:.* ad"; then is_secure="true";
+                 elif echo "$out_sec" | grep -q "RRSIG"; then is_secure="true"; fi
+
+                 if [[ "$is_secure" == "true" ]]; then
+                     dnssec_html="<a href=\"#\" onclick=\"showLog('svc_sec_${svc_id}'); return false;\" class=\"status-cell status-ok\">🔐 Supported</a>"
+                     dnssec_console="${GREEN}DNSSEC:OK${NC}"
+                 else
+                     dnssec_html="<a href=\"#\" onclick=\"showLog('svc_sec_${svc_id}'); return false;\" class=\"status-cell status-warning\">⚠️ Not Supported</a>"
+                     dnssec_console="${YELLOW}DNSSEC:NO${NC}"
+                 fi
+             fi
+             local safe_log=$(echo "$out_sec" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+             echo "<div id=\"svc_sec_${svc_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+             echo "<div id=\"svc_sec_${svc_id}_title\" style=\"display:none\">DNSSEC CHECK | $ip &rarr; $target</div>" >> "$TEMP_DETAILS"
+        fi
+
+        echo -e "[$tcp_console | $dnssec_console]"
+        echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>$target</td><td>$tcp_html</td><td>$dnssec_html</td></tr>" >> "$TEMP_SERVICES"
+    done
+
+    echo "</tbody></table>" >> "$TEMP_SERVICES"
 }
 
 process_tests() {
@@ -1086,68 +1193,6 @@ process_tests() {
                         done
                     done
                     
-                    # --- TESTE EXTRA: TCP ---
-                    if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#f44747\">(TCP)</span></td>" >> "$TEMP_GROUP_BODY"
-                         for srv in "${srv_list[@]}"; do
-                            test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
-                            local unique_id="test_tcp_${test_id}"; local attempts_log=""
-                            # TCP force +tcp
-                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"; local opts_arr; read -ra opts_arr <<< "$opts_str"
-                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4"); opts_arr+=("+tcp")
-
-                            local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") 
-                            local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
-                            local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
-                            
-                            local iter_status="OK"; local status_class="status-ok"; local status_icon="✅"
-                            if [[ $ret -ne 0 ]] || echo "$output" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
-                                iter_status="FAIL"; status_class="status-fail"; status_icon="❌"
-                                FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}T${NC}"
-                            else
-                                SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}T${NC}"
-                            fi
-                            
-                            attempts_log="=== TCP TEST === "$'\n'"$output"
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_GROUP_BODY"
-                            
-                            local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
-                            echo "<div id=\"${unique_id}_title\" style=\"display:none\">TCP CHECK | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
-                         done
-                         echo "</tr>" >> "$TEMP_GROUP_BODY"
-                    fi
-
-                    # --- TESTE EXTRA: DNSSEC ---
-                    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#4ec9b0\">(DNSSEC)</span></td>" >> "$TEMP_GROUP_BODY"
-                         for srv in "${srv_list[@]}"; do
-                            test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
-                            local unique_id="test_dnssec_${test_id}"; local attempts_log=""
-                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"; local opts_arr; read -ra opts_arr <<< "$opts_str"
-                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4"); opts_arr+=("+dnssec")
-
-                            local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") 
-                            local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
-                            local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
-                            
-                            local is_secure="false"; local security_note=""
-                            if echo "$output" | grep -q ";; flags:.* ad"; then is_secure="true"; security_note="AD Flag";
-                            elif echo "$output" | grep -q "RRSIG"; then is_secure="true"; security_note="RRSIG";
-                            else security_note="No AD/RRSIG"; fi
-
-                            local iter_status="OK"; local status_class="status-ok"; local status_icon="🔐"
-                            if [[ "$is_secure" == "true" ]]; then SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}D${NC}"
-                            else iter_status="UNSECURE"; status_class="status-warning"; status_icon="⚠️"; WARNING_TESTS+=1; g_warn=$((g_warn+1)); echo -ne "${YELLOW}D${NC}"; fi
-                            
-                            attempts_log="=== DNSSEC TEST ($security_note) === "$'\n'"$output"
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_GROUP_BODY"
-                            
-                            local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
-                            echo "<div id=\"${unique_id}_title\" style=\"display:none\">DNSSEC | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
-                         done
-                    fi
                 done
             done
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
@@ -1211,14 +1256,14 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhytd" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; t) ENABLE_TCP_CHECK="true" ;; d) ENABLE_DNSSEC_CHECK="true" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
     interactive_configuration
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
-    init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics
+    init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics; run_service_diagnostics
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     assemble_html
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
