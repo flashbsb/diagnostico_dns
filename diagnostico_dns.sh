@@ -2,15 +2,15 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.12 (Script Polish)
-# "Script Polish (Icons, Verbose, Logging)"
+# Versão: 9.13 (timeout e help)
+# "timeout unification (global and group-specific) e help"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.12"
+SCRIPT_VERSION="9.13"
 
-DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=1232 +nsid"
-RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=1232 +nsid"
+DEFAULT_DIG_OPTIONS="+norecurse +tries=1 +nocookie +cd +bufsize=1232 +nsid"
+RECURSIVE_DIG_OPTIONS="+tries=1 +nocookie +cd +bufsize=1232 +nsid"
 
 # Prefixo e Arquivos
 LOG_PREFIX="dnsdiag"
@@ -20,7 +20,7 @@ FILE_GROUPS="dns_groups.csv"
 # Configurações de Comportamento
 TIMEOUT=2                     
 VALIDATE_CONNECTIVITY="true"  
-GENERATE_HTML="true"
+
 GENERATE_LOG_TEXT="false"     
 SLEEP=0.05                    
 VERBOSE="false"               
@@ -108,22 +108,82 @@ TEMP_SERVICES="logs/temp_services_${TIMESTAMP}.html"
 # ==============================================
 
 show_help() {
-    echo -e "${BLUE}==========================================================${NC}"
-    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - v${SCRIPT_VERSION}        ${NC}"
-    echo -e "${BLUE}==========================================================${NC}"
-    echo -e "Ferramenta de automação com verificação de consistência inteligente."
+    clear
+    echo -e "${BLUE}==============================================================================${NC}"
+    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA v${SCRIPT_VERSION}        ${NC}"
+    echo -e "${BLUE}==============================================================================${NC}"
     echo -e ""
-    echo -e "${PURPLE}USO:${NC}"
-    echo -e "  $0 [opções]"
+    echo -e "${PURPLE}DESCRIÇÃO GERAL:${NC}"
+    echo -e "  Esta ferramenta é um auditor de infraestrutura DNS projetado para validar a"
+    echo -e "  confiabilidade, consistência e performance de servidores autoritativos e recursivos."
     echo -e ""
-    echo -e "${PURPLE}OPÇÕES:${NC}"
-    echo -e "  ${GREEN}-n <arquivo>${NC}   CSV de domínios (Default: domains_tests.csv)"
-    echo -e "  ${GREEN}-g <arquivo>${NC}   CSV de grupos DNS (Default: dns_groups.csv)"
-    echo -e "  ${GREEN}-y${NC}            Modo Silencioso (Não interativo)"
-    echo -e "  ${GREEN}-t${NC}            Habilita teste TCP"
-    echo -e "  ${GREEN}-d${NC}            Habilita teste DNSSEC"
-    echo -e "  ${GREEN}-h${NC}            Exibe ajuda"
+    echo -e "  O script executa uma bateria de testes para cada domínio alvo contra um grupo de"
+    echo -e "  servidores DNS definidos, identificando:"
+    echo -e "   1. ${CYAN}Disponibilidade:${NC} Se os servidores estão alcançáveis (ICMP/TCP)."
+    echo -e "   2. ${CYAN}Consistência:${NC} Se múltiplos servidores retornam a mesma resposta (SOAs, IPs)."
+    echo -e "   3. ${CYAN}Estabilidade:${NC} Se a resposta varia ao longo de múltiplas consultas (Flapping)."
+    echo -e "   4. ${CYAN}Features:${NC} Suporte a TCP (obrigatório RFC 7766) e validação DNSSEC."
+    echo -e "   5. ${CYAN}Performance:${NC} Latência de resposta e perda de pacotes."
     echo -e ""
+    echo -e "${PURPLE}MODOS DE OPERAÇÃO:${NC}"
+    echo -e "  ${YELLOW}Modo Interativo (Padrão):${NC} Um wizard guia a configuração das variáveis antes do início."
+    echo -e "  ${YELLOW}Modo Silencioso (-y):${NC} Executa imediatamente usando os valores padrão ou editados no script."
+    echo -e ""
+    echo -e "${PURPLE}OPÇÕES DE LINHA DE COMANDO:${NC}"
+    echo -e "  ${GREEN}-n <arquivo>${NC}   Define arquivo CSV de domínios (Padrão: ${GRAY}domains_tests.csv${NC})"
+    echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
+    echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
+    echo -e "  ${GREEN}-t${NC}            Ativa verificação de conectividade via **TCP** (Porta 53)."
+    echo -e "  ${GREEN}-d${NC}            Ativa validação da cadeia de confiança **DNSSEC** (RRSIG/AD flags)."
+    echo -e "  ${GREEN}-h${NC}            Exibe este manual detalhado."
+    echo -e ""
+    echo -e "${PURPLE}DICIONÁRIO DE VARIÁVEIS (Configuração Fina):${NC}"
+    echo -e "  Abaixo estão as variáveis que controlam o comportamento do motor de testes."
+    echo -e "  Elas podem ser ajustadas editando o cabeçalho do script ou via menu interativo."
+    echo -e ""
+    echo -e "  ${CYAN}TIMEOUT${NC}"
+    echo -e "      Define o tempo máximo (em segundos) que o script aguarda por respostas de rede."
+    echo -e "      Afeta pings, traceroutes e consultas DIG. Se um servidor levar mais que isso,"
+    echo -e "      será marcado como TIMEOUT/DOWN."
+    echo -e ""
+    echo -e "  ${CYAN}CONSISTENCY_CHECKS${NC} (Padrão: 10)"
+    echo -e "      Define quantas vezes a MESMA consulta será repetida para o MESMO servidor."
+    echo -e "      Se o servidor responder IPs diferentes nessas N tentativas, ele é marcado como"
+    echo -e "      ${PURPLE}DIVERGENTE (~)${NC}. Isso pega balanceamentos Round-Robin mal configurados."
+    echo -e ""
+    echo -e "  ${CYAN}SLEEP${NC} (Padrão: 0.05s)"
+    echo -e "      Pausa entre cada tentativa do loop de consistência. Aumente se o firewall"
+    echo -e "      do alvo estiver bloqueando as requisições por rate-limit."
+    echo -e ""
+    echo -e "  ${CYAN}STRICT_IP_CHECK${NC} (true/false)"
+    echo -e "      ${GREEN}true:${NC} Exige que o IP de resposta seja IDÊNTICO em todas as tentativas."
+    echo -e "      ${GREEN}false:${NC} Aceita IPs diferentes (útil para CDNs ou pools de balanceamento)."
+    echo -e ""
+    echo -e "  ${CYAN}STRICT_ORDER_CHECK${NC} (true/false)"
+    echo -e "      ${GREEN}true:${NC} A ordem dos registros (ex: NS1 antes de NS2) deve ser idêntica."
+    echo -e "      ${GREEN}false:${NC} A ordem é ignorada, desde que o conteúdo seja o mesmo."
+    echo -e ""
+    echo -e "  ${CYAN}STRICT_TTL_CHECK${NC} (true/false)"
+    echo -e "      ${GREEN}true:${NC} Considera erro se o TTL mudar entre consultas (ex: 300 -> 299)."
+    echo -e "      ${GREEN}false:${NC} Ignora variações de TTL (Comportamento recomendado para recursivos)."
+    echo -e ""
+    echo -e "  ${CYAN}ENABLE_PING / PING_COUNT / PING_TIMEOUT${NC}"
+    echo -e "      Módulo de latência ICMP. Executa N pings antes dos testes DNS para verificar"
+    echo -e "      a saúde básica da rota e perda de pacotes."
+    echo -e ""
+    echo -e "  ${CYAN}CHECK_BIND_VERSION${NC}"
+    echo -e "      Tenta extrair a versão do software DNS usando consultas CHAOS TXT."
+    echo -e "      (Geralmente bloqueado por segurança em servidores de produção)."
+    echo -e ""
+    echo -e "${PURPLE}LEGENDA DE SAÍDA (O que significam os símbolos?):${NC}"
+    echo -e "  ${GREEN}.${NC} (Ponto)      = Sucesso (Resposta consistente e válida)."
+    echo -e "  ${YELLOW}!${NC} (Exclamação)= Alerta (Sucesso, mas servidor lento ou resposta estranha)."
+    echo -e "  ${PURPLE}~${NC} (Til)       = Divergência (O servidor mudou a resposta durante o teste)."
+    echo -e "  ${RED}x${NC} (Xis)        = Falha Crítica (Timeout, Erro de Conexão, REFUSED)."
+    echo -e "  ${RED}T${NC} / ${GREEN}T${NC}        = Status do Teste TCP (Falha/Sucesso)."
+    echo -e "  ${RED}D${NC} / ${GREEN}D${NC}        = Status do Teste DNSSEC (Falha/Sucesso)."
+    echo -e ""
+    echo -e "${BLUE}==============================================================================${NC}"
 }
 
 print_execution_summary() {
@@ -977,7 +1037,7 @@ run_trace_diagnostics() {
     log_section "TRACEROUTE NETWORK PATH"
     
     local cmd_trace=""
-    if command -v traceroute &> /dev/null; then cmd_trace="traceroute -n -w 1 -q 1 -m 15"
+    if command -v traceroute &> /dev/null; then cmd_trace="traceroute -n -w $TIMEOUT -q 1 -m 15"
     elif command -v tracepath &> /dev/null; then cmd_trace="tracepath -n"
     else 
         echo -e "${YELLOW}⚠️ Traceroute/Tracepath não encontrados. Pulando.${NC}"
@@ -1064,7 +1124,7 @@ run_service_diagnostics() {
         local tcp_html="<span class=\"status-cell\" style=\"color:#ccc;\">N/A</span>"
         local tcp_console=""
         if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-             local opts_tcp="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"; opts_tcp+=" +tcp"
+             local opts_tcp="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"; opts_tcp+=" +tcp +time=$TIMEOUT"
              [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] TCP Check: dig $opts_tcp @$ip $target A${NC}"
              
              local start_tcp=$(date +%s%N)
@@ -1090,7 +1150,7 @@ run_service_diagnostics() {
         local dnssec_html="<span class=\"status-cell\" style=\"color:#ccc;\">N/A</span>"
         local dnssec_console=""
         if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-             local opts_sec="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"; opts_sec+=" +dnssec"
+             local opts_sec="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"; opts_sec+=" +dnssec +time=$TIMEOUT"
              [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] DNSSEC Check: dig $opts_sec @$ip $target A${NC}"
              
              local start_sec=$(date +%s%N)
@@ -1194,7 +1254,12 @@ process_tests() {
                                 local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
                                 local opts_arr; read -ra opts_arr <<< "$opts_str"
                                 [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
-
+                                
+                                # Apply Dynamic Timeout (Group Specific or Global)
+                                local cur_timeout="${DNS_GROUP_TIMEOUT[$grp]}"
+                                [[ -z "$cur_timeout" ]] && cur_timeout=$TIMEOUT
+                                opts_arr+=("+time=$cur_timeout")
+                                
                                 local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "$rec")
                                 
                                 [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] #${iter} Running: ${cmd_arr[*]}${NC}"
