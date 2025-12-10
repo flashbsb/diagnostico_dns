@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.11 (DIG)
-# "DIG ajustes para melhor compatibilidade"
+# Versão: 9.12 (Script Polish)
+# "Script Polish (Icons, Verbose, Logging)"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.11"
+SCRIPT_VERSION="9.12"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=1232 +nsid"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=1232 +nsid"
@@ -946,7 +946,14 @@ run_ping_diagnostics() {
         ping_id=$((ping_id + 1))
         local groups_str="${IP_GROUPS_MAP[$ip]}"
         echo -ne "   📡 $ip ... "
+        
+        [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Pinging $ip (Count=$PING_COUNT, Timeout=$PING_TIMEOUT)...${NC}"
+        local start_p=$(date +%s%N)
         local output; output=$(ping -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
+        local end_p=$(date +%s%N); local dur_p=$(( (end_p - start_p) / 1000000 ))
+        
+        log_cmd_result "PING $ip" "ping -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
+        
         local loss=$(echo "$output" | grep -oP '\d+(?=% packet loss)' | head -1)
         [[ -z "$loss" ]] && loss=100
         local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
@@ -995,7 +1002,12 @@ run_trace_diagnostics() {
         local groups_str="${IP_GROUPS_MAP[$ip]}"
         echo -ne "   🛤️ $ip ... "
         
+        [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Tracing route to $ip...${NC}"
+        local start_t=$(date +%s%N)
         local output; output=$($cmd_trace $ip 2>&1); local ret=$?
+        local end_t=$(date +%s%N); local dur_t=$(( (end_t - start_t) / 1000000 ))
+        log_cmd_result "TRACE $ip" "$cmd_trace $ip" "$output" "$dur_t"
+        
         local hops=$(echo "$output" | wc -l)
         local last_hop=$(echo "$output" | tail -1 | xargs)
         
@@ -1053,7 +1065,13 @@ run_service_diagnostics() {
         local tcp_console=""
         if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
              local opts_tcp="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"; opts_tcp+=" +tcp"
+             [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] TCP Check: dig $opts_tcp @$ip $target A${NC}"
+             
+             local start_tcp=$(date +%s%N)
              local out_tcp=$(dig $opts_tcp @$ip $target A 2>&1)
+             local end_tcp=$(date +%s%N); local dur_tcp=$(( (end_tcp - start_tcp) / 1000000 ))
+             log_cmd_result "TCP CHECK $ip" "dig $opts_tcp @$ip $target A" "$out_tcp" "$dur_tcp"
+             
              # Logic: If dig FAILS to connect (timeout, etc), then TCP broken. If dig connects but returns SERVFAIL/REFUSED, TCP IS WORKING.
              if echo "$out_tcp" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                  tcp_html="<a href=\"#\" onclick=\"showLog('svc_tcp_${svc_id}'); return false;\" class=\"status-cell status-fail\">❌ FAIL (Conn)</a>"
@@ -1073,7 +1091,12 @@ run_service_diagnostics() {
         local dnssec_console=""
         if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
              local opts_sec="$DEFAULT_DIG_OPTIONS"; [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"; opts_sec+=" +dnssec"
+             [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] DNSSEC Check: dig $opts_sec @$ip $target A${NC}"
+             
+             local start_sec=$(date +%s%N)
              local out_sec=$(dig $opts_sec @$ip $target A 2>&1)
+             local end_sec=$(date +%s%N); local dur_sec=$(( (end_sec - start_sec) / 1000000 ))
+             log_cmd_result "DNSSEC CHECK $ip" "dig $opts_sec @$ip $target A" "$out_sec" "$dur_sec"
              
              # Logic: First check connectivity.
              if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
@@ -1173,9 +1196,14 @@ process_tests() {
                                 [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
 
                                 local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "$rec")
-
+                                
+                                [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] #${iter} Running: ${cmd_arr[*]}${NC}"
+                                
                                 local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
                                 local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 )); final_dur=$dur
+                                
+                                log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
+
 
                                 # Normalization
                                 local normalized=$(normalize_dig_output "$output")
