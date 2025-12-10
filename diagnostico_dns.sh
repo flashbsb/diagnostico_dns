@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.10 (Trace)
-# "Trace de rede."
+# Versão: 9.11 (HTML)
+# "Apresentacao HTML."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.10"
+SCRIPT_VERSION="9.11"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -321,122 +321,328 @@ init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEM
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>DNS Report v$SCRIPT_VERSION - $TIMESTAMP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório DNS v$SCRIPT_VERSION - $TIMESTAMP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
-        .container { max-width: 1400px; margin: 0 auto; }
-        h1 { color: #ce9178; text-align: center; margin-bottom: 20px; }
-        
-        /* Modal Styles */
-        .modal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(2px); }
-        .modal-content { background-color: #252526; margin: 5% auto; padding: 0; border: 1px solid #444; width: 80%; max-width: 1000px; border-radius: 8px; box-shadow: 0 0 30px rgba(0,0,0,0.7); animation: slideDown 0.3s; }
-        @keyframes slideDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .modal-header { padding: 15px 20px; background: #333; border-bottom: 1px solid #444; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
-        .modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
-        .close-btn { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; transition: 0.2s; line-height: 1; }
-        .close-btn:hover { color: #f44747; }
-        #modalTitle { font-weight: bold; font-family: monospace; color: #9cdcfe; font-size: 1.1em; }
-        #modalText { font-family: 'Consolas', 'Courier New', monospace; white-space: pre-wrap; color: #d4d4d4; background: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #333; font-size: 0.9em; margin: 0; }
-        
-        .dashboard { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 10px; }
-        .card { background: #252526; padding: 15px; border-radius: 6px; text-align: center; border-bottom: 3px solid #444; }
-        .card-num { font-size: 2em; font-weight: bold; display: block; }
-        .card-label { font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; color: #888; }
-        .st-total { border-color: #007acc; } .st-total .card-num { color: #007acc; }
-        .st-ok { border-color: #4ec9b0; } .st-ok .card-num { color: #4ec9b0; }
-        .st-warn { border-color: #ffcc02; } .st-warn .card-num { color: #ffcc02; }
-        .st-fail { border-color: #f44747; } .st-fail .card-num { color: #f44747; }
-        .st-div { border-color: #d16d9e; } .st-div .card-num { color: #d16d9e; }
-        
-        .timing-strip { background: #252526; padding: 10px; border-radius: 6px; border-left: 5px solid #666; margin-bottom: 20px; display: flex; justify-content: space-around; font-family: monospace; }
-        .timing-item { text-align: center; }
-        .timing-label { display: block; font-size: 0.8em; color: #888; margin-bottom: 3px; }
-        .timing-val { font-weight: bold; color: #fff; }
+        :root {
+            --bg-body: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --bg-header: #1e293b;
+            --border-color: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6; 
+            --accent-success: #10b981;
+            --accent-warning: #f59e0b;
+            --accent-danger: #ef4444;
+            --accent-divergent: #d946ef;
+        }
 
-        
-        /* Legenda de Criterios */
-        .criteria-legend { margin-top: 10px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; border: 1px dashed #444; }
-        .criteria-item { margin-bottom: 5px; font-family: monospace; }
-        .crit-true { color: #f44747; font-weight: bold; }
-        .crit-false { color: #4ec9b0; font-weight: bold; }
-        
-        /* Disclaimer Collapsible */
-        details.disclaimer-details { margin-bottom: 30px; border: 1px solid #ffcc02; border-left: 5px solid #ffcc02; border-radius: 4px; background: rgba(50, 40, 0, 0.4); }
-        summary.disclaimer-summary { background: rgba(50, 40, 0, 0.6); color: #ffcc02; font-weight: bold; padding: 15px; cursor: pointer; list-style: none; display: flex; align-items: center; }
-        summary.disclaimer-summary:hover { background: rgba(50, 40, 0, 0.8); }
-        summary.disclaimer-summary::after { content: '+'; margin-left: auto; font-size: 1.2em; }
-        details.disclaimer-details[open] summary.disclaimer-summary::after { content: '-'; }
-        .disclaimer-content { padding: 15px; font-size: 0.95em; line-height: 1.5; color: #e0e0e0; border-top: 1px solid rgba(255, 204, 2, 0.3); }
-        .disclaimer-content strong { color: #ffcc02; }
-        .disclaimer-content ul { margin: 5px 0; padding-left: 20px; color: #ccc; }
-        .disclaimer-content li { margin-bottom: 3px; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
 
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* --- Header & Typography --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
         
-        .domain-block { background: #252526; margin-bottom: 20px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); overflow: hidden; }
-        .domain-header { background: #333; padding: 10px 15px; font-weight: bold; border-left: 5px solid #007acc; display: flex; justify-content: space-between; align-items: center; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #3e3e42; font-size: 0.9em; }
-        th { background: #2d2d30; color: #dcdcaa; }
-        .cell-link { text-decoration: none; display: block; width: 100%; height: 100%; cursor: pointer; }
-        .cell-link:hover { background: rgba(255,255,255,0.05); }
-        .status-ok { color: #4ec9b0; }
-        .status-warning { color: #ffcc02; }
-        .status-fail { color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }
-        .status-divergent { color: #d16d9e; font-weight: bold; }
-        .time-badge { font-size: 0.75em; color: #808080; margin-left: 5px; }
-        .consistency-badge { font-size: 0.75em; padding: 1px 4px; border-radius: 3px; background: #333; border: 1px solid #555; margin-left: 5px; color: #fff; }
-        .consistency-bad { background: #5a1d1d; border-color: #f44747; color: #f44747; }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        h1 small {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            background: var(--bg-card);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary);
+            border-left: 4px solid var(--accent-primary);
+            padding-left: 10px;
+        }
+
+        /* --- Dashboard Cards --- */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border-color: var(--bg-card-hover);
+        }
+        .card-num {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+        .card-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
         
-        .tech-section, .ping-section, .config-section { margin-top: 50px; border-top: 3px dashed #3e3e42; padding-top: 20px; }
-        .tech-controls { margin-bottom: 15px; }
-        .btn-ctrl { background: #3e3e42; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 10px; font-size: 0.9em; }
-        .btn-ctrl:hover { background: #007acc; }
+        .st-total .card-num { color: var(--accent-primary); }
+        .st-ok .card-num { color: var(--accent-success); }
+        .st-warn .card-num { color: var(--accent-warning); }
+        .st-fail .card-num { color: var(--accent-danger); }
+        .st-div .card-num { color: var(--accent-divergent); }
+
+        /* --- Nested Details Structure --- */
+        details {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
         
-        .config-table td { font-family: monospace; color: #9cdcfe; word-break: break-all; }
-        .config-table th { width: 250px; }
-        
-        details { background: #1e1e1e; margin-bottom: 10px; border: 1px solid #333; border-radius: 4px; }
-        summary { cursor: pointer; padding: 10px; background: #252526; list-style: none; font-family: monospace; }
-        summary:hover { background: #2a2d2e; }
+        /* Domain Level (Level 1) */
+        details.domain-level {
+            border-left: 4px solid var(--accent-primary);
+        }
+        details.domain-level[open] {
+            margin-bottom: 20px;
+        }
+        details.domain-level > summary {
+            background: var(--bg-card);
+            padding: 15px 20px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        details.domain-level > summary:hover {
+            background: var(--bg-card-hover);
+        }
+
+        /* Group Level (Level 2) */
+        details.group-level {
+            margin: 10px 20px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color);
+        }
+        details.group-level > summary {
+            padding: 10px 15px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        details.group-level > summary:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.03);
+        }
+
+        summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
         summary::-webkit-details-marker { display: none; }
-        .log-header { display: flex; align-items: center; gap: 10px; }
-        .log-id { background: #007acc; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
-        pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
-        .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
+        summary::after {
+            content: '+';
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            margin-left: 10px;
+        }
+        details[open] > summary::after { content: '−'; }
+
+        /* --- Tables --- */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background: rgba(0,0,0,0.3);
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        td {
+            font-family: 'Fira Code', monospace;
+        }
+        tr:hover td {
+            background: rgba(255,255,255,0.02);
+        }
         
-        .conn-error-block summary { background: #2d0e0e; border-left: 3px solid #f44747; }
-        .conn-error-block summary:hover { background: #3d1414; }
+        /* --- Badges & Status --- */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .badge-type { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge.consistent { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
         
-        .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }
-        .footer a { color: #007acc; text-decoration: none; transition: color 0.3s; }
-        .scroll-top { position: fixed; bottom: 20px; right: 20px; background: #007acc; color: white; padding: 10px; border-radius: 50%; text-decoration: none; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .status-cell { font-weight: 600; display: flex; align-items: center; gap: 8px; text-decoration: none; transition: opacity 0.2s; }
+        .status-cell:hover { opacity: 0.8; }
+        .st-ok { color: var(--accent-success); }
+        .st-warn { color: var(--accent-warning); }
+        .st-fail { color: var(--accent-danger); }
+        .st-div { color: var(--accent-divergent); }
+        .time-val { font-size: 0.8em; color: var(--text-secondary); font-weight: 400; opacity: 0.7; }
+
+        /* --- Modal & Logs --- */
+        .modal {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: var(--bg-card); margin: 5vh auto; padding: 0;
+            border: 1px solid var(--border-color); width: 90%; max-width: 1200px;
+            border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; max-height: 90vh;
+        }
+        .modal-header {
+            padding: 20px; border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-body {
+            padding: 0; overflow-y: auto; flex: 1;
+            background: #000;
+        }
+        pre {
+            margin: 0; padding: 20px; color: #e5e5e5; font-family: 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.6;
+        }
+        
+        /* --- Controls & Utilities --- */
+        .tech-controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn {
+            background: var(--bg-card-hover); border: 1px solid var(--border-color);
+            color: var(--text-primary); padding: 8px 16px; border-radius: 6px;
+            cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--accent-primary); border-color: var(--accent-primary); color: white; }
+        
+        .section-header { margin-top: 40px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+        
+        /* Disclaimer */
+        .disclaimer-box {
+            background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 8px; padding: 15px; margin-bottom: 30px;
+        }
+        .disclaimer-box summary { color: var(--accent-warning); font-weight: 600; }
+        
+        /* Footer */
+        footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-secondary); font-size: 0.85rem; }
+        footer a { color: var(--accent-primary); text-decoration: none; }
+        
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .dashboard, .domain-level { animation: fadeIn 0.4s ease-out forwards; }
     </style>
     <script>
-        function toggleDetails(state) {
-            const elements = document.querySelectorAll('details');
-            elements.forEach(el => el.open = state);
+        function toggleAll(level, state) {
+            const selector = level === 'domain' ? 'details.domain-level' : 'details.group-level';
+            document.querySelectorAll(selector).forEach(el => el.open = state);
         }
+        
         function showLog(id) {
-            var logDetails = document.getElementById(id);
-            if (!logDetails) { console.error("Log ID not found: " + id); return; }
-            var rawText = logDetails.querySelector('pre').innerHTML;
-            var headerText = logDetails.querySelector('summary').innerText;
-            document.getElementById('modalTitle').innerText = headerText;
-            document.getElementById('modalText').innerHTML = rawText;
+            var rawContent = document.getElementById(id + '_content').innerHTML;
+            document.getElementById('modalTitle').innerText = document.getElementById(id + '_title').innerText;
+            document.getElementById('modalText').innerHTML = rawContent;
             document.getElementById('logModal').style.display = "block";
+            document.body.style.overflow = 'hidden'; 
         }
-        function closeModal() { document.getElementById('logModal').style.display = "none"; }
-        window.onclick = function(event) { if (event.target == document.getElementById('logModal')) { closeModal(); } }
-        document.addEventListener('keydown', function(event){ if(event.key === "Escape"){ closeModal(); } });
+        
+        function closeModal() {
+            document.getElementById('logModal').style.display = "none";
+            document.body.style.overflow = 'auto';
+        }
+        
+        window.onclick = function(e) { if (e.target.className === 'modal') closeModal(); }
+        document.addEventListener('keydown', function(e) { if(e.key === "Escape") closeModal(); });
     </script>
 </head>
 <body>
     <div class="container">
-        <h1>📊 Relatório de Diagnóstico DNS (v$SCRIPT_VERSION)</h1>
-        <a name="top"></a>
+        <header>
+            <h1>
+                🔍 Diagnóstico DNS
+                <small>v$SCRIPT_VERSION</small>
+            </h1>
+            <div style="text-align: right; color: var(--text-secondary); font-size: 0.9rem;">
+                <div>Executado em: <strong>$TIMESTAMP</strong></div>
+                <div style="font-size: 0.8em; margin-top:4px;">Tempo Total: <span id="total_time_placeholder">...</span></div>
+            </div>
+        </header>
 EOF
 }
 
@@ -591,48 +797,59 @@ assemble_html() {
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
     
     cat >> "$HTML_FILE" << EOF
-    <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
+    <div style="display:flex; justify-content:flex-end; margin-bottom: 20px;">
         <div class="tech-controls">
-            <button class="btn-ctrl" onclick="toggleDetails(true)">➕ Expandir Todos</button>
-            <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
+            <button class="btn" onclick="toggleAll('domain', true)">➕ Expandir Domínios</button>
+            <button class="btn" onclick="toggleAll('domain', false)">➖ Recolher Domínios</button>
+            <button class="btn" onclick="toggleAll('group', true)">➕ Expandir Grupos</button>
+            <button class="btn" onclick="toggleAll('group', false)">➖ Recolher Grupos</button>
         </div>
     </div>
 EOF
 
     if [[ -s "$TEMP_PING" ]]; then
         cat >> "$HTML_FILE" << EOF
-        <div class="ping-section">
-             <h2>📡 Latência e Disponibilidade (ICMP)</h2>
+        <details class="section-details" style="margin-top: 30px; border-left: 4px solid var(--accent-warning);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
+             <div class="table-responsive" style="padding:15px;">
              <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
 EOF
         cat "$TEMP_PING" >> "$HTML_FILE"
-        echo "</tbody></table></div>" >> "$HTML_FILE"
+        echo "</tbody></table></div></details>" >> "$HTML_FILE"
     fi
 
     if [[ -s "$TEMP_TRACE" ]]; then
+         cat >> "$HTML_FILE" << EOF
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-divergent);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">🛤️ Rota de Rede (Traceroute)</summary>
+             <div class="table-responsive" style="padding:15px;">
+EOF
         cat "$TEMP_TRACE" >> "$HTML_FILE"
+        echo "</div></details>" >> "$HTML_FILE"
     fi
 
     cat >> "$HTML_FILE" << EOF
-        <div class="tech-section">
-            <h2>🛠️ Logs Técnicos Detalhados</h2>
-            <p style="color: #808080;">Logs brutos de execução. Mesmo em testes consistentes, variações ignoradas (IP/TTL) podem ser vistas aqui.</p>
+        <div class="tech-section" style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+            <h2 style="border:none;">🛠️ Logs Técnicos Detalhados</h2>
+            <p style="color: var(--text-secondary); margin-bottom:20px;">
+                Logs brutos de execução. Mesmo em testes consistentes, variações ignoradas (IP/TTL) podem ser vistas aqui.
+            </p>
 EOF
     cat "$TEMP_DETAILS" >> "$HTML_FILE"
     echo "</div>" >> "$HTML_FILE"
     cat "$TEMP_CONFIG" >> "$HTML_FILE"
 
     cat >> "$HTML_FILE" << EOF
-        <div class="footer">
+        <footer>
             Gerado automaticamente por <strong>DNS Diagnostic Tool (v$SCRIPT_VERSION)</strong><br>
-            Repositório Oficial: <a href="https://github.com/flashbsb/diagnostico_dns" target="_blank">github.com/flashbsb/diagnostico_dns</a><br>
-            <br>
-            <span style="font-size:0.8em; border:1px solid #444; padding:5px; border-radius:4px;">
-            Critérios Ativos: IP[${STRICT_IP_CHECK}] | Order[${STRICT_ORDER_CHECK}] | TTL[${STRICT_TTL_CHECK}]
-            </span>
-        </div>
+            <div style="margin-top:10px;">
+                <span class="badge" style="border:1px solid var(--border-color); color:var(--text-secondary);">
+                Critérios: IP[${STRICT_IP_CHECK}] | Order[${STRICT_ORDER_CHECK}] | TTL[${STRICT_TTL_CHECK}]
+                </span>
+            </div>
+        </footer>
     </div>
-    <a href="#top" class="scroll-top">⬆️</a>
+    <a href="#top" style="position:fixed; bottom:20px; right:20px; background:var(--accent-primary); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); font-size:1.2rem;">⬆️</a>
 </body>
 </html>
 EOF
@@ -706,7 +923,7 @@ run_trace_diagnostics() {
     elif command -v tracepath &> /dev/null; then cmd_trace="tracepath -n"
     else 
         echo -e "${YELLOW}⚠️ Traceroute/Tracepath não encontrados. Pulando.${NC}"
-        echo "<div class=\"ping-section\"><h2>🛤️ Rota de Rede (Traceroute)</h2><p class=\"status-warning\">Ferramentas de trace não encontradas (instale traceroute ou iputils-tracepath).</p></div>" > "$TEMP_TRACE"
+        echo "<p class=\"status-warning\" style=\"padding:15px;\">Ferramentas de trace não encontradas (instale traceroute ou iputils-tracepath).</p>" > "$TEMP_TRACE"
         return
     fi
 
@@ -719,7 +936,6 @@ run_trace_diagnostics() {
         done
     done
 
-    echo "<div class=\"ping-section\"><h2>🛤️ Rota de Rede (Traceroute)</h2>" >> "$TEMP_TRACE"
     echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
 
     local trace_id=0
@@ -739,7 +955,7 @@ run_trace_diagnostics() {
         local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
         echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver rota completa #$trace_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_TRACE"
     done
-    echo "</tbody></table></div>" >> "$TEMP_TRACE"
+    echo "</tbody></table>" >> "$TEMP_TRACE"
 }
 
 process_tests() {
@@ -755,7 +971,8 @@ process_tests() {
         
         echo -e "${CYAN}>> ${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
         
-        echo "<div class=\"domain-block\"><div class=\"domain-header\"><span>🌐 $domain</span><span class=\"badge\">$test_types</span></div>" >> "$TEMP_MATRIX"
+        # --- DOMAIN LEVEL DETAILS ---
+        echo "<details class=\"domain-level\" open><summary>🌐 $domain <span class=\"badge\">$test_types</span></summary>" >> "$TEMP_MATRIX"
         
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
         local targets=("$domain"); for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
@@ -764,29 +981,32 @@ process_tests() {
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
             local srv_list=(${DNS_GROUPS[$grp]})
             echo -ne "   [${PURPLE}${grp}${NC}] "
-            echo "<div style=\"padding:10px; border-bottom:1px solid #333; background:#2d2d30; color:#9cdcfe;\">Grupo: $grp</div>" >> "$TEMP_MATRIX"
-            echo "<table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_MATRIX"
+            
+            # --- GROUP LEVEL DETAILS ---
+            echo "<details class=\"group-level\" open><summary>📂 Grupo: $grp</summary>" >> "$TEMP_MATRIX"
+            echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_MATRIX"
             for srv in "${srv_list[@]}"; do echo "<th>$srv</th>" >> "$TEMP_MATRIX"; done
             echo "</tr></thead><tbody>" >> "$TEMP_MATRIX"
             
             for mode in "${calc_modes[@]}"; do
                 for target in "${targets[@]}"; do
                     for rec in "${rec_list[@]}"; do
-                        echo "<tr><td><span class=\"badge\">$mode</span> <strong>$target</strong> <span style=\"color:#666\">($rec)</span></td>" >> "$TEMP_MATRIX"
+                        echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_MATRIX"
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1
+                            local unique_id="test_${test_id}"
                             
                             # Connectivity
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1; echo -ne "${RED}x${NC}"; 
-                                    echo "<td><a href=\"#\" class=\"cell-link status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
+                                    echo "<td><a href=\"#\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
                                     continue
                                 fi
                             fi
                             
                             # Consistency Loop
-                            local unique_id="test_${test_id}"; local attempts_log=""; local last_normalized=""
+                            local attempts_log=""; local last_normalized=""
                             local is_divergent="false"; local consistent_count=0
                             local final_status="OK"; local final_dur=0; local final_class=""
                             
@@ -800,9 +1020,8 @@ process_tests() {
                                 local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
                                 local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 )); final_dur=$dur
                                 
-                                # --- NORMALIZAÇÃO PARA COMPARAÇÃO ---
+                                # Normalization
                                 local normalized=$(normalize_dig_output "$output")
-                                
                                 if [[ $iter -gt 1 ]]; then
                                     if [[ "$normalized" != "$last_normalized" ]]; then is_divergent="true"; else consistent_count=$((consistent_count + 1)); fi
                                 else last_normalized="$normalized"; consistent_count=1; fi
@@ -819,7 +1038,6 @@ process_tests() {
                                     [[ "$answer_count" -eq 0 ]] && iter_status="NOANSWER" || iter_status="NOERROR"
                                 fi
                                 
-                                # CORREÇÃO VISUAL: Uso de ANSI C quoting para garantir newlines reais
                                 attempts_log="${attempts_log}"$'\n\n'"=== TENTATIVA #$iter ($iter_status) === "$'\n'"[Normalized Check: $(echo "$normalized" | tr '\n' ' ')]"$'\n'"$output"
                                 final_status="$iter_status"
                                 [[ "$iter_status" == "NOERROR" ]] && final_class="status-ok" || { [[ "$iter_status" == "SERVFAIL" || "$iter_status" == "NXDOMAIN" || "$iter_status" == "NOANSWER" ]] && final_class="status-warning" || final_class="status-fail"; }
@@ -829,46 +1047,44 @@ process_tests() {
                             
                             local badge=""
                             if [[ "$is_divergent" == "true" ]]; then
-                                DIVERGENT_TESTS+=1; final_status="DIVERGENTE"; final_class="status-divergent"
+                                DIVERGENT_TESTS+=1; final_status="DIV"; final_class="status-divergent"
                                 badge="<span class=\"consistency-badge consistency-bad\">${consistent_count}/${CONSISTENCY_CHECKS}</span>"
                                 echo -ne "${PURPLE}~${NC}"
                             else
                                 [[ "$final_class" == "status-ok" ]] && { SUCCESS_TESTS+=1; echo -ne "${GREEN}.${NC}"; }
                                 [[ "$final_class" == "status-warning" ]] && { WARNING_TESTS+=1; echo -ne "${YELLOW}!${NC}"; }
                                 [[ "$final_class" == "status-fail" ]] && { FAILED_TESTS+=1; echo -ne "${RED}x${NC}"; }
-                                badge="<span class=\"consistency-badge\">${CONSISTENCY_CHECKS}/${CONSISTENCY_CHECKS}</span>"
+                                badge="<span class=\"badge consistent\">${CONSISTENCY_CHECKS}x</span>"
                             fi
 
                             local icon=""; [[ "$final_class" == "status-ok" ]] && icon="✅"; [[ "$final_class" == "status-warning" ]] && icon="⚠️"
                             [[ "$final_class" == "status-fail" ]] && icon="❌"; [[ "$final_class" == "status-divergent" ]] && icon="🔀"
 
-                            # ADICIONADO: Geração da célula HTML para o teste padrão
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $final_class\">$icon $final_status $badge <span class=\"time-badge\">${final_dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <span class=\"time-val\">${final_dur}ms</span></a></td>" >> "$TEMP_MATRIX"
 
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span class=\"badge\">$final_status</span> <strong>$srv</strong> &rarr; $target ($rec)</summary><pre>$safe_log</pre></details>" >> "$TEMP_DETAILS"
+                            # Hidden divs for Modal
+                            echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                            echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id $final_status | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
                         done
-                        echo "</tr>" >> "$TEMP_MATRIX"
                     done
-
+                    
                     # --- TESTE EXTRA: TCP ---
                     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-                         echo "<tr><td><span class=\"badge\">$mode</span> <strong>$target</strong> <span style=\"color:#f44747\">(TCP)</span></td>" >> "$TEMP_MATRIX"
+                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#f44747\">(TCP)</span></td>" >> "$TEMP_MATRIX"
                          for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1
                             local unique_id="test_tcp_${test_id}"; local attempts_log=""
                             # TCP force +tcp
-                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
-                            local opts_arr; read -ra opts_arr <<< "$opts_str"
-                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
-                            opts_arr+=("+tcp")
+                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"; local opts_arr; read -ra opts_arr <<< "$opts_str"
+                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4"); opts_arr+=("+tcp")
 
-                            local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") # Testa TCP usando query A
+                            local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") 
                             local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
                             local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
                             
                             local iter_status="OK"; local status_class="status-ok"; local status_icon="✅"
-                            if [[ $ret -ne 0 ]] || echo "$output" | grep -q "connection timed out" || echo "$output" | grep -q "communications error"; then
+                            if [[ $ret -ne 0 ]] || echo "$output" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                 iter_status="FAIL"; status_class="status-fail"; status_icon="❌"
                                 FAILED_TESTS+=1; echo -ne "${RED}T${NC}"
                             else
@@ -876,65 +1092,52 @@ process_tests() {
                             fi
                             
                             attempts_log="=== TCP TEST === "$'\n'"$output"
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $status_class\">$status_icon $iter_status <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span class=\"badge\">TCP</span> <strong>$srv</strong> &rarr; $target</summary><pre>$safe_log</pre></details>" >> "$TEMP_DETAILS"
+                            echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                            echo "<div id=\"${unique_id}_title\" style=\"display:none\">TCP CHECK | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
                          done
                          echo "</tr>" >> "$TEMP_MATRIX"
                     fi
 
                     # --- TESTE EXTRA: DNSSEC ---
                     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                         echo "<tr><td><span class=\"badge\">$mode</span> <strong>$target</strong> <span style=\"color:#4ec9b0\">(DNSSEC)</span></td>" >> "$TEMP_MATRIX"
+                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#4ec9b0\">(DNSSEC)</span></td>" >> "$TEMP_MATRIX"
                          for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1
                             local unique_id="test_dnssec_${test_id}"; local attempts_log=""
-                            # DNSSEC force +dnssec
-                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
-                            local opts_arr; read -ra opts_arr <<< "$opts_str"
-                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
-                            opts_arr+=("+dnssec")
+                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"; local opts_arr; read -ra opts_arr <<< "$opts_str"
+                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4"); opts_arr+=("+dnssec")
 
                             local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") 
                             local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
                             local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
                             
-                            # Verifica flag 'ad' (Authenticated Data) para recursivos
-                            # Para iterativo/autoritativo, a validação é diferente (RRSIG presente na resposta)
-                            local is_secure="false"
-                            local security_note=""
-                            
-                            if echo "$output" | grep -q ";; flags:.* ad"; then
-                                is_secure="true"; security_note="AD Flag Found"
-                            elif echo "$output" | grep -q "RRSIG"; then
-                                # Se achou RRSIG na resposta, indicio de que retornou dados assinados
-                                is_secure="true"; security_note="RRSIG Found"
-                            else
-                                security_note="No AD/RRSIG"
-                            fi
+                            local is_secure="false"; local security_note=""
+                            if echo "$output" | grep -q ";; flags:.* ad"; then is_secure="true"; security_note="AD Flag";
+                            elif echo "$output" | grep -q "RRSIG"; then is_secure="true"; security_note="RRSIG";
+                            else security_note="No AD/RRSIG"; fi
 
                             local iter_status="OK"; local status_class="status-ok"; local status_icon="🔐"
-                            if [[ "$is_secure" == "true" ]]; then
-                                SUCCESS_TESTS+=1; echo -ne "${GREEN}D${NC}"
-                            else
-                                # Falha no DNSSEC (ou dominio não assinado) - Alerta Amarelo
-                                iter_status="UNSECURE"; status_class="status-warning"; status_icon="⚠️"
-                                WARNING_TESTS+=1; echo -ne "${YELLOW}D${NC}"
-                            fi
+                            if [[ "$is_secure" == "true" ]]; then SUCCESS_TESTS+=1; echo -ne "${GREEN}D${NC}"
+                            else iter_status="UNSECURE"; status_class="status-warning"; status_icon="⚠️"; WARNING_TESTS+=1; echo -ne "${YELLOW}D${NC}"; fi
                             
                             attempts_log="=== DNSSEC TEST ($security_note) === "$'\n'"$output"
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $status_class\">$status_icon $iter_status <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span class=\"badge\">DNSSEC</span> <strong>$srv</strong> &rarr; $target</summary><pre>$safe_log</pre></details>" >> "$TEMP_DETAILS"
+                            echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                            echo "<div id=\"${unique_id}_title\" style=\"display:none\">DNSSEC | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
                          done
-                         echo "</tr>" >> "$TEMP_MATRIX"
                     fi
                 done
             done
-            echo "</tbody></table>" >> "$TEMP_MATRIX"
+            echo "</tbody></table></div>" >> "$TEMP_MATRIX"
+            echo "</details>" >> "$TEMP_MATRIX" # Closes Group Details
             echo "" 
         done
-        echo "</div>" >> "$TEMP_MATRIX"
+        echo "</details>" >> "$TEMP_MATRIX" # Closes Domain Details
         echo ""
     done < "$FILE_DOMAINS"
 }
