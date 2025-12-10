@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.9.7.2 (Visual Fix Edition)
-# "Correção das quebras de linha nas tentativas (Logs)."
+# Versão: 9.10 (Trace)
+# "Trace de rede."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.9.7.2"
+SCRIPT_VERSION="9.10"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -45,6 +45,7 @@ PING_TIMEOUT=2
 # Configurações de Testes Especiais
 ENABLE_TCP_CHECK="true"
 ENABLE_DNSSEC_CHECK="true"
+ENABLE_TRACE_CHECK="true"
 
 # Controle de Interatividade
 INTERACTIVE_MODE="true"
@@ -91,6 +92,7 @@ TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
 TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
 TEMP_MODAL="logs/temp_modal_${TIMESTAMP}.html"
 TEMP_DISCLAIMER="logs/temp_disclaimer_${TIMESTAMP}.html"
+TEMP_TRACE="logs/temp_trace_${TIMESTAMP}.html"
 
 # ==============================================
 # HELP & BANNER
@@ -133,6 +135,7 @@ print_execution_summary() {
     echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT, Timeout: ${PING_TIMEOUT}s)${NC}"
     echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
     echo -e "  🔐 DNSSEC Check  : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
+    echo -e "  🛤️ Trace Check   : ${CYAN}${ENABLE_TRACE_CHECK}${NC}"
     echo ""
     echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
     echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
@@ -255,6 +258,7 @@ interactive_configuration() {
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
         ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
         ask_boolean "Ativar Teste DNSSEC (+dnssec)?" "ENABLE_DNSSEC_CHECK"
+        ask_boolean "Executar Traceroute (Rota)?" "ENABLE_TRACE_CHECK"
         
         echo -e "\n${GREEN}Configurações atualizadas!${NC}"
         print_execution_summary
@@ -312,7 +316,7 @@ normalize_dig_output() {
 # GERAÇÃO HTML
 # ==============================================
 
-init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; > "$TEMP_MODAL"; > "$TEMP_DISCLAIMER"; }
+init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_TRACE"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; > "$TEMP_MODAL"; > "$TEMP_DISCLAIMER"; }
 
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
@@ -543,6 +547,7 @@ cat > "$TEMP_CONFIG" << EOF
                     <tr><th>Ping Enabled</th><td>${ENABLE_PING} (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s)</td></tr>
                     <tr><th>TCP Check (+tcp)</th><td>${ENABLE_TCP_CHECK}</td></tr>
                     <tr><th>DNSSEC Check (+dnssec)</th><td>${ENABLE_DNSSEC_CHECK}</td></tr>
+                    <tr><th>Trace Route Check</th><td>${ENABLE_TRACE_CHECK}</td></tr>
                     <tr><th>Consistency Checks</th><td>${CONSISTENCY_CHECKS} tentativas</td></tr>
                     <tr><th>Strict Criteria</th><td>IP=${STRICT_IP_CHECK} | Order=${STRICT_ORDER_CHECK} | TTL=${STRICT_TTL_CHECK}</td></tr>
                     <tr><th>Iterative DIG Options</th><td>${DEFAULT_DIG_OPTIONS}</td></tr>
@@ -604,6 +609,10 @@ EOF
         echo "</tbody></table></div>" >> "$HTML_FILE"
     fi
 
+    if [[ -s "$TEMP_TRACE" ]]; then
+        cat "$TEMP_TRACE" >> "$HTML_FILE"
+    fi
+
     cat >> "$HTML_FILE" << EOF
         <div class="tech-section">
             <h2>🛠️ Logs Técnicos Detalhados</h2>
@@ -627,7 +636,7 @@ EOF
 </body>
 </html>
 EOF
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER"
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER"
     # Trap will handle final cleanup, but we can keep explicit removal here too to be sure
 }
 
@@ -685,6 +694,52 @@ run_ping_diagnostics() {
         local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
         echo "<tr><td colspan=\"5\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
     done
+}
+
+run_trace_diagnostics() {
+    [[ "$ENABLE_TRACE_CHECK" != "true" ]] && return
+    echo -e "\n${BLUE}=== INICIANDO TRACEROUTE ===${NC}"
+    log_section "TRACEROUTE NETWORK PATH"
+    
+    local cmd_trace=""
+    if command -v traceroute &> /dev/null; then cmd_trace="traceroute -n -w 1 -q 1 -m 15"
+    elif command -v tracepath &> /dev/null; then cmd_trace="tracepath -n"
+    else 
+        echo -e "${YELLOW}⚠️ Traceroute/Tracepath não encontrados. Pulando.${NC}"
+        echo "<div class=\"ping-section\"><h2>🛤️ Rota de Rede (Traceroute)</h2><p class=\"status-warning\">Ferramentas de trace não encontradas (instale traceroute ou iputils-tracepath).</p></div>" > "$TEMP_TRACE"
+        return
+    fi
+
+    declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
+    for grp in "${!DNS_GROUPS[@]}"; do
+        for ip in ${DNS_GROUPS[$grp]}; do
+            local grp_label="[$grp]"
+            [[ -z "${IP_GROUPS_MAP[$ip]}" ]] && IP_GROUPS_MAP[$ip]="$grp_label" || { [[ "${IP_GROUPS_MAP[$ip]}" != *"$grp_label"* ]] && IP_GROUPS_MAP[$ip]="${IP_GROUPS_MAP[$ip]} $grp_label"; }
+            if [[ -z "${CHECKED_IPS[$ip]}" ]]; then CHECKED_IPS[$ip]=1; unique_ips+=("$ip"); fi
+        done
+    done
+
+    echo "<div class=\"ping-section\"><h2>🛤️ Rota de Rede (Traceroute)</h2>" >> "$TEMP_TRACE"
+    echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
+
+    local trace_id=0
+    for ip in "${unique_ips[@]}"; do
+        trace_id=$((trace_id + 1))
+        local groups_str="${IP_GROUPS_MAP[$ip]}"
+        echo -ne "   🛤️ $ip ... "
+        
+        local output; output=$($cmd_trace $ip 2>&1); local ret=$?
+        local hops=$(echo "$output" | wc -l)
+        local last_hop=$(echo "$output" | tail -1 | xargs)
+        
+        echo -e "${CYAN}${hops} hops${NC}"
+        
+        echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
+        
+        local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+        echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver rota completa #$trace_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_TRACE"
+    done
+    echo "</tbody></table></div>" >> "$TEMP_TRACE"
 }
 
 process_tests() {
@@ -888,14 +943,14 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhytd" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; t) ENABLE_TCP_CHECK="true" ;; d) ENABLE_DNSSEC_CHECK="true" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
     interactive_configuration
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
-    init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics
+    init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     assemble_html
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
