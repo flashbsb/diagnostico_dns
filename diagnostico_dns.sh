@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.9.7.1 (Visual Fix Edition)
+# Versão: 9.9.7.2 (Visual Fix Edition)
 # "Correção das quebras de linha nas tentativas (Logs)."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.9.7.1"
+SCRIPT_VERSION="9.9.7.2"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
