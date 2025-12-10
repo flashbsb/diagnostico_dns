@@ -2,15 +2,15 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.9 (HTML)
-# "HTML ajustes e melhorias"
+# Versão: 9.11.11 (DIG)
+# "DIG ajustes para melhor compatibilidade"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.9"
+SCRIPT_VERSION="9.11.11"
 
-DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
-RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
+DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=1232 +nsid"
+RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=1232 +nsid"
 
 # Prefixo e Arquivos
 LOG_PREFIX="dnsdiag"
@@ -141,6 +141,7 @@ print_execution_summary() {
     echo -e "  🔄 Consistência  : ${YELLOW}${CONSISTENCY_CHECKS} tentativas${NC}"
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
     echo -e "  🌐 Versão IP     : ${CYAN}${IP_VERSION}${NC}"
+    echo -e "  🔍 Check BIND Ver: ${CYAN}${CHECK_BIND_VERSION}${NC}"
     echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT, Timeout: ${PING_TIMEOUT}s)${NC}"
     echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
     echo -e "  🔐 DNSSEC Check  : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
@@ -154,7 +155,13 @@ print_execution_summary() {
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
     echo -e "  📝 Gerar Log TXT : ${CYAN}${GENERATE_LOG_TEXT}${NC}"
-    echo -e "  🛠️  Dig Options   : ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
+    echo -e "  🛠️  Dig Opts (Iter): ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
+    echo -e "  🛠️  Dig Opts (Rec) : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
+    echo ""
+    echo -e "${PURPLE}[ANÁLISE & VISUALIZAÇÃO]${NC}"
+    echo -e "  ⚠️  Limiar Latência : ${YELLOW}${LATENCY_WARNING_THRESHOLD}ms${NC}"
+    echo -e "  📉 Perda Pcts Max : ${YELLOW}${PING_PACKET_LOSS_LIMIT}%${NC}"
+    echo -e "  🎨 Color Output   : ${CYAN}${COLOR_OUTPUT}${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
     echo -e "  📄 Relatório HTML: ${GREEN}$HTML_FILE${NC}"
@@ -262,12 +269,28 @@ interactive_configuration() {
         ask_variable "Sleep entre queries (segundos)" "SLEEP"
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
         ask_variable "Versão IP (ipv4/ipv6)" "IP_VERSION"
+        ask_boolean "Checar versão BIND (chaos)?" "CHECK_BIND_VERSION"
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
+        
+        echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
+        if [[ "$ENABLE_PING" == "true" ]]; then
+             ask_variable "   ↳ Ping Count" "PING_COUNT"
+             ask_variable "   ↳ Ping Timeout (s)" "PING_TIMEOUT"
+        fi
         ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
         ask_boolean "Ativar Teste DNSSEC (+dnssec)?" "ENABLE_DNSSEC_CHECK"
         ask_boolean "Executar Traceroute (Rota)?" "ENABLE_TRACE_CHECK"
+        
+        echo -e "\n${BLUE}--- OPÇÕES AVANÇADAS (DIG) ---${NC}"
+        ask_variable "Dig Options (Padrão/Iterativo)" "DEFAULT_DIG_OPTIONS"
+        ask_variable "Dig Options (Recursivo)" "RECURSIVE_DIG_OPTIONS"
+        
+        echo -e "\n${BLUE}--- ANÁLISE & VISUALIZAÇÃO ---${NC}"
+        ask_variable "Limiar de Alerta de Latência (ms)" "LATENCY_WARNING_THRESHOLD"
+        ask_variable "Limite tolerável de Perda de Pacotes (%)" "PING_PACKET_LOSS_LIMIT"
+        ask_boolean "Habilitar Cores no Terminal?" "COLOR_OUTPUT"
         
         echo -e "\n${GREEN}Configurações atualizadas!${NC}"
         print_execution_summary
@@ -768,7 +791,7 @@ cat > "$TEMP_CONFIG" << EOF
                         <tr><td>Valida Conectividade</td><td>${VALIDATE_CONNECTIVITY}</td><td>Testa porta 53 antes do envio da query.</td></tr>
                         <tr><td>Versão IP</td><td>${IP_VERSION}</td><td>Protocolo de transporte forçado (IPv4/IPv6).</td></tr>
                         <tr><td>Check BIND Version</td><td>${CHECK_BIND_VERSION}</td><td>Consulta caos class para versão do BIND.</td></tr>
-                        <tr><td>Ping Enabled</td><td>${ENABLE_PING} (Count: ${PING_COUNT})</td><td>Verificação de latência ICMP.</td></tr>
+                        <tr><td>Ping Enabled</td><td>${ENABLE_PING}</td><td>Verificação de latência ICMP (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s).</td></tr>
                         <tr><td>TCP Check (+tcp)</td><td>${ENABLE_TCP_CHECK}</td><td>Obrigatoriedade de suporte a DNS via TCP.</td></tr>
                         <tr><td>DNSSEC Check (+dnssec)</td><td>${ENABLE_DNSSEC_CHECK}</td><td>Validação da cadeia de confiança DNSSEC.</td></tr>
                         <tr><td>Trace Route Check</td><td>${ENABLE_TRACE_CHECK}</td><td>Mapeamento de rota até o servidor.</td></tr>
@@ -776,6 +799,9 @@ cat > "$TEMP_CONFIG" << EOF
                         <tr><td>Strict Criteria</td><td>IP=${STRICT_IP_CHECK} | Order=${STRICT_ORDER_CHECK} | TTL=${STRICT_TTL_CHECK}</td><td>Regras rígidas para considerar divergência.</td></tr>
                         <tr><td>Iterative DIG Options</td><td>${DEFAULT_DIG_OPTIONS}</td><td>Flags RAW enviadas ao DIG (Modo Iterativo).</td></tr>
                         <tr><td>Recursive DIG Options</td><td>${RECURSIVE_DIG_OPTIONS}</td><td>Flags RAW enviadas ao DIG (Modo Recursivo).</td></tr>
+                        <tr><td>Latency Threshold</td><td>${LATENCY_WARNING_THRESHOLD}ms</td><td>Acima deste valor, a resposta é marcada como 'Slow' (Alerta).</td></tr>
+                        <tr><td>Packet Loss Limit</td><td>${PING_PACKET_LOSS_LIMIT}%</td><td>Tolerância máxima de perda de pacotes antes de falhar o teste.</td></tr>
+                        <tr><td>Color Output</td><td>${COLOR_OUTPUT}</td><td>Indica se a saída do terminal utiliza códigos de cores ANSI.</td></tr>
                     </tbody>
                  </table>
                  </div>
