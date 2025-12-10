@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.9.6 (Visual Fix Edition)
+# Versão: 9.9.7.1 (Visual Fix Edition)
 # "Correção das quebras de linha nas tentativas (Logs)."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.9.6"
+SCRIPT_VERSION="9.9.7.1"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -41,6 +41,10 @@ STRICT_TTL_CHECK="false"      # Se false: Ignora diferenças de TTL (recomendado
 ENABLE_PING=true
 PING_COUNT=10       
 PING_TIMEOUT=2      
+
+# Configurações de Testes Especiais
+ENABLE_TCP_CHECK="true"
+ENABLE_DNSSEC_CHECK="true"
 
 # Controle de Interatividade
 INTERACTIVE_MODE="true"
@@ -105,6 +109,8 @@ show_help() {
     echo -e "  ${GREEN}-n <arquivo>${NC}   CSV de domínios (Default: domains_tests.csv)"
     echo -e "  ${GREEN}-g <arquivo>${NC}   CSV de grupos DNS (Default: dns_groups.csv)"
     echo -e "  ${GREEN}-y${NC}            Modo Silencioso (Não interativo)"
+    echo -e "  ${GREEN}-t${NC}            Habilita teste TCP"
+    echo -e "  ${GREEN}-d${NC}            Habilita teste DNSSEC"
     echo -e "  ${GREEN}-h${NC}            Exibe ajuda"
     echo -e ""
 }
@@ -125,6 +131,8 @@ print_execution_summary() {
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
     echo -e "  🌐 Versão IP     : ${CYAN}${IP_VERSION}${NC}"
     echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT, Timeout: ${PING_TIMEOUT}s)${NC}"
+    echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
+    echo -e "  🔐 DNSSEC Check  : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
     echo ""
     echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
     echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
@@ -182,10 +190,11 @@ init_log_file() {
     {
         echo "DNS DIAGNOSTIC TOOL v$SCRIPT_VERSION - FORENSIC LOG"
         echo "Date: $START_TIME_HUMAN"
-        echo "Config Dump:"
+        echo "  Config Dump:"
         echo "  Timeout: $TIMEOUT, Sleep: $SLEEP, IP: $IP_VERSION, ConnCheck: $VALIDATE_CONNECTIVITY"
         echo "  Consistency: $CONSISTENCY_CHECKS attempts"
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
+        echo "  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK"
         echo "  Dig Opts: $DEFAULT_DIG_OPTIONS"
         echo ""
     } > "$LOG_FILE_TEXT"
@@ -244,6 +253,8 @@ interactive_configuration() {
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
+        ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
+        ask_boolean "Ativar Teste DNSSEC (+dnssec)?" "ENABLE_DNSSEC_CHECK"
         
         echo -e "\n${GREEN}Configurações atualizadas!${NC}"
         print_execution_summary
@@ -530,6 +541,8 @@ cat > "$TEMP_CONFIG" << EOF
                     <tr><th>Versão IP</th><td>${IP_VERSION}</td></tr>
                     <tr><th>Check BIND Version</th><td>${CHECK_BIND_VERSION}</td></tr>
                     <tr><th>Ping Enabled</th><td>${ENABLE_PING} (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s)</td></tr>
+                    <tr><th>TCP Check (+tcp)</th><td>${ENABLE_TCP_CHECK}</td></tr>
+                    <tr><th>DNSSEC Check (+dnssec)</th><td>${ENABLE_DNSSEC_CHECK}</td></tr>
                     <tr><th>Consistency Checks</th><td>${CONSISTENCY_CHECKS} tentativas</td></tr>
                     <tr><th>Strict Criteria</th><td>IP=${STRICT_IP_CHECK} | Order=${STRICT_ORDER_CHECK} | TTL=${STRICT_TTL_CHECK}</td></tr>
                     <tr><th>Iterative DIG Options</th><td>${DEFAULT_DIG_OPTIONS}</td></tr>
@@ -676,7 +689,7 @@ run_ping_diagnostics() {
 
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
-    echo -e "LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
+    echo -e "LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail ${GREEN}T${NC}=TCP ${GREEN}D${NC}=DNSSEC"
     
     local test_id=0
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
@@ -774,12 +787,93 @@ process_tests() {
                             local icon=""; [[ "$final_class" == "status-ok" ]] && icon="✅"; [[ "$final_class" == "status-warning" ]] && icon="⚠️"
                             [[ "$final_class" == "status-fail" ]] && icon="❌"; [[ "$final_class" == "status-divergent" ]] && icon="🔀"
 
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $final_class\">$icon $final_status <span class=\"time-badge\">${final_dur}ms</span>$badge</a></td>" >> "$TEMP_MATRIX"
+                            # ADICIONADO: Geração da célula HTML para o teste padrão
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $final_class\">$icon $final_status $badge <span class=\"time-badge\">${final_dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                             echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span class=\"badge\">$final_status</span> <strong>$srv</strong> &rarr; $target ($rec)</summary><pre>$safe_log</pre></details>" >> "$TEMP_DETAILS"
                         done
                         echo "</tr>" >> "$TEMP_MATRIX"
                     done
+
+                    # --- TESTE EXTRA: TCP ---
+                    if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+                         echo "<tr><td><span class=\"badge\">$mode</span> <strong>$target</strong> <span style=\"color:#f44747\">(TCP)</span></td>" >> "$TEMP_MATRIX"
+                         for srv in "${srv_list[@]}"; do
+                            test_id=$((test_id + 1)); TOTAL_TESTS+=1
+                            local unique_id="test_tcp_${test_id}"; local attempts_log=""
+                            # TCP force +tcp
+                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
+                            local opts_arr; read -ra opts_arr <<< "$opts_str"
+                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
+                            opts_arr+=("+tcp")
+
+                            local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") # Testa TCP usando query A
+                            local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
+                            local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
+                            
+                            local iter_status="OK"; local status_class="status-ok"; local status_icon="✅"
+                            if [[ $ret -ne 0 ]] || echo "$output" | grep -q "connection timed out" || echo "$output" | grep -q "communications error"; then
+                                iter_status="FAIL"; status_class="status-fail"; status_icon="❌"
+                                FAILED_TESTS+=1; echo -ne "${RED}T${NC}"
+                            else
+                                SUCCESS_TESTS+=1; echo -ne "${GREEN}T${NC}"
+                            fi
+                            
+                            attempts_log="=== TCP TEST === "$'\n'"$output"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $status_class\">$status_icon $iter_status <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span class=\"badge\">TCP</span> <strong>$srv</strong> &rarr; $target</summary><pre>$safe_log</pre></details>" >> "$TEMP_DETAILS"
+                         done
+                         echo "</tr>" >> "$TEMP_MATRIX"
+                    fi
+
+                    # --- TESTE EXTRA: DNSSEC ---
+                    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                         echo "<tr><td><span class=\"badge\">$mode</span> <strong>$target</strong> <span style=\"color:#4ec9b0\">(DNSSEC)</span></td>" >> "$TEMP_MATRIX"
+                         for srv in "${srv_list[@]}"; do
+                            test_id=$((test_id + 1)); TOTAL_TESTS+=1
+                            local unique_id="test_dnssec_${test_id}"; local attempts_log=""
+                            # DNSSEC force +dnssec
+                            local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
+                            local opts_arr; read -ra opts_arr <<< "$opts_str"
+                            [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
+                            opts_arr+=("+dnssec")
+
+                            local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "A") 
+                            local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
+                            local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
+                            
+                            # Verifica flag 'ad' (Authenticated Data) para recursivos
+                            # Para iterativo/autoritativo, a validação é diferente (RRSIG presente na resposta)
+                            local is_secure="false"
+                            local security_note=""
+                            
+                            if echo "$output" | grep -q ";; flags:.* ad"; then
+                                is_secure="true"; security_note="AD Flag Found"
+                            elif echo "$output" | grep -q "RRSIG"; then
+                                # Se achou RRSIG na resposta, indicio de que retornou dados assinados
+                                is_secure="true"; security_note="RRSIG Found"
+                            else
+                                security_note="No AD/RRSIG"
+                            fi
+
+                            local iter_status="OK"; local status_class="status-ok"; local status_icon="🔐"
+                            if [[ "$is_secure" == "true" ]]; then
+                                SUCCESS_TESTS+=1; echo -ne "${GREEN}D${NC}"
+                            else
+                                # Falha no DNSSEC (ou dominio não assinado) - Alerta Amarelo
+                                iter_status="UNSECURE"; status_class="status-warning"; status_icon="⚠️"
+                                WARNING_TESTS+=1; echo -ne "${YELLOW}D${NC}"
+                            fi
+                            
+                            attempts_log="=== DNSSEC TEST ($security_note) === "$'\n'"$output"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"cell-link $status_class\">$status_icon $iter_status <span class=\"time-badge\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                            echo "<details id=\"$unique_id\"><summary class=\"log-header\"><span class=\"log-id\">#$test_id</span> <span class=\"badge\">DNSSEC</span> <strong>$srv</strong> &rarr; $target</summary><pre>$safe_log</pre></details>" >> "$TEMP_DETAILS"
+                         done
+                         echo "</tr>" >> "$TEMP_MATRIX"
+                    fi
                 done
             done
             echo "</tbody></table>" >> "$TEMP_MATRIX"
@@ -796,7 +890,7 @@ main() {
     # Define cleanup trap
     trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" 2>/dev/null' EXIT
 
-    while getopts ":n:g:lhy" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
+    while getopts ":n:g:lhytd" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; t) ENABLE_TCP_CHECK="true" ;; d) ENABLE_DNSSEC_CHECK="true" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
     interactive_configuration
