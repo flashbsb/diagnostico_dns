@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.6 (TCP/DNSSEC)
-# "TCP/DNSSEC movidos para o final."
+# Versão: 9.11.7 (sumario nomes)
+# "sumario nomes com tipos de record"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.6"
+SCRIPT_VERSION="9.11.7"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -1226,7 +1226,7 @@ process_tests() {
         [[ $d_div -gt 0 ]] && d_stats_html+="<span class=\"st-div\">🔀 $d_div</span>"
         d_stats_html+="</span>"
 
-        echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
+        echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
         cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
         echo "</details>" >> "$TEMP_MATRIX"
         
