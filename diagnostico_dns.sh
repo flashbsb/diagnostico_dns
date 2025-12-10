@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11.8 (Variáveis de configuração)
-# "Novas variaveis de configuracao latency, packet loss limit e color output"
+# Versão: 9.11.9 (HTML)
+# "HTML ajustes e melhorias"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11.8"
+SCRIPT_VERSION="9.11.9"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -687,22 +687,22 @@ EOF
 
 generate_timing_html() {
 cat > "$TEMP_TIMING" << EOF
-        <div class="timing-strip">
-            <div class="timing-item">
-                <span class="timing-label">Início</span>
-                <span class="timing-val">$START_TIME_HUMAN</span>
+        <div class="timing-container" style="display:flex; justify-content:center; gap:30px; margin: 40px auto 20px auto; padding: 15px; background:var(--bg-secondary); border-radius:12px; max-width:800px; border:1px solid var(--border-color);">
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Início</div>
+                <div style="font-size:1.1rem; font-weight:600;">$START_TIME_HUMAN</div>
             </div>
-            <div class="timing-item">
-                <span class="timing-label">Final</span>
-                <span class="timing-val">$END_TIME_HUMAN</span>
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Final</div>
+                <div style="font-size:1.1rem; font-weight:600;">$END_TIME_HUMAN</div>
             </div>
-            <div class="timing-item">
-                <span class="timing-label">Tentativas p/ Teste</span>
-                <span class="timing-val">${CONSISTENCY_CHECKS}x</span>
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Tentativas</div>
+                <div style="font-size:1.1rem; font-weight:600;">${CONSISTENCY_CHECKS}x</div>
             </div>
-            <div class="timing-item">
-                <span class="timing-label">Duração Total</span>
-                <span class="timing-val">${TOTAL_DURATION}s</span>
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Duração</div>
+                <div style="font-size:1.1rem; font-weight:600;"><span id="total_time_footer">${TOTAL_DURATION}s</span></div>
             </div>
         </div>
 EOF
@@ -811,7 +811,8 @@ assemble_html() {
     cat "$TEMP_HEADER" >> "$HTML_FILE"
     cat "$TEMP_MODAL" >> "$HTML_FILE"
     cat "$TEMP_STATS" >> "$HTML_FILE"
-    cat "$TEMP_TIMING" >> "$HTML_FILE"
+
+
     cat "$TEMP_DISCLAIMER" >> "$HTML_FILE"
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
     
@@ -863,15 +864,11 @@ EOF
     cat "$TEMP_DETAILS" >> "$HTML_FILE"
     echo "</div>" >> "$HTML_FILE"
     cat "$TEMP_CONFIG" >> "$HTML_FILE"
+    cat "$TEMP_TIMING" >> "$HTML_FILE"
 
     cat >> "$HTML_FILE" << EOF
         <footer>
             Gerado automaticamente por <strong>DNS Diagnostic Tool (v$SCRIPT_VERSION)</strong><br>
-            <div style="margin-top:10px;">
-                <span class="badge" style="border:1px solid var(--border-color); color:var(--text-secondary);">
-                Critérios: IP[${STRICT_IP_CHECK}] | Order[${STRICT_ORDER_CHECK}] | TTL[${STRICT_TTL_CHECK}]
-                </span>
-            </div>
         </footer>
     </div>
     <a href="#top" style="position:fixed; bottom:20px; right:20px; background:var(--accent-primary); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); font-size:1.2rem;">⬆️</a>
