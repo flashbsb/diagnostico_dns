@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.11 (HTML)
+# Versão: 9.11.3 (HTML)
 # "Apresentacao HTML."
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.11"
+SCRIPT_VERSION="9.11.3"
 
 DEFAULT_DIG_OPTIONS="+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512"
 RECURSIVE_DIG_OPTIONS="+time=2 +tries=1 +nocookie +cd +bufsize=512"
@@ -738,31 +738,41 @@ EOF
 
 generate_config_html() {
 cat > "$TEMP_CONFIG" << EOF
-        <div class="config-section">
-             <h2>⚙️ Bastidores da Execução (Inventário & Configs)</h2>
-             <p style="color: #808080; margin-bottom: 20px;">Para fins de auditoria (e para provar que você configurou o teste corretamente).</p>
-             
-             <table class="config-table" style="margin-bottom:30px;">
-                <tbody>
-                    <tr><th>Versão do Script</th><td>v${SCRIPT_VERSION}</td></tr>
-                    <tr><th>Timeout Global</th><td>${TIMEOUT}s</td></tr>
-                    <tr><th>Sleep (Intervalo)</th><td>${SLEEP}s</td></tr>
-                    <tr><th>Valida Conectividade</th><td>${VALIDATE_CONNECTIVITY}</td></tr>
-                    <tr><th>Versão IP</th><td>${IP_VERSION}</td></tr>
-                    <tr><th>Check BIND Version</th><td>${CHECK_BIND_VERSION}</td></tr>
-                    <tr><th>Ping Enabled</th><td>${ENABLE_PING} (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s)</td></tr>
-                    <tr><th>TCP Check (+tcp)</th><td>${ENABLE_TCP_CHECK}</td></tr>
-                    <tr><th>DNSSEC Check (+dnssec)</th><td>${ENABLE_DNSSEC_CHECK}</td></tr>
-                    <tr><th>Trace Route Check</th><td>${ENABLE_TRACE_CHECK}</td></tr>
-                    <tr><th>Consistency Checks</th><td>${CONSISTENCY_CHECKS} tentativas</td></tr>
-                    <tr><th>Strict Criteria</th><td>IP=${STRICT_IP_CHECK} | Order=${STRICT_ORDER_CHECK} | TTL=${STRICT_TTL_CHECK}</td></tr>
-                    <tr><th>Iterative DIG Options</th><td>${DEFAULT_DIG_OPTIONS}</td></tr>
-                    <tr><th>Recursive DIG Options</th><td>${RECURSIVE_DIG_OPTIONS}</td></tr>
-                </tbody>
-             </table>
+        <details class="section-details" style="margin-top: 30px; border-left: 4px solid #6b7280;">
+             <summary style="font-size: 1.1rem; font-weight: 600;">⚙️ Bastidores da Execução (Inventário & Configs)</summary>
+             <div style="padding:15px;">
+                 <p style="color: #808080; margin-bottom: 20px;">Parâmetros técnicos utilizados nesta bateria de testes.</p>
+                 
+                 <div class="table-responsive">
+                 <table>
+                    <thead>
+                        <tr>
+                            <th>Parâmetro</th>
+                            <th>Valor Configurado</th>
+                            <th>Descrição / Função</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Versão do Script</td><td>v${SCRIPT_VERSION}</td><td>Identificação da release utilizada.</td></tr>
+                        <tr><td>Timeout Global</td><td>${TIMEOUT}s</td><td>Tempo máximo de espera por resposta do DNS.</td></tr>
+                        <tr><td>Sleep (Intervalo)</td><td>${SLEEP}s</td><td>Pausa entre tentativas consecutivas (consistency check).</td></tr>
+                        <tr><td>Valida Conectividade</td><td>${VALIDATE_CONNECTIVITY}</td><td>Testa porta 53 antes do envio da query.</td></tr>
+                        <tr><td>Versão IP</td><td>${IP_VERSION}</td><td>Protocolo de transporte forçado (IPv4/IPv6).</td></tr>
+                        <tr><td>Check BIND Version</td><td>${CHECK_BIND_VERSION}</td><td>Consulta caos class para versão do BIND.</td></tr>
+                        <tr><td>Ping Enabled</td><td>${ENABLE_PING} (Count: ${PING_COUNT})</td><td>Verificação de latência ICMP.</td></tr>
+                        <tr><td>TCP Check (+tcp)</td><td>${ENABLE_TCP_CHECK}</td><td>Obrigatoriedade de suporte a DNS via TCP.</td></tr>
+                        <tr><td>DNSSEC Check (+dnssec)</td><td>${ENABLE_DNSSEC_CHECK}</td><td>Validação da cadeia de confiança DNSSEC.</td></tr>
+                        <tr><td>Trace Route Check</td><td>${ENABLE_TRACE_CHECK}</td><td>Mapeamento de rota até o servidor.</td></tr>
+                        <tr><td>Consistency Checks</td><td>${CONSISTENCY_CHECKS} tentativas</td><td>Repetições para validar estabilidade da resposta.</td></tr>
+                        <tr><td>Strict Criteria</td><td>IP=${STRICT_IP_CHECK} | Order=${STRICT_ORDER_CHECK} | TTL=${STRICT_TTL_CHECK}</td><td>Regras rígidas para considerar divergência.</td></tr>
+                        <tr><td>Iterative DIG Options</td><td>${DEFAULT_DIG_OPTIONS}</td><td>Flags RAW enviadas ao DIG (Modo Iterativo).</td></tr>
+                        <tr><td>Recursive DIG Options</td><td>${RECURSIVE_DIG_OPTIONS}</td><td>Flags RAW enviadas ao DIG (Modo Recursivo).</td></tr>
+                    </tbody>
+                 </table>
+                 </div>
+             </div>
+        </details>
 EOF
-    # Inventário de grupos removido do código principal para encurtar, mas mantido o fechamento da div
-    echo "</div>" >> "$TEMP_CONFIG"
 }
 
 # Gera a estrutura oculta do Modal
@@ -829,11 +839,7 @@ EOF
     fi
 
     cat >> "$HTML_FILE" << EOF
-        <div class="tech-section" style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 20px;">
-            <h2 style="border:none;">🛠️ Logs Técnicos Detalhados</h2>
-            <p style="color: var(--text-secondary); margin-bottom:20px;">
-                Logs brutos de execução. Mesmo em testes consistentes, variações ignoradas (IP/TTL) podem ser vistas aqui.
-            </p>
+        <div style="display:none;">
 EOF
     cat "$TEMP_DETAILS" >> "$HTML_FILE"
     echo "</div>" >> "$HTML_FILE"
@@ -850,6 +856,9 @@ EOF
         </footer>
     </div>
     <a href="#top" style="position:fixed; bottom:20px; right:20px; background:var(--accent-primary); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); font-size:1.2rem;">⬆️</a>
+    <script>
+        document.getElementById('total_time_placeholder').innerText = "${TOTAL_DURATION}s";
+    </script>
 </body>
 </html>
 EOF
@@ -962,6 +971,10 @@ process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
     echo -e "LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail ${GREEN}T${NC}=TCP ${GREEN}D${NC}=DNSSEC"
     
+    # Temp files for buffering
+    local TEMP_DOMAIN_BODY="logs/temp_domain_body_$$.html"
+    local TEMP_GROUP_BODY="logs/temp_group_body_$$.html"
+    
     local test_id=0
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
@@ -971,9 +984,10 @@ process_tests() {
         
         echo -e "${CYAN}>> ${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
         
-        # --- DOMAIN LEVEL DETAILS ---
-        echo "<details class=\"domain-level\" open><summary>🌐 $domain <span class=\"badge\">$test_types</span></summary>" >> "$TEMP_MATRIX"
-        
+        # Reset Domain Stats
+        local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
+        > "$TEMP_DOMAIN_BODY"
+
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
         local targets=("$domain"); for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
 
@@ -982,25 +996,27 @@ process_tests() {
             local srv_list=(${DNS_GROUPS[$grp]})
             echo -ne "   [${PURPLE}${grp}${NC}] "
             
-            # --- GROUP LEVEL DETAILS ---
-            echo "<details class=\"group-level\" open><summary>📂 Grupo: $grp</summary>" >> "$TEMP_MATRIX"
-            echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_MATRIX"
-            for srv in "${srv_list[@]}"; do echo "<th>$srv</th>" >> "$TEMP_MATRIX"; done
-            echo "</tr></thead><tbody>" >> "$TEMP_MATRIX"
+            # Reset Group Stats
+            local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
+            > "$TEMP_GROUP_BODY"
+
+            echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
+            for srv in "${srv_list[@]}"; do echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"; done
+            echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY"
             
             for mode in "${calc_modes[@]}"; do
                 for target in "${targets[@]}"; do
                     for rec in "${rec_list[@]}"; do
-                        echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_MATRIX"
+                        echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
                         for srv in "${srv_list[@]}"; do
-                            test_id=$((test_id + 1)); TOTAL_TESTS+=1
+                            test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_${test_id}"
                             
                             # Connectivity
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
-                                    FAILED_TESTS+=1; echo -ne "${RED}x${NC}"; 
-                                    echo "<td><a href=\"#\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_MATRIX"
+                                    FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}"; 
+                                    echo "<td><a href=\"#\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_GROUP_BODY"
                                     continue
                                 fi
                             fi
@@ -1047,20 +1063,21 @@ process_tests() {
                             
                             local badge=""
                             if [[ "$is_divergent" == "true" ]]; then
-                                DIVERGENT_TESTS+=1; final_status="DIV"; final_class="status-divergent"
+                                DIVERGENT_TESTS+=1; g_div=$((g_div+1))
+                                final_status="DIV"; final_class="status-divergent"
                                 badge="<span class=\"consistency-badge consistency-bad\">${consistent_count}/${CONSISTENCY_CHECKS}</span>"
                                 echo -ne "${PURPLE}~${NC}"
                             else
-                                [[ "$final_class" == "status-ok" ]] && { SUCCESS_TESTS+=1; echo -ne "${GREEN}.${NC}"; }
-                                [[ "$final_class" == "status-warning" ]] && { WARNING_TESTS+=1; echo -ne "${YELLOW}!${NC}"; }
-                                [[ "$final_class" == "status-fail" ]] && { FAILED_TESTS+=1; echo -ne "${RED}x${NC}"; }
+                                [[ "$final_class" == "status-ok" ]] && { SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}.${NC}"; }
+                                [[ "$final_class" == "status-warning" ]] && { WARNING_TESTS+=1; g_warn=$((g_warn+1)); echo -ne "${YELLOW}!${NC}"; }
+                                [[ "$final_class" == "status-fail" ]] && { FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}"; }
                                 badge="<span class=\"badge consistent\">${CONSISTENCY_CHECKS}x</span>"
                             fi
 
                             local icon=""; [[ "$final_class" == "status-ok" ]] && icon="✅"; [[ "$final_class" == "status-warning" ]] && icon="⚠️"
                             [[ "$final_class" == "status-fail" ]] && icon="❌"; [[ "$final_class" == "status-divergent" ]] && icon="🔀"
 
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <span class=\"time-val\">${final_dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <span class=\"time-val\">${final_dur}ms</span></a></td>" >> "$TEMP_GROUP_BODY"
 
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                             # Hidden divs for Modal
@@ -1071,9 +1088,9 @@ process_tests() {
                     
                     # --- TESTE EXTRA: TCP ---
                     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#f44747\">(TCP)</span></td>" >> "$TEMP_MATRIX"
+                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#f44747\">(TCP)</span></td>" >> "$TEMP_GROUP_BODY"
                          for srv in "${srv_list[@]}"; do
-                            test_id=$((test_id + 1)); TOTAL_TESTS+=1
+                            test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_tcp_${test_id}"; local attempts_log=""
                             # TCP force +tcp
                             local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"; local opts_arr; read -ra opts_arr <<< "$opts_str"
@@ -1086,26 +1103,26 @@ process_tests() {
                             local iter_status="OK"; local status_class="status-ok"; local status_icon="✅"
                             if [[ $ret -ne 0 ]] || echo "$output" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                 iter_status="FAIL"; status_class="status-fail"; status_icon="❌"
-                                FAILED_TESTS+=1; echo -ne "${RED}T${NC}"
+                                FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}T${NC}"
                             else
-                                SUCCESS_TESTS+=1; echo -ne "${GREEN}T${NC}"
+                                SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}T${NC}"
                             fi
                             
                             attempts_log="=== TCP TEST === "$'\n'"$output"
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_GROUP_BODY"
                             
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                             echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
                             echo "<div id=\"${unique_id}_title\" style=\"display:none\">TCP CHECK | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
                          done
-                         echo "</tr>" >> "$TEMP_MATRIX"
+                         echo "</tr>" >> "$TEMP_GROUP_BODY"
                     fi
 
                     # --- TESTE EXTRA: DNSSEC ---
                     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#4ec9b0\">(DNSSEC)</span></td>" >> "$TEMP_MATRIX"
+                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:#4ec9b0\">(DNSSEC)</span></td>" >> "$TEMP_GROUP_BODY"
                          for srv in "${srv_list[@]}"; do
-                            test_id=$((test_id + 1)); TOTAL_TESTS+=1
+                            test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_dnssec_${test_id}"; local attempts_log=""
                             local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"; local opts_arr; read -ra opts_arr <<< "$opts_str"
                             [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4"); opts_arr+=("+dnssec")
@@ -1120,11 +1137,11 @@ process_tests() {
                             else security_note="No AD/RRSIG"; fi
 
                             local iter_status="OK"; local status_class="status-ok"; local status_icon="🔐"
-                            if [[ "$is_secure" == "true" ]]; then SUCCESS_TESTS+=1; echo -ne "${GREEN}D${NC}"
-                            else iter_status="UNSECURE"; status_class="status-warning"; status_icon="⚠️"; WARNING_TESTS+=1; echo -ne "${YELLOW}D${NC}"; fi
+                            if [[ "$is_secure" == "true" ]]; then SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}D${NC}"
+                            else iter_status="UNSECURE"; status_class="status-warning"; status_icon="⚠️"; WARNING_TESTS+=1; g_warn=$((g_warn+1)); echo -ne "${YELLOW}D${NC}"; fi
                             
                             attempts_log="=== DNSSEC TEST ($security_note) === "$'\n'"$output"
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_MATRIX"
+                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $status_class\">$status_icon $iter_status <span class=\"time-val\">${dur}ms</span></a></td>" >> "$TEMP_GROUP_BODY"
                             
                             local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                             echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
@@ -1133,13 +1150,45 @@ process_tests() {
                     fi
                 done
             done
-            echo "</tbody></table></div>" >> "$TEMP_MATRIX"
-            echo "</details>" >> "$TEMP_MATRIX" # Closes Group Details
+            echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
+
+            # Accumulate Group Stats to Domain Stats
+            d_total=$((d_total + g_total)); d_ok=$((d_ok + g_ok)); d_warn=$((d_warn + g_warn))
+            d_fail=$((d_fail + g_fail)); d_div=$((d_div + g_div))
+
+            # Render Group Summary with Stats
+            local g_stats_html="<span style=\"font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;\">"
+            g_stats_html+="Total: <strong>$g_total</strong> | "
+            [[ $g_ok -gt 0 ]] && g_stats_html+="<span class=\"st-ok\">✅ $g_ok</span> "
+            [[ $g_warn -gt 0 ]] && g_stats_html+="<span class=\"st-warn\">⚠️ $g_warn</span> "
+            [[ $g_fail -gt 0 ]] && g_stats_html+="<span class=\"st-fail\">❌ $g_fail</span> "
+            [[ $g_div -gt 0 ]] && g_stats_html+="<span class=\"st-div\">🔀 $g_div</span>"
+            g_stats_html+="</span>"
+
+            echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY"
+            cat "$TEMP_GROUP_BODY" >> "$TEMP_DOMAIN_BODY"
+            echo "</details>" >> "$TEMP_DOMAIN_BODY"
+            
             echo "" 
         done
-        echo "</details>" >> "$TEMP_MATRIX" # Closes Domain Details
+        
+        # Render Domain Summary with Stats
+        local d_stats_html="<span style=\"font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;\">"
+        d_stats_html+="Tests: <strong>$d_total</strong> | "
+        [[ $d_ok -gt 0 ]] && d_stats_html+="<span class=\"st-ok\">✅ $d_ok</span> "
+        [[ $d_warn -gt 0 ]] && d_stats_html+="<span class=\"st-warn\">⚠️ $d_warn</span> "
+        [[ $d_fail -gt 0 ]] && d_stats_html+="<span class=\"st-fail\">❌ $d_fail</span> "
+        [[ $d_div -gt 0 ]] && d_stats_html+="<span class=\"st-div\">🔀 $d_div</span>"
+        d_stats_html+="</span>"
+
+        echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
+        cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
+        echo "</details>" >> "$TEMP_MATRIX"
+        
         echo ""
     done < "$FILE_DOMAINS"
+    
+    rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY"
 }
 
 main() {
