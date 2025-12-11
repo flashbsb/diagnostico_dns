@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.10 (Fix Output Leak)
-# "Fix Output Leak"
+# Versão: 9.18.13 (Doc Update)
+# "Doc Update"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.10"
+SCRIPT_VERSION="9.18.13"
 
 
 # Carrega configurações externas
@@ -112,6 +112,14 @@ init_html_parts() {
     TEMP_SECURITY_SIMPLE="logs/temp_security_simple_$$.html"
     > "$TEMP_SECURITY"
     > "$TEMP_SECURITY_SIMPLE"
+    
+    # JSON Temp Files
+    TEMP_JSON_Ping="logs/temp_json_ping_$$.json"
+    TEMP_JSON_DNS="logs/temp_json_dns_$$.json"
+    TEMP_JSON_Sec="logs/temp_json_sec_$$.json"
+    > "$TEMP_JSON_Ping"
+    > "$TEMP_JSON_DNS"
+    > "$TEMP_JSON_Sec"
 }
 # ==============================================
 # HELP & BANNER
@@ -134,6 +142,7 @@ show_help() {
     echo -e "   3. ${CYAN}Estabilidade:${NC} Se a resposta varia ao longo de múltiplas consultas (Flapping)."
     echo -e "   4. ${CYAN}Features:${NC} Suporte a TCP (obrigatório RFC 7766) e validação DNSSEC."
     echo -e "   5. ${CYAN}Performance:${NC} Latência de resposta e perda de pacotes."
+    echo -e "   6. ${CYAN}Segurança:${NC} Transferência de Zona (AXFR), Recursão Aberta e Versão BIND."
     echo -e ""
     echo -e "${PURPLE}MODOS DE OPERAÇÃO:${NC}"
     echo -e "  ${YELLOW}Modo Interativo (Padrão):${NC} Um wizard guia a configuração das variáveis antes do início."
@@ -143,7 +152,9 @@ show_help() {
     echo -e "  ${GREEN}-n <arquivo>${NC}   Define arquivo CSV de domínios (Padrão: ${GRAY}domains_tests.csv${NC})"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
     echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
+
     echo -e "  ${GREEN}-s${NC}            Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)."
+    echo -e "  ${GREEN}-j${NC}            Gera saída em JSON estruturado (.json)."
     echo -e "  ${GREEN}-t${NC}            Habilita testes de conectividade TCP."
     echo -e "  ${GREEN}-d${NC}            Habilita validação DNSSEC."
     echo -e "  ${GREEN}-x${NC}            Habilita teste de transferência de zona (AXFR)."
@@ -156,8 +167,7 @@ show_help() {
     echo -e ""
     echo -e "  ${CYAN}TIMEOUT${NC}"
     echo -e "      Define o tempo máximo (em segundos) que o script aguarda por respostas de rede."
-    echo -e "      Afeta pings, traceroutes e consultas DIG. Se um servidor levar mais que isso,"
-    echo -e "      será marcado como TIMEOUT/DOWN."
+    echo -e "      Afeta pings, traceroutes e consultas DIG. Default seguro: 4s."
     echo -e ""
     echo -e "  ${CYAN}CONSISTENCY_CHECKS${NC} (Padrão: 10)"
     echo -e "      Define quantas vezes a MESMA consulta será repetida para o MESMO servidor."
@@ -187,6 +197,21 @@ show_help() {
     echo -e "  ${CYAN}CHECK_BIND_VERSION${NC}"
     echo -e "      Tenta extrair a versão do software DNS usando consultas CHAOS TXT."
     echo -e "      (Geralmente bloqueado por segurança em servidores de produção)."
+    echo -e ""
+    echo -e "  ${CYAN}ENABLE_TCP_CHECK / ENABLE_DNSSEC_CHECK${NC}"
+    echo -e "      Ativa verificações de conformidade RFC 7766 (TCP) e suporte a DNSSEC."
+    echo -e ""
+    echo -e "  ${CYAN}ENABLE_AXFR_CHECK / ENABLE_RECURSION_CHECK${NC}"
+    echo -e "      Testes de segurança para permissividade de transferência de zona e recursão."
+    echo -e ""
+    echo -e "  ${CYAN}LATENCY_WARNING_THRESHOLD${NC} (Default: 100ms)"
+    echo -e "      Define o limiar para alertas amarelos de lentidão."
+    echo -e ""
+    echo -e "  ${CYAN}PING_PACKET_LOSS_LIMIT${NC} (Default: 10%)"
+    echo -e "      Define a porcentagem aceitável de perda de pacotes antes de marcar como UNSTABLE."
+    echo -e ""
+    echo -e "  ${CYAN}COLOR_OUTPUT${NC} (true/false)"
+    echo -e "      Habilita ou desabilita cores no terminal ANSI."
     echo -e ""
     echo -e "${PURPLE}LEGENDA DE SAÍDA (O que significam os símbolos?):${NC}"
     echo -e "  ${GREEN}.${NC} (Ponto)      = Sucesso (Resposta consistente e válida)."
@@ -256,6 +281,7 @@ print_execution_summary() {
     echo -e "${PURPLE}[SAÍDA]${NC}"
     [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
     [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
+    [[ "$GENERATE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
     echo ""
@@ -402,6 +428,42 @@ interactive_configuration() {
 # ==============================================
 # INFRA & DEBUG
 # ==============================================
+
+# ==============================================
+# INFRA & DEBUG
+# ==============================================
+
+validate_csv_files() {
+    local error_count=0
+    
+    # 1. Check Domains File
+    if [[ ! -f "$FILE_DOMAINS" ]]; then
+         echo -e "${RED}ERRO: Arquivo de domínios '$FILE_DOMAINS' não encontrado!${NC}"; error_count=$((error_count+1))
+    else
+         # Check columns (Expected 5: DOMAIN;GROUPS;TEST;RECORDS;EXTRA)
+         local invalid_lines=$(awk -F';' 'NF!=5 && !/^#/ && !/^$/ {print NR}' "$FILE_DOMAINS")
+         if [[ -n "$invalid_lines" ]]; then
+             echo -e "${RED}ERRO EM '$FILE_DOMAINS':${NC} Linhas com número incorreto de colunas (Esperado 5):"
+             echo -e "${YELLOW}Linhas: $(echo "$invalid_lines" | tr '\n' ',' | sed 's/,$//')${NC}"
+             error_count=$((error_count+1))
+         fi
+    fi
+
+    # 2. Check Groups File
+    if [[ ! -f "$FILE_GROUPS" ]]; then
+         echo -e "${RED}ERRO: Arquivo de grupos '$FILE_GROUPS' não encontrado!${NC}"; error_count=$((error_count+1))
+    else
+         # Check columns (Expected 5: NAME;DESC;TYPE;TIMEOUT;SERVERS)
+         local invalid_lines=$(awk -F';' 'NF!=5 && !/^#/ && !/^$/ {print NR}' "$FILE_GROUPS")
+         if [[ -n "$invalid_lines" ]]; then
+             echo -e "${RED}ERRO EM '$FILE_GROUPS':${NC} Linhas com número incorreto de colunas (Esperado 5):"
+             echo -e "${YELLOW}Linhas: $(echo "$invalid_lines" | tr '\n' ',' | sed 's/,$//')${NC}"
+             error_count=$((error_count+1))
+         fi
+    fi
+
+    [[ $error_count -gt 0 ]] && exit 1
+}
 
 check_port_bash() { timeout "$3" bash -c "cat < /dev/tcp/$1/$2" &>/dev/null; return $?; }
 
@@ -1485,6 +1547,14 @@ run_security_diagnostics() {
         
         # Add Row
         echo "<tr><td><strong>$ip</strong></td><td>$html_ver</td><td>$html_axfr</td><td>$html_rec</td></tr>" >> "$TEMP_SEC_ROWS" 
+        
+        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+            # Clean string values for JSON
+            local j_ver=$(echo "$v_res" | sed 's/"/\\"/g')
+            local j_axfr=$(echo "$axfr_res" | sed 's/"/\\"/g')
+            local j_rec=$(echo "$rec_res" | sed 's/"/\\"/g')
+            echo "{ \"ip\": \"$ip\", \"version_check\": \"$j_ver\", \"axfr_check\": \"$j_axfr\", \"recursion_check\": \"$j_rec\" }," >> "$TEMP_JSON_Sec"
+        fi 
     done
     
     if [[ -s "$TEMP_SEC_ROWS" ]]; then
@@ -1548,6 +1618,13 @@ run_ping_diagnostics() {
 
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
              echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING_SIMPLE"
+        fi
+        
+        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+            # Clean RTT for JSON (remove 'ms' if exists, though awk above likely kept it pure numbers or N/A)
+            # JSON format: { "ip": "...", "groups": "...", "status": "...", "loss_percent": ..., "rtt_avg_ms": ... },
+            # We handle the trailing comma later or use a list join strategy
+            echo "{ \"ip\": \"$ip\", \"groups\": \"$(echo $groups_str | xargs)\", \"status\": \"$(echo $status_html | sed 's/.* //')\", \"loss_percent\": \"$loss\", \"rtt_avg_ms\": \"$rtt_avg\" }," >> "$TEMP_JSON_Ping"
         fi
     done
 }
@@ -1874,6 +1951,25 @@ process_tests() {
                             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                                 echo "<td><div class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
                             fi
+                            
+                            if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+                                local j_tcp="N/A"; [[ "$ENABLE_TCP_CHECK" == "true" ]] && j_tcp="$tcp_res"
+                                # Strip HTML from tcp_res/sec_res if needed, or just keep simple status
+                                # Actually, tcp_res contains HTML. Let's rely on badge arrays or clean it.
+                                # Simplification: Use values from cache logic
+                                local j_tcp_status="skipped"
+                                if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+                                    if [[ "${CACHE_TCP_BADGE[$srv]}" == *"fail"* ]]; then j_tcp_status="FAIL"; else j_tcp_status="OK"; fi
+                                fi
+                                local j_sec_status="skipped"
+                                if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                                     if [[ "${CACHE_SEC_BADGE[$srv]}" == *"fail"* ]]; then j_sec_status="FAIL"
+                                     elif [[ "${CACHE_SEC_BADGE[$srv]}" == *"neutral"* ]]; then j_sec_status="UNSIGNED"
+                                     else j_sec_status="OK"; fi
+                                fi
+
+                                echo "{ \"domain\": \"$domain\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec\", \"mode\": \"$mode\", \"status\": \"$final_status\", \"latency_ms\": $final_dur, \"consistent\": \"$consistent_count/$CONSISTENCY_CHECKS\", \"divergent\": $is_divergent, \"tcp_check\": \"$j_tcp_status\", \"dnssec_check\": \"$j_sec_status\" }," >> "$TEMP_JSON_DNS"
+                            fi
                         done
                     done
                 done
@@ -1925,6 +2021,69 @@ process_tests() {
     rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY" "$TEMP_DOMAIN_BODY_SIMPLE" "$TEMP_GROUP_BODY_SIMPLE"
 }
 
+assemble_json() {
+    [[ "$GENERATE_JSON_REPORT" != "true" ]] && return
+    
+    local JSON_FILE="${HTML_FILE%.html}.json"
+    
+    # Helper to clean trailing comma from file content for valid JSON array
+    # If file is empty, this results in empty string, which is fine for empty array
+    local dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
+    local ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
+    local sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
+    
+    # Build complete JSON
+    cat > "$JSON_FILE" << EOF
+{
+  "meta": {
+    "script_version": "$SCRIPT_VERSION",
+    "timestamp_start": "$START_TIME_HUMAN",
+    "timestamp_end": "$END_TIME_HUMAN",
+    "duration_seconds": $TOTAL_DURATION,
+    "user": "$USER",
+    "hostname": "$HOSTNAME"
+  },
+  "config": {
+    "domains_file": "$FILE_DOMAINS",
+    "groups_file": "$FILE_GROUPS",
+    "timeout": $TIMEOUT,
+    "consistency_checks": $CONSISTENCY_CHECKS,
+    "strict_mode": {
+      "ip": $STRICT_IP_CHECK,
+      "order": $STRICT_ORDER_CHECK,
+      "ttl": $STRICT_TTL_CHECK
+    }
+  },
+  "summary": {
+    "total_tests": $TOTAL_TESTS,
+    "success": $SUCCESS_TESTS,
+    "warnings": $WARNING_TESTS,
+    "failures": $FAILED_TESTS,
+    "divergences": $DIVERGENT_TESTS,
+    "tcp_checks": { "ok": $TCP_SUCCESS, "fail": $TCP_FAIL },
+    "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "fail": $DNSSEC_FAIL }
+  },
+  "results": [
+    $dns_data
+  ],
+  "ping_results": [
+    $ping_data
+  ],
+  "security_scan": {
+    "summary": {
+       "privacy_hidden": $SEC_HIDDEN, "privacy_revealed": $SEC_REVEALED,
+       "axfr_denied": $SEC_AXFR_OK, "axfr_allowed": $SEC_AXFR_RISK,
+       "recursion_closed": $SEC_REC_OK, "recursion_open": $SEC_REC_RISK
+    },
+    "details": [
+      $sec_data
+    ]
+  }
+}
+EOF
+    echo -e "  📄 Relatório JSON    : ${GREEN}$JSON_FILE${NC}"
+}
+
 print_final_terminal_summary() {
     echo -e "\n${BLUE}======================================================${NC}"
     echo -e "${BLUE}       RESUMO DA EXECUÇÃO (DASHBOARD TERMINAL)${NC}"
@@ -1957,23 +2116,27 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" 2>/dev/null' EXIT
+    # Define cleanup trap
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" 2>/dev/null' EXIT
 
     GENERATE_FULL_REPORT="true"
     GENERATE_SIMPLE_REPORT="true"
+    GENERATE_JSON_REPORT="false"
     
-    while getopts ":n:g:lhys" opt; do case ${opt} in 
+    while getopts ":n:g:lhyjs" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
         l) GENERATE_LOG_TEXT="true" ;; 
         y) INTERACTIVE_MODE="false" ;; 
         s) GENERATE_FULL_REPORT="false"; GENERATE_SIMPLE_REPORT="true" ;; 
+        j) GENERATE_JSON_REPORT="true" ;;
         h) show_help; exit 0 ;; 
         *) echo "Opção inválida"; exit 1 ;; 
     esac; done
 
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
+    validate_csv_files
     interactive_configuration
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
     init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics; run_security_diagnostics
@@ -1986,6 +2149,10 @@ main() {
     
     if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
         assemble_html "simple"
+    fi
+    
+    if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+        assemble_json
     fi
 
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"

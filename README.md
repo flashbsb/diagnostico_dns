@@ -1,4 +1,4 @@
-# 🔍 Diagnóstico DNS Avançado (v9.16)
+# 🔍 Diagnóstico DNS Avançado
 
 > "Porque a culpa é sempre do DNS, mas agora você tem provas coloridas em HTML para diagnosticar o problema."
 
@@ -25,7 +25,7 @@ Você precisa de um Linux e vontade de viver. Ah, e destes pacotes:
 * `bash` (versão 4+ recomendada).
 * `bind-utils` (ou `dnsutils` no Debian/Ubuntu) - precisamos do binário `dig`.
 * `iputils-ping` - para os testes de ICMP.
-* `nc` (netcat) - opcional, mas recomendado para timeout preciso na validação de porta.
+* `nc` (netcat) - opcional (o script usa `/dev/tcp` automaticamente se ausente).
 
 ## 🛠️ Instalação
 
@@ -47,7 +47,7 @@ cd diagnostico_dns
 
 ### Modo Interativo (Recomendado para Debug)
 
-Rode sem argumentos. O script vai te entrevistar sobre timeouts, retries, se deve usar IPv6, e ativar os modos rigorosos de verificação (Strict Mode).
+Rode sem argumentos. O script vai te entrevistar sobre timeouts, retries, e ativar os modos rigorosos de verificação (Strict Mode). A detecção de IPv6 é automática.
 
 ```bash
 ./diagnostico_dns.sh
@@ -70,6 +70,7 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
   * `-y`: Modo Silencioso (Não interativo / Aceita defaults do .conf)
   * `-s`: Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)
+  * `-j`: Gera saída em JSON estruturado (.json) para integrações.
   * `-t`: Habilita testes de conectividade TCP
   * `-d`: Habilita validação DNSSEC
   * `-x`: Habilita teste de transferência de zona (AXFR)
@@ -110,7 +111,6 @@ Formato: `NOME_GRUPO;DESCRICAO;TIPO;TIMEOUT;SERVIDORES`
 CLOUDFLARE;Resolver Publico Rapido;recursive;2;1.1.1.1,1.0.0.1
 AD_INTERNO;Active Directory Corp;mixed;1;192.168.10.5,192.168.10.6
 ```
-
 ### 2\. `diagnostico.conf` (Ajustes Finos)
 
 Arquivo opcional para definir defaults (se não quiser usar o menu interativo toda vez).
@@ -120,7 +120,7 @@ ENABLE_TCP_CHECK="true"      # Testa suporte a TCP/53
 ENABLE_DNSSEC_CHECK="true"   # Testa validação DNSSEC
 ENABLE_AXFR_CHECK="true"     # Testa transferência de zona (RISCO)
 ENABLE_RECURSION_CHECK="true"# Testa recursão aberta (RISCO)
-TIMEOUT=2                    # Timeout global
+TIMEOUT=4                    # Timeout global
 ```
 
 ### 3\. `domains_tests.csv` (Suas Perguntas)
