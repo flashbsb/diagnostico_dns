@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.16.1 (DNS TCP DNSSEC, help, readme)
-# "ajuste html, DNS TCP DNSSEC ajustes, readme, help"
+# Versão: 9.16.2 (HTML)
+# "HTML Report Structural Improvements"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.16.1"
+SCRIPT_VERSION="9.16.2"
 
 
 # Carrega configurações externas
@@ -179,12 +179,12 @@ print_execution_summary() {
     echo -e "${BLUE}       DIAGNÓSTICO DNS - DASHBOARD DE EXECUÇÃO        ${NC}"
     echo -e "${BLUE}======================================================${NC}"
     echo -e "${PURPLE}[GERAL]${NC}"
-    echo -e "  🏷️  Versão        : ${YELLOW}v${SCRIPT_VERSION}${NC}"
+    echo -e "  🏷️ Versão        : ${YELLOW}v${SCRIPT_VERSION}${NC}"
     echo -e "  📂 Domínios      : ${YELLOW}$FILE_DOMAINS${NC}"
     echo -e "  📂 Grupos DNS    : ${YELLOW}$FILE_GROUPS${NC}"
     echo ""
     echo -e "${PURPLE}[REDE & PERFORMANCE]${NC}"
-    echo -e "  ⏱️  Timeout Global: ${CYAN}${TIMEOUT}s${NC}"
+    echo -e "  ⏱️ Timeout Global: ${CYAN}${TIMEOUT}s${NC}"
     echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
     echo -e "  🔄 Consistência  : ${YELLOW}${CONSISTENCY_CHECKS} tentativas${NC}"
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
@@ -198,16 +198,16 @@ print_execution_summary() {
     echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
     echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
     echo -e "  🔃 Strict Order  : ${CYAN}${STRICT_ORDER_CHECK}${NC} (True = Ordem diferente diverge)"
-    echo -e "  ⏱️  Strict TTL    : ${CYAN}${STRICT_TTL_CHECK}${NC} (True = TTL diferente diverge)"
+    echo -e "  ⏱️ Strict TTL    : ${CYAN}${STRICT_TTL_CHECK}${NC} (True = TTL diferente diverge)"
     echo ""
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
     echo -e "  📝 Gerar Log TXT : ${CYAN}${GENERATE_LOG_TEXT}${NC}"
-    echo -e "  🛠️  Dig Opts (Iter): ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
-    echo -e "  🛠️  Dig Opts (Rec) : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
+    echo -e "  🛠️ Dig Opts (Iter): ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
+    echo -e "  🛠️ Dig Opts (Rec) : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
     echo ""
     echo -e "${PURPLE}[ANÁLISE & VISUALIZAÇÃO]${NC}"
-    echo -e "  ⚠️  Limiar Latência : ${YELLOW}${LATENCY_WARNING_THRESHOLD}ms${NC}"
+    echo -e "  ⚠️ Limiar Latência : ${YELLOW}${LATENCY_WARNING_THRESHOLD}ms${NC}"
     echo -e "  📉 Perda Pcts Max : ${YELLOW}${PING_PACKET_LOSS_LIMIT}%${NC}"
     echo -e "  🎨 Color Output   : ${CYAN}${COLOR_OUTPUT}${NC}"
     echo ""
@@ -832,28 +832,30 @@ generate_object_summary() {
     fi
 
     cat > "logs/temp_obj_summary_$$.html" << EOF
-        <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 25px;">
-            <h4 style="margin: 0 0 15px 0; color: var(--text-primary); border-bottom:1px solid var(--border-color); padding-bottom:10px;">📋 Resumo da Execução & Escopo</h4>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                <!-- Domínios -->
-                <div>
-                    <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">📁 Domínios Alvo ($domain_count)</h5>
-                    <div style="line-height:1.6;">$d_html</div>
-                </div>
-                
-                <!-- Grupos -->
-                <div>
-                    <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">🏢 Grupos DNS ($group_count)</h5>
-                    <div style="line-height:1.6;">$g_html</div>
-                </div>
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📋 Resumo da Execução e Escopo</summary>
+            <div style="padding: 20px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                    <!-- Domínios -->
+                    <div>
+                        <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">📁 Domínios Alvo ($domain_count)</h5>
+                        <div style="line-height:1.6;">$d_html</div>
+                    </div>
+                    
+                    <!-- Grupos -->
+                    <div>
+                        <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">🏢 Grupos DNS ($group_count)</h5>
+                        <div style="line-height:1.6;">$g_html</div>
+                    </div>
 
-                <!-- Serviços -->
-                <div>
-                    <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">🛡️ Status de Serviços</h5>
-                    $svc_summary
+                    <!-- Serviços -->
+                    <div>
+                        <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">🛡️ Status de Serviços</h5>
+                        $svc_summary
+                    </div>
                 </div>
             </div>
-        </div>
+        </details>
 EOF
 
 }
@@ -990,9 +992,7 @@ assemble_html() {
     cat "$TEMP_HEADER" >> "$HTML_FILE"
     cat "$TEMP_MODAL" >> "$HTML_FILE"
     cat "$TEMP_STATS" >> "$HTML_FILE"
-    cat "logs/temp_obj_summary_$$.html" >> "$HTML_FILE"
-
-
+    
 
     cat "$TEMP_DISCLAIMER" >> "$HTML_FILE"
     cat "$TEMP_MATRIX" >> "$HTML_FILE"
@@ -1038,6 +1038,9 @@ EOF
         cat "$TEMP_SERVICES" >> "$HTML_FILE"
         echo "</div></details>" >> "$HTML_FILE"
     fi
+
+    # Mover Resumo da Execução para cá (após os resultados, antes das configs)
+    cat "logs/temp_obj_summary_$$.html" >> "$HTML_FILE"
 
     cat >> "$HTML_FILE" << EOF
         <div style="display:none;">
@@ -1412,7 +1415,7 @@ print_final_terminal_summary() {
     echo -e "${BLUE}======================================================${NC}"
     echo -e "  🔢 Total de Testes : ${TOTAL_TESTS}"
     echo -e "  ✅ Sucesso         : ${GREEN}${SUCCESS_TESTS}${NC}"
-    echo -e "  ⚠️  Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
+    echo -e "  ⚠️ Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
     echo -e "  ❌ Falhas Críticas : ${RED}${FAILED_TESTS}${NC}"
     echo -e "  🔀 Divergências    : ${PURPLE}${DIVERGENT_TESTS}${NC}"
     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
