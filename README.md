@@ -11,6 +11,7 @@ Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar tecnicam
 * **Verificação de Consistência:** Por que testar uma vez se você pode testar 10? O script repete as queries para garantir que o resultado é estável (pega DNS fazendo Load Balance com dados desatualizados).
 * **Critérios de Divergência (Strict Mode):** Você define o que é erro. Mudança de IP no Round-Robin deve alarmar? Ordem dos registros importa? TTL mudando é problema? Você decide.
 * **HTML Dashboard:** Gera um relatório visual com matriz de falhas, tempos de resposta, **resumos de TCP/DNSSEC**, inventário de execução e o **manual de ajuda completo embutido**.
+* **Security & Risk Scan:** Verifica vulnerabilidades comuns como **Transferência de Zona (AXFR)** permitida, **Recursão Aberta** e vazamento de versão do BIND.
 * **Testes de Serviço (Features):** Valida se o servidor suporta **TCP** (RFC 7766) e se responde com validação **DNSSEC** (RRSIG/AD), com contadores de sucesso/falha no terminal e HTML.
 * **Validação de Conectividade:** Testa a porta 53 (TCP/UDP) antes de tentar o DNS. Se a porta estiver fechada, ele nem perde tempo tentando resolver (Smart Error Logging).
 * **Latência (ICMP):** Roda testes de ping contra os servidores DNS para saber se o problema é resolução ou se o link caiu mesmo.
@@ -68,6 +69,11 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-g <arquivo>`: Caminho do CSV de grupos DNS (Default: dns_groups.csv)
   * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
   * `-y`: Modo Silencioso (Não interativo / Aceita defaults do .conf)
+  * `-s`: Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)
+  * `-t`: Habilita testes de conectividade TCP
+  * `-d`: Habilita validação DNSSEC
+  * `-x`: Habilita teste de transferência de zona (AXFR)
+  * `-r`: Habilita teste de recursão aberta
   * `-h`: Exibe este menu de ajuda
 
 ## 🕵️‍♂️ Critérios de Divergência (Strict Mode)
@@ -112,6 +118,8 @@ Arquivo opcional para definir defaults (se não quiser usar o menu interativo to
 ```bash
 ENABLE_TCP_CHECK="true"      # Testa suporte a TCP/53
 ENABLE_DNSSEC_CHECK="true"   # Testa validação DNSSEC
+ENABLE_AXFR_CHECK="true"     # Testa transferência de zona (RISCO)
+ENABLE_RECURSION_CHECK="true"# Testa recursão aberta (RISCO)
 TIMEOUT=2                    # Timeout global
 ```
 

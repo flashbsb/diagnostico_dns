@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.16.3 (HTML DNS TCP e DNSSEC)
-# "HTML DNS TCP e DNSSEC"
+# Versão: 9.18.1(Security Test)
+# "Security Dashboard"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.16.3"
+SCRIPT_VERSION="9.18.1"
 
 
 # Carrega configurações externas
@@ -58,6 +58,12 @@ declare -i TCP_SUCCESS=0
 declare -i TCP_FAIL=0
 declare -i DNSSEC_SUCCESS=0
 declare -i DNSSEC_FAIL=0
+declare -i SEC_HIDDEN=0
+declare -i SEC_REVEALED=0
+declare -i SEC_AXFR_OK=0
+declare -i SEC_AXFR_RISK=0
+declare -i SEC_REC_OK=0
+declare -i SEC_REC_RISK=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -65,19 +71,48 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
 LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
 
-# Arquivos Temporários
-TEMP_HEADER="logs/temp_header_${TIMESTAMP}.html"
-TEMP_STATS="logs/temp_stats_${TIMESTAMP}.html"
-TEMP_TIMING="logs/temp_timing_${TIMESTAMP}.html"
-TEMP_MATRIX="logs/temp_matrix_${TIMESTAMP}.html"
-TEMP_PING="logs/temp_ping_${TIMESTAMP}.html"
-TEMP_DETAILS="logs/temp_details_${TIMESTAMP}.html"
-TEMP_CONFIG="logs/temp_config_${TIMESTAMP}.html"
-TEMP_MODAL="logs/temp_modal_${TIMESTAMP}.html"
-TEMP_DISCLAIMER="logs/temp_disclaimer_${TIMESTAMP}.html"
-TEMP_TRACE="logs/temp_trace_${TIMESTAMP}.html"
-TEMP_SERVICES="logs/temp_services_${TIMESTAMP}.html"
+init_html_parts() {
+    TEMP_HEADER="logs/temp_header_$$.html"
+    TEMP_STATS="logs/temp_stats_$$.html"
+    TEMP_MATRIX="logs/temp_matrix_$$.html"
+    TEMP_DETAILS="logs/temp_details_$$.html"
+    TEMP_PING="logs/temp_ping_$$.html"
+    TEMP_TRACE="logs/temp_trace_$$.html"
+    TEMP_CONFIG="logs/temp_config_$$.html"
+    TEMP_TIMING="logs/temp_timing_$$.html"
+    TEMP_MODAL="logs/temp_modal_$$.html"
+    TEMP_DISCLAIMER="logs/temp_disclaimer_$$.html"
+    TEMP_SERVICES="logs/temp_services_$$.html"
 
+    # Simple Mode Temp Files
+    TEMP_MATRIX_SIMPLE="logs/temp_matrix_simple_$$.html"
+    TEMP_PING_SIMPLE="logs/temp_ping_simple_$$.html"
+    TEMP_TRACE_SIMPLE="logs/temp_trace_simple_$$.html"
+    TEMP_SERVICES_SIMPLE="logs/temp_services_simple_$$.html"
+
+    > "$TEMP_HEADER"
+    > "$TEMP_STATS"
+    > "$TEMP_MATRIX"
+    > "$TEMP_DETAILS"
+    > "$TEMP_PING"
+    > "$TEMP_TRACE"
+    > "$TEMP_CONFIG"
+    > "$TEMP_TIMING"
+    > "$TEMP_MODAL"
+    > "$TEMP_DISCLAIMER"
+    > "$TEMP_SERVICES"
+    
+    > "$TEMP_MATRIX_SIMPLE"
+    > "$TEMP_PING_SIMPLE"
+    > "$TEMP_TRACE_SIMPLE"
+    > "$TEMP_SERVICES_SIMPLE"
+    
+    # Security Temp Files
+    TEMP_SECURITY="logs/temp_security_$$.html"
+    TEMP_SECURITY_SIMPLE="logs/temp_security_simple_$$.html"
+    > "$TEMP_SECURITY"
+    > "$TEMP_SECURITY_SIMPLE"
+}
 # ==============================================
 # HELP & BANNER
 # ==============================================
@@ -108,6 +143,11 @@ show_help() {
     echo -e "  ${GREEN}-n <arquivo>${NC}   Define arquivo CSV de domínios (Padrão: ${GRAY}domains_tests.csv${NC})"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
     echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
+    echo -e "  ${GREEN}-s${NC}            Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)."
+    echo -e "  ${GREEN}-t${NC}            Habilita testes de conectividade TCP."
+    echo -e "  ${GREEN}-d${NC}            Habilita validação DNSSEC."
+    echo -e "  ${GREEN}-x${NC}            Habilita teste de transferência de zona (AXFR)."
+    echo -e "  ${GREEN}-r${NC}            Habilita teste de recursão aberta."
     echo -e "  ${GREEN}-h${NC}            Exibe este manual detalhado."
     echo -e ""
     echo -e "${PURPLE}DICIONÁRIO DE VARIÁVEIS (Configuração Fina):${NC}"
@@ -194,6 +234,9 @@ print_execution_summary() {
     echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
     echo -e "  🔐 DNSSEC Check  : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
     echo -e "  🛤️ Trace Check   : ${CYAN}${ENABLE_TRACE_CHECK}${NC}"
+    echo -e "  🛡️ Ver Check     : ${CYAN}${CHECK_BIND_VERSION}${NC}"
+    echo -e "  🛡️ AXFR Check    : ${CYAN}${ENABLE_AXFR_CHECK}${NC}"
+    echo -e "  🛡️ Recurse Check : ${CYAN}${ENABLE_RECURSION_CHECK}${NC}"
     echo ""
     echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
     echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
@@ -212,7 +255,8 @@ print_execution_summary() {
     echo -e "  🎨 Color Output   : ${CYAN}${COLOR_OUTPUT}${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
-    echo -e "  📄 Relatório HTML: ${GREEN}$HTML_FILE${NC}"
+    [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
+    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
     echo ""
@@ -258,11 +302,18 @@ init_log_file() {
         echo "DNS DIAGNOSTIC TOOL v$SCRIPT_VERSION - FORENSIC LOG"
         echo "Date: $START_TIME_HUMAN"
         echo "  Config Dump:"
+        echo "  Files: Domains='$FILE_DOMAINS', Groups='$FILE_GROUPS'"
         echo "  Timeout: $TIMEOUT, Sleep: $SLEEP, IP: $IP_VERSION, ConnCheck: $VALIDATE_CONNECTIVITY"
         echo "  Consistency: $CONSISTENCY_CHECKS attempts"
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
-        echo "  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK"
+        echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
+        echo "  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK, Trace=$ENABLE_TRACE_CHECK"
+        echo "  Security: Version=$CHECK_BIND_VERSION, AXFR=$ENABLE_AXFR_CHECK, Recursion=$ENABLE_RECURSION_CHECK"
+        echo "  Ping: Enabled=$ENABLE_PING, Count=$PING_COUNT, Timeout=$PING_TIMEOUT, LossLimit=$PING_PACKET_LOSS_LIMIT%"
+        echo "  Analysis: LatencyThreshold=${LATENCY_WARNING_THRESHOLD}ms, Color=$COLOR_OUTPUT"
+        echo "  Reports: Full=$GENERATE_FULL_REPORT, Simple=$GENERATE_SIMPLE_REPORT"
         echo "  Dig Opts: $DEFAULT_DIG_OPTIONS"
+        echo "  Rec Dig Opts: $RECURSIVE_DIG_OPTIONS"
         echo ""
     } > "$LOG_FILE_TEXT"
 }
@@ -331,6 +382,11 @@ interactive_configuration() {
         ask_boolean "Ativar Teste DNSSEC (+dnssec)?" "ENABLE_DNSSEC_CHECK"
         ask_boolean "Executar Traceroute (Rota)?" "ENABLE_TRACE_CHECK"
         
+        echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
+        ask_boolean "Verificar Versão (BIND Privacy)?" "CHECK_BIND_VERSION"
+        ask_boolean "Verificar Zone Transfer (AXFR)?" "ENABLE_AXFR_CHECK"
+        ask_boolean "Verificar Recursão Aberta?" "ENABLE_RECURSION_CHECK"
+        
         echo -e "\n${BLUE}--- OPÇÕES AVANÇADAS (DIG) ---${NC}"
         ask_variable "Dig Options (Padrão/Iterativo)" "DEFAULT_DIG_OPTIONS"
         ask_variable "Dig Options (Recursivo)" "RECURSIVE_DIG_OPTIONS"
@@ -356,8 +412,13 @@ validate_connectivity() {
     [[ -n "${CONNECTIVITY_CACHE[$server]}" ]] && return ${CONNECTIVITY_CACHE[$server]}
     
     local status=1
-    if command -v nc &> /dev/null; then nc -z -w "$timeout" "$server" 53 2>/dev/null; status=$?
-    else check_port_bash "$server" 53 "$timeout"; status=$?; fi
+    if command -v nc &> /dev/null; then 
+        nc -z -w "$timeout" "$server" 53 2>/dev/null; status=$?
+        log_cmd_result "CONNECTIVITY $server" "nc -z -w $timeout $server 53" "Exit Code: $status" "0"
+    else 
+        check_port_bash "$server" 53 "$timeout"; status=$?
+        log_cmd_result "CONNECTIVITY $server" "timeout $timeout bash -c 'cat < /dev/tcp/$server/53'" "Exit Code: $status" "0"
+    fi
     
     CONNECTIVITY_CACHE[$server]=$status
     return $status
@@ -396,7 +457,7 @@ normalize_dig_output() {
 # GERAÇÃO HTML
 # ==============================================
 
-init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_TRACE"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; > "$TEMP_MODAL"; > "$TEMP_DISCLAIMER"; > "$TEMP_SERVICES"; > "logs/temp_help_$$.html"; > "logs/temp_obj_summary_$$.html"; }
+
 
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
@@ -742,6 +803,20 @@ cat > "$TEMP_HEADER" << EOF
             </div>
         </header>
 EOF
+
+    local mode_hv="$1"
+    if [[ "$mode_hv" == "simple" ]]; then
+        cat >> "$TEMP_HEADER" << EOF
+        <div style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--text-primary); padding: 12px; border-radius: 8px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; font-size: 0.9rem;">
+            <span style="font-size: 1.2rem;">ℹ️</span>
+            <div>
+                <strong>Modo Simplificado Ativo:</strong> 
+                Este relatório foi gerado em modo compacto. Logs técnicos detalhados (outputs de dig, traceroute e ping) foram suprimidos para reduzir o tamanho do arquivo.
+            </div>
+        </div>
+EOF
+    fi
+
 }
 
 generate_stats_block() {
@@ -792,6 +867,45 @@ EOF
 
     cat >> "$TEMP_STATS" << EOF
         </div>
+EOF
+    
+    # Adding Security Cards Row
+    cat >> "$TEMP_STATS" << EOF
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+        <div class="card" style="border-left: 4px solid var(--accent-primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">Version Privacy</span>
+                 <span style="font-size:1.5rem;">🕵️</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_HIDDEN}</span> <span style="font-size:0.85em; color:var(--accent-success);">Hidden</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REVEALED}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Revealed</span>
+            </div>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent-warning);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">Zone Transfer</span>
+                 <span style="font-size:1.5rem;">📂</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_AXFR_OK}</span> <span style="font-size:0.85em; color:var(--accent-success);">Denied</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_AXFR_RISK}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Allowed</span>
+            </div>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent-danger);">
+             <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">Recursion</span>
+                 <span style="font-size:1.5rem;">🔄</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REC_OK}</span> <span style="font-size:0.85em; color:var(--accent-success);">Closed</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REC_RISK}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Open</span>
+            </div>
+        </div>
+    </div>
 EOF
 }
 
@@ -951,6 +1065,13 @@ EOF
 }
 
 assemble_html() {
+    local mode="$1"
+    local target_file="$HTML_FILE"
+    
+    if [[ "$mode" == "simple" ]]; then
+        target_file="${HTML_FILE%.html}_simple.html"
+    fi
+    
     generate_stats_block
     generate_object_summary
     generate_timing_html
@@ -959,16 +1080,23 @@ assemble_html() {
     generate_modal_html
     generate_help_html
 
-    
-    cat "$TEMP_HEADER" >> "$HTML_FILE"
-    cat "$TEMP_MODAL" >> "$HTML_FILE"
-    cat "$TEMP_STATS" >> "$HTML_FILE"
-    
+    # Reset header for simple/full difference (banner)
+    > "$TEMP_HEADER"
+    write_html_header "$mode"
 
-    cat "$TEMP_DISCLAIMER" >> "$HTML_FILE"
-    cat "$TEMP_MATRIX" >> "$HTML_FILE"
+    cat "$TEMP_HEADER" >> "$target_file"
+    cat "$TEMP_MODAL" >> "$target_file"
+    cat "$TEMP_STATS" >> "$target_file"
     
-    cat >> "$HTML_FILE" << EOF
+    cat "$TEMP_DISCLAIMER" >> "$target_file"
+    
+    if [[ "$mode" == "simple" ]]; then
+        cat "$TEMP_MATRIX_SIMPLE" >> "$target_file"
+    else
+        cat "$TEMP_MATRIX" >> "$target_file"
+    fi
+    
+    cat >> "$target_file" << EOF
     <div style="display:flex; justify-content:flex-end; margin-bottom: 20px;">
         <div class="tech-controls">
             <button class="btn" onclick="toggleAll('domain', true)">➕ Expandir Domínios</button>
@@ -980,50 +1108,78 @@ assemble_html() {
 EOF
 
     if [[ -s "$TEMP_PING" ]]; then
-        cat >> "$HTML_FILE" << EOF
+        cat >> "$target_file" << EOF
         <details class="section-details" style="margin-top: 30px; border-left: 4px solid var(--accent-warning);">
              <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
              <div class="table-responsive" style="padding:15px;">
              <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
 EOF
-        cat "$TEMP_PING" >> "$HTML_FILE"
-        echo "</tbody></table></div></details>" >> "$HTML_FILE"
+        if [[ "$mode" == "simple" ]]; then
+             cat "$TEMP_PING_SIMPLE" >> "$target_file"
+        else
+             cat "$TEMP_PING" >> "$target_file"
+        fi
+        echo "</tbody></table></div></details>" >> "$target_file"
+    fi
+
+    # ADD SECURITY SECTION
+    # Only if TEMP_SECURITY has content (it was populated by generate_security_html which reads from the raw log buffer)
+    # Actually wait, run_security_diagnostics populates a buffer, then we wrap it. 
+    # Let's adjust: run_security_diagnostics writes rows to TEMP_SECURITY_ROWS.
+    # Then generate_security_html wraps it into TEMP_SECURITY (block).
+    
+    if [[ -s "$TEMP_SECURITY" ]]; then
+        if [[ "$mode" == "simple" ]]; then
+             cat "$TEMP_SECURITY_SIMPLE" >> "$target_file"
+        else
+             cat "$TEMP_SECURITY" >> "$target_file"
+        fi
     fi
 
     if [[ -s "$TEMP_TRACE" ]]; then
-         cat >> "$HTML_FILE" << EOF
+         cat >> "$target_file" << EOF
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-divergent);">
              <summary style="font-size: 1.1rem; font-weight: 600;">🛤️ Rota de Rede (Traceroute)</summary>
              <div class="table-responsive" style="padding:15px;">
 EOF
-        cat "$TEMP_TRACE" >> "$HTML_FILE"
-        echo "</div></details>" >> "$HTML_FILE"
+        if [[ "$mode" == "simple" ]]; then
+             cat "$TEMP_TRACE_SIMPLE" >> "$target_file"
+        else
+             cat "$TEMP_TRACE" >> "$target_file"
+        fi
+        echo "</div></details>" >> "$target_file"
     fi
 
     if [[ -s "$TEMP_SERVICES" ]]; then
-         cat >> "$HTML_FILE" << EOF
+         cat >> "$target_file" << EOF
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid #8b5cf6;">
              <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Serviços DNS & Capabilities (TCP/DNSSEC)</summary>
              <div class="table-responsive" style="padding:15px;">
 EOF
-        cat "$TEMP_SERVICES" >> "$HTML_FILE"
-        echo "</div></details>" >> "$HTML_FILE"
+        if [[ "$mode" == "simple" ]]; then
+             cat "$TEMP_SERVICES_SIMPLE" >> "$target_file"
+        else
+             cat "$TEMP_SERVICES" >> "$target_file"
+        fi
+        echo "</div></details>" >> "$target_file"
     fi
 
     # Mover Resumo da Execução para cá (após os resultados, antes das configs)
-    cat "logs/temp_obj_summary_$$.html" >> "$HTML_FILE"
+    cat "logs/temp_obj_summary_$$.html" >> "$target_file"
 
-    cat >> "$HTML_FILE" << EOF
+    cat >> "$target_file" << EOF
         <div style="display:none;">
 EOF
-    cat "$TEMP_DETAILS" >> "$HTML_FILE"
-    echo "</div>" >> "$HTML_FILE"
-    cat "$TEMP_CONFIG" >> "$HTML_FILE"
-    cat "$TEMP_TIMING" >> "$HTML_FILE"
-    cat "logs/temp_help_$$.html" >> "$HTML_FILE"
+    if [[ "$mode" != "simple" ]]; then
+         cat "$TEMP_DETAILS" >> "$target_file"
+    fi
+    echo "</div>" >> "$target_file"
+    cat "$TEMP_CONFIG" >> "$target_file"
+    cat "$TEMP_TIMING" >> "$target_file"
+    cat "logs/temp_help_$$.html" >> "$target_file"
 
 
-    cat >> "$HTML_FILE" << EOF
+    cat >> "$target_file" << EOF
         <footer>
             Gerado automaticamente por <strong>DNS Diagnostic Tool (v$SCRIPT_VERSION)</strong><br>
         </footer>
@@ -1035,8 +1191,59 @@ EOF
 </body>
 </html>
 EOF
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html"
-    # Trap will handle final cleanup, but we can keep explicit removal here too to be sure
+    # Clean up handled by trap
+}
+
+generate_security_html() {
+    # Generate HTML block if there is data
+    if [[ -s "$TEMP_SECURITY" ]]; then
+        local sec_content
+        sec_content=$(cat "$TEMP_SECURITY")
+        
+        # Simple Mode
+        cat >> "$TEMP_SECURITY_SIMPLE" << EOF
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
+             <div class="table-responsive" style="padding:15px;">
+             <table>
+                <thead>
+                    <tr>
+                        <th>Servidor</th>
+                        <th>Versão (Privacy)</th>
+                        <th>AXFR (Zone Transfer)</th>
+                        <th>Recursão (Open Relay)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    $sec_content
+                </tbody>
+             </table>
+             </div>
+        </details>
+EOF
+
+        # Full Mode (Uses same content for now, maybe add raw logs details later if needed)
+        cat >> "$TEMP_SECURITY" << EOF
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
+             <div class="table-responsive" style="padding:15px;">
+             <table>
+                <thead>
+                    <tr>
+                        <th>Servidor</th>
+                        <th>Versão (Privacy)</th>
+                        <th>AXFR (Zone Transfer)</th>
+                        <th>Recursão (Open Relay)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    $sec_content
+                </tbody>
+             </table>
+             </div>
+        </details>
+EOF
+    fi
 }
 
 # ==============================================
@@ -1053,6 +1260,149 @@ load_dns_groups() {
         IFS=',' read -ra srv_arr <<< "$servers"
         DNS_GROUPS["$name"]="${srv_arr[@]}"; DNS_GROUP_DESC["$name"]="$desc"; DNS_GROUP_TYPE["$name"]="$type"; DNS_GROUP_TIMEOUT["$name"]="$timeout"
     done < "$FILE_GROUPS"
+}
+
+run_security_diagnostics() {
+    # Check if ANY security check is enabled
+    if [[ "$CHECK_BIND_VERSION" != "true" && "$ENABLE_AXFR_CHECK" != "true" && "$ENABLE_RECURSION_CHECK" != "true" ]]; then
+         return
+    fi
+    
+    echo -e "\n${BLUE}=== INICIANDO SECURITY SCAN (Version/AXFR/Recurse) ===${NC}"
+    log_section "SECURITY SCAN"
+
+    # Temp file for rows
+    local TEMP_SEC_ROWS="logs/temp_sec_rows_$$.html"
+    > "$TEMP_SEC_ROWS"
+
+    declare -A CHECKED_IPS; local unique_ips=()
+    for grp in "${!DNS_GROUPS[@]}"; do
+        for ip in ${DNS_GROUPS[$grp]}; do
+            if [[ -z "${CHECKED_IPS[$ip]}" ]]; then CHECKED_IPS[$ip]=1; unique_ips+=("$ip"); fi
+        done
+    done
+
+    for ip in "${unique_ips[@]}"; do
+        echo -ne "   🛡️  Scanning $ip ... "
+        
+        # 1. VERSION CHECK
+        if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
+            local v_cmd="dig +noall +answer +time=$TIMEOUT @$ip version.bind chaos txt"
+            local v_out; v_out=$($v_cmd 2>&1)
+            log_cmd_result "VERSION CHECK $ip" "$v_cmd" "$v_out" "0"
+            
+            local v_res=""
+            local v_class=""
+            if [[ -z "$v_out" ]] || echo "$v_out" | grep -qE "REFUSED|SERVFAIL|no servers|timed out"; then
+                 v_res="HIDDEN (OK)"
+                 v_class="status-ok"
+                 SEC_HIDDEN+=1
+                 echo -ne "${GREEN}Ver:OK${NC} "
+            else
+                 local ver_str=$(echo "$v_out" | grep "TXT" | cut -d'"' -f2)
+                 v_res="REVEALED: ${ver_str:0:15}..."
+                 v_class="status-fail"
+                 SEC_REVEALED+=1
+                 echo -ne "${RED}Ver:RISK${NC} "
+            fi
+            local html_ver="<span class=\"badge $v_class\">$v_res</span>"
+        else
+            local html_ver="<span class=\"badge neutral\">N/A</span>"
+        fi
+
+        # 2. AXFR CHECK (Zone Transfer)
+        if [[ "$ENABLE_AXFR_CHECK" == "true" ]]; then
+            # Try to transfer common test zones or the first domain from the list if available
+            # Using the first domain definition from file or a dummy if empty
+            local target_axfr=""
+            if [[ -f "$FILE_DOMAINS" ]]; then
+                target_axfr=$(head -1 "$FILE_DOMAINS" | awk -F';' '{print $1}')
+            fi
+            [[ -z "$target_axfr" ]] && target_axfr="example.com"
+            
+            local axfr_cmd="dig @$ip $target_axfr AXFR +time=$TIMEOUT +tries=1"
+            local axfr_out; axfr_out=$($axfr_cmd 2>&1)
+            log_cmd_result "AXFR CHECK $ip ($target_axfr)" "$axfr_cmd" "${axfr_out:0:500}..." "0"
+            
+            local axfr_res=""
+            local axfr_class=""
+            if echo "$axfr_out" | grep -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
+                 axfr_res="DENIED (OK)"
+                 axfr_class="status-ok"
+                 SEC_AXFR_OK+=1
+                 echo -ne "${GREEN}AXFR:OK${NC} "
+            elif echo "$axfr_out" | grep -q "SOA"; then
+                 axfr_res="ALLOWED (RISK)"
+                 axfr_class="status-fail"
+                 SEC_AXFR_RISK+=1
+                 echo -ne "${RED}AXFR:RISK${NC} "
+            else
+                 # Uncertain (maybe not auth for this zone, but didn't explicitly refuse XFR op code)
+                 # Assume OK if no data data returned
+                 axfr_res="NO DATA (OK)"
+                 axfr_class="status-ok"
+                 SEC_AXFR_OK+=1
+                 echo -ne "${GREEN}AXFR:OK${NC} "
+            fi
+            local html_axfr="<span class=\"badge $axfr_class\">$axfr_res</span>"
+        else
+            local html_axfr="<span class=\"badge neutral\">N/A</span>"
+        fi
+
+        # 3. RECURSION CHECK
+        if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
+            # Query external domain (google.com)
+            local rec_cmd="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
+            local rec_out; rec_out=$($rec_cmd 2>&1)
+            log_cmd_result "RECURSION CHECK $ip" "$rec_cmd" "$rec_out" "0"
+            
+            local rec_res=""
+            local rec_class=""
+            # Check if we got an A record for google.com
+            if echo "$rec_out" | grep -qE "^google\.com\..*IN.*A.*[0-9]"; then
+                 rec_res="OPEN (RISK)"
+                 rec_class="status-fail"
+                 SEC_REC_RISK+=1
+                 echo -ne "${RED}Rec:RISK${NC}"
+            else
+                 rec_res="CLOSED (OK)"
+                 rec_class="status-ok"
+                 SEC_REC_OK+=1
+                 echo -ne "${GREEN}Rec:OK${NC}"
+            fi
+            local html_rec="<span class=\"badge $rec_class\">$rec_res</span>"
+        else
+            local html_rec="<span class=\"badge neutral\">N/A</span>"
+        fi
+        
+        echo ""
+        
+        # Add Row
+        echo "<tr><td><strong>$ip</strong></td><td>$html_ver</td><td>$html_axfr</td><td>$html_rec</td></tr>" >> "$TEMP_SECURITY" # Writing directly to buffer file used by generator logic later? 
+        # Wait, I defined generate_security_html to read from TEMP_SECURITY and write formatted block to TEMP_SECURITY/SIMPLE.
+        # So I should write RAW rows to a temp file, then wrap it.
+        # Let's fix the flow:
+        # 1. run_security_diagnostics writes ROWS to TEMP_SECURITY (which I'll rename to TEMP_SEC_ROWS in my mind, but use TEMP_SECURITY for now then swap).
+        # Actually, let's use a specific row buffer.
+    done
+    
+    # Store rows in the var expected by generate_security_html
+    # In generate_security_html I read from TEMP_SECURITY as the CONTENT.
+    # So I should leave the rows in TEMP_SECURITY?
+    # No, generate_security_html logic I wrote above: sec_content=$(cat "$TEMP_SECURITY")
+    # So here I just append rows to TEMP_SECURITY.
+    # But wait, generate_security_html cat >> TEMP_SECURITY with the HEADER.
+    # So I need to perform a swap or use a dedicated rows file.
+    
+    # Let's simple: Write rows to TEMP_SEC_ROWS.
+    # Then cat TEMP_SEC_ROWS > TEMP_SECURITY (just content).
+    # Then call generate_security_html which wraps it.
+    
+    if [[ -s "$TEMP_SEC_ROWS" ]]; then
+        cat "$TEMP_SEC_ROWS" > "$TEMP_SECURITY"
+        rm -f "$TEMP_SEC_ROWS"
+        generate_security_html # This processes TEMP_SECURITY (rows) and wraps them into blocks
+    fi
 }
 
 run_ping_diagnostics() {
@@ -1096,9 +1446,15 @@ run_ping_diagnostics() {
         else status_html="✅ UP"; class_html="status-ok"; console_res="${GREEN}${rtt_avg}ms${NC}"; fi
         
         echo -e "$console_res"
-        echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING"
-        local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-        echo "<tr><td colspan=\"5\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
+        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING"
+            local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            echo "<tr><td colspan=\"5\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
+        fi
+
+        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING_SIMPLE"
+        fi
     done
 }
 
@@ -1126,6 +1482,7 @@ run_trace_diagnostics() {
     done
 
     echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
+    echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE_SIMPLE"
 
     local trace_id=0
     for ip in "${unique_ips[@]}"; do
@@ -1139,17 +1496,37 @@ run_trace_diagnostics() {
         local end_t=$(date +%s%N); local dur_t=$(( (end_t - start_t) / 1000000 ))
         log_cmd_result "TRACE $ip" "$cmd_trace $ip" "$output" "$dur_t"
         
-        local hops=$(echo "$output" | wc -l)
-        local last_hop=$(echo "$output" | tail -1 | xargs)
+        # Validation of output
+        local hops="-"
+        local last_hop="Error/Timeout"
+        
+        # Check if output looks valid (contains hops)
+        if [[ $ret -eq 0 ]] && echo "$output" | grep -qE "^[ ]*[0-9]+"; then
+            hops=$(echo "$output" | grep -E "^[ ]*[0-9]+" | wc -l)
+            last_hop=$(echo "$output" | tail -1 | xargs)
+        else
+            # Try to extract error message if short enough, otherwise specific message
+            if [[ ${#output} -lt 50 && -n "$output" ]]; then
+                 last_hop="Error: $output"
+            elif [[ -n "$output" ]]; then
+                 last_hop="Trace failed (See expanded log)"
+            fi
+        fi
         
         echo -e "${CYAN}${hops} hops${NC}"
         
-        echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
-        
-        local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-        echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver rota completa #$trace_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_TRACE"
+        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
+            local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver rota completa #$trace_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_TRACE"
+        fi
+
+        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE_SIMPLE"
+        fi
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
+    echo "</tbody></table>" >> "$TEMP_TRACE_SIMPLE"
 }
 
 
@@ -1164,6 +1541,8 @@ process_tests() {
     # Temp files for buffering
     local TEMP_DOMAIN_BODY="logs/temp_domain_body_$$.html"
     local TEMP_GROUP_BODY="logs/temp_group_body_$$.html"
+    local TEMP_DOMAIN_BODY_SIMPLE="logs/temp_domain_body_simple_$$.html"
+    local TEMP_GROUP_BODY_SIMPLE="logs/temp_group_body_simple_$$.html"
     
     local test_id=0
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
@@ -1177,6 +1556,7 @@ process_tests() {
         # Reset Domain Stats
         local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
         > "$TEMP_DOMAIN_BODY"
+        > "$TEMP_DOMAIN_BODY_SIMPLE"
 
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
         local targets=("$domain"); for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
@@ -1192,10 +1572,16 @@ process_tests() {
             # Reset Group Stats
             local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
             > "$TEMP_GROUP_BODY"
+            > "$TEMP_GROUP_BODY_SIMPLE"
 
             echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
-            for srv in "${srv_list[@]}"; do echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"; done
+            echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            for srv in "${srv_list[@]}"; do 
+                echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
+                echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            done
             echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY"
+            echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY_SIMPLE"
             
             for mode in "${calc_modes[@]}"; do
                 for target in "${targets[@]}"; do
@@ -1215,6 +1601,7 @@ process_tests() {
                              [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"
                              opts_tcp+=" +tcp +time=$TIMEOUT"
                              local out_tcp=$(dig $opts_tcp @$srv $target A 2>&1)
+                             log_cmd_result "TCP CHECK $srv -> $target" "dig $opts_tcp @$srv $target A" "$out_tcp" "0"
                              
                              if echo "$out_tcp" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                  CACHE_TCP_BADGE[$srv]="<span class='badge-mini fail' title='TCP Failed'>T</span>"
@@ -1235,6 +1622,7 @@ process_tests() {
                              [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"
                              opts_sec+=" +dnssec +time=$TIMEOUT"
                              local out_sec=$(dig $opts_sec @$srv $target A 2>&1)
+                             log_cmd_result "DNSSEC CHECK $srv -> $target" "dig $opts_sec @$srv $target A" "$out_sec" "0"
                              
                              if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                  CACHE_SEC_BADGE[$srv]="<span class='badge-mini fail' title='DNSSEC Error'>D</span>"
@@ -1259,12 +1647,14 @@ process_tests() {
                         
                         # Write to Matrix Log
                         if [[ "$ENABLE_TCP_CHECK" == "true" || "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                             echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_$$.html"
+                             [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_$$.html"
+                             [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_services_simple_$$.html"
                         fi
                     done
 
                     for rec in "${rec_list[@]}"; do
                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
+                        echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_${test_id}"
@@ -1273,10 +1663,15 @@ process_tests() {
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}";
-                                    echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_GROUP_BODY"
-                                    local safe_log=$(echo "Server $srv is unreachable via ping." | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                                    echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
-                                    echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id DOWN | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
+                                    
+                                    [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_GROUP_BODY"
+                                    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo "<td><div class=\"status-cell status-fail\">❌ DOWN</div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+
+                                    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                                         local safe_log=$(echo "Server $srv is unreachable via ping." | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                         echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                                         echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id DOWN | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
+                                    fi
                                     continue
                                 fi
                             fi
@@ -1348,16 +1743,22 @@ process_tests() {
                             [[ -n "${CACHE_TCP_BADGE[$srv]}" ]] && svc_badges+=" ${CACHE_TCP_BADGE[$srv]}"
                             [[ -n "${CACHE_SEC_BADGE[$srv]}" ]] && svc_badges+=" ${CACHE_SEC_BADGE[$srv]}"
 
-                            echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></a></td>" >> "$TEMP_GROUP_BODY"
+                            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                                echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></a></td>" >> "$TEMP_GROUP_BODY"
+                                local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                                echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id $final_status | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
+                            fi
 
-                            local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                            echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
-                            echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id $final_status | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
+                            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                                echo "<td><div class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                            fi
                         done
                     done
                 done
             done
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
+            echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
 
             d_total=$((d_total + g_total)); d_ok=$((d_ok + g_ok)); d_warn=$((d_warn + g_warn))
             d_fail=$((d_fail + g_fail)); d_div=$((d_div + g_div))
@@ -1373,6 +1774,10 @@ process_tests() {
             echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY"
             cat "$TEMP_GROUP_BODY" >> "$TEMP_DOMAIN_BODY"
             echo "</details>" >> "$TEMP_DOMAIN_BODY"
+
+            echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
+            cat "$TEMP_GROUP_BODY_SIMPLE" >> "$TEMP_DOMAIN_BODY_SIMPLE"
+            echo "</details>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
             
             echo "" 
         done
@@ -1388,11 +1793,15 @@ process_tests() {
         echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
         cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
         echo "</details>" >> "$TEMP_MATRIX"
+
+        echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX_SIMPLE"
+        cat "$TEMP_DOMAIN_BODY_SIMPLE" >> "$TEMP_MATRIX_SIMPLE"
+        echo "</details>" >> "$TEMP_MATRIX_SIMPLE"
         
         echo ""
     done < "$FILE_DOMAINS"
     
-    rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY"
+    rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY" "$TEMP_DOMAIN_BODY_SIMPLE" "$TEMP_GROUP_BODY_SIMPLE"
 }
 
 print_final_terminal_summary() {
@@ -1414,6 +1823,12 @@ print_final_terminal_summary() {
     local p_succ=0
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
     echo -e "  📊 Taxa de Sucesso : ${p_succ}%"
+    
+    echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
+    echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed"
+    echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed"
+    echo -e "  RECURSION : ${GREEN}${SEC_REC_OK}${NC} Closed / ${RED}${SEC_REC_RISK}${NC} Open"
+    
     echo -e "${BLUE}======================================================${NC}"
 }
 
@@ -1421,20 +1836,42 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" 2>/dev/null' EXIT
 
-    while getopts ":n:g:lhy" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
+    GENERATE_FULL_REPORT="true"
+    GENERATE_SIMPLE_REPORT="true"
+    
+    while getopts ":n:g:lhys" opt; do case ${opt} in 
+        n) FILE_DOMAINS=$OPTARG ;; 
+        g) FILE_GROUPS=$OPTARG ;; 
+        l) GENERATE_LOG_TEXT="true" ;; 
+        y) INTERACTIVE_MODE="false" ;; 
+        s) GENERATE_FULL_REPORT="false"; GENERATE_SIMPLE_REPORT="true" ;; 
+        h) show_help; exit 0 ;; 
+        *) echo "Opção inválida"; exit 1 ;; 
+    esac; done
+
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
     interactive_configuration
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
-    init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics
+    init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics; run_security_diagnostics
 
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
-    assemble_html
+    
+    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        assemble_html "full"
+    fi
+    
+    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        assemble_html "simple"
+    fi
+
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
     print_final_terminal_summary
-    echo -e "\n${GREEN}=== CONCLUÍDO ===${NC} Relatório: $HTML_FILE"
+    echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
+    [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "Relatório Completo: $HTML_FILE"
+    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo "Relatório Simplificado: ${HTML_FILE%.html}_simple.html"
 }
 
 main "$@"
