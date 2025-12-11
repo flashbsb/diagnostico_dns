@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.15 (DNS TCP DNSSEC)
-# "DNS TCP DNSSEC ajustes"
+# Versão: 9.16.1 (DNS TCP DNSSEC, help, readme)
+# "ajuste html, DNS TCP DNSSEC ajustes, readme, help"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.15"
+SCRIPT_VERSION="9.16.1"
 
 
 # Carrega configurações externas
@@ -54,6 +54,10 @@ declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
 declare -i WARNING_TESTS=0
 declare -i DIVERGENT_TESTS=0
+declare -i TCP_SUCCESS=0
+declare -i TCP_FAIL=0
+declare -i DNSSEC_SUCCESS=0
+declare -i DNSSEC_FAIL=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -104,8 +108,6 @@ show_help() {
     echo -e "  ${GREEN}-n <arquivo>${NC}   Define arquivo CSV de domínios (Padrão: ${GRAY}domains_tests.csv${NC})"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
     echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
-    echo -e "  ${GREEN}-t${NC}            Ativa verificação de conectividade via **TCP** (Porta 53)."
-    echo -e "  ${GREEN}-d${NC}            Ativa validação da cadeia de confiança **DNSSEC** (RRSIG/AD flags)."
     echo -e "  ${GREEN}-h${NC}            Exibe este manual detalhado."
     echo -e ""
     echo -e "${PURPLE}DICIONÁRIO DE VARIÁVEIS (Configuração Fina):${NC}"
@@ -155,6 +157,21 @@ show_help() {
     echo -e "  ${RED}D${NC} / ${GREEN}D${NC}        = Status do Teste DNSSEC (Falha/Sucesso)."
     echo -e ""
     echo -e "${BLUE}==============================================================================${NC}"
+}
+
+generate_help_html() {
+    local help_content
+    # Captura a saída da função show_help, removendo códigos de cores ANSI para o HTML
+    help_content=$(show_help | sed 's/\x1b\[[0-9;]*m//g' | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    
+    cat > "logs/temp_help_$$.html" << EOF
+        <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📚 Manual de Referência (Help)</summary>
+            <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: 'Fira Code', monospace; font-size: 0.85rem; overflow-x: auto;">
+                <pre style="white-space: pre-wrap;">$help_content</pre>
+            </div>
+        </details>
+EOF
 }
 
 print_execution_summary() {
@@ -379,7 +396,7 @@ normalize_dig_output() {
 # GERAÇÃO HTML
 # ==============================================
 
-init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_TRACE"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; > "$TEMP_MODAL"; > "$TEMP_DISCLAIMER"; }
+init_html_parts() { > "$TEMP_HEADER"; > "$TEMP_STATS"; > "$TEMP_MATRIX"; > "$TEMP_PING"; > "$TEMP_TRACE"; > "$TEMP_DETAILS"; > "$TEMP_CONFIG"; > "$TEMP_TIMING"; > "$TEMP_MODAL"; > "$TEMP_DISCLAIMER"; > "$TEMP_SERVICES"; > "logs/temp_help_$$.html"; > "logs/temp_obj_summary_$$.html"; }
 
 write_html_header() {
 cat > "$TEMP_HEADER" << EOF
@@ -753,8 +770,92 @@ cat > "$TEMP_STATS" << EOF
                 <span class="card-num">$DIVERGENT_TESTS</span>
                 <span class="card-label">Divergências</span>
             </div>
+EOF
+
+    if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+        cat >> "$TEMP_STATS" << EOF
+            <div class="card" style="border-color: #3b82f6;">
+                <span class="card-num" style="color: #60a5fa;">${TCP_SUCCESS} <small style="font-size:0.4em; color:#94a3b8;">/ $((${TCP_SUCCESS} + ${TCP_FAIL}))</small></span>
+                <span class="card-label">TCP Checks</span>
+            </div>
+EOF
+    fi
+
+    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+        cat >> "$TEMP_STATS" << EOF
+            <div class="card" style="border-color: #8b5cf6;">
+                <span class="card-num" style="color: #a78bfa;">${DNSSEC_SUCCESS} <small style="font-size:0.4em; color:#94a3b8;">/ $((${DNSSEC_SUCCESS} + ${DNSSEC_FAIL}))</small></span>
+                <span class="card-label">DNSSEC Checks</span>
+            </div>
+EOF
+    fi
+
+    cat >> "$TEMP_STATS" << EOF
         </div>
 EOF
+}
+
+generate_object_summary() {
+    # Limpa vars para evitar lixo
+    local domain_list=()
+    local group_list=()
+    
+    # Lê domínios em array
+    while IFS=';' read -r d _ || [ -n "$d" ]; do [[ "$d" =~ ^# || -z "$d" ]] && continue; domain_list+=("$d"); done < "$FILE_DOMAINS"
+    local domain_count=${#domain_list[@]}
+    
+    # Lê grupos em array
+    if [[ -f "$FILE_GROUPS" ]]; then
+        while IFS=';' read -r g _ || [ -n "$g" ]; do [[ "$g" =~ ^# || -z "$g" ]] && continue; group_list+=("$g"); done < "$FILE_GROUPS"
+    fi
+    local group_count=${#group_list[@]}
+
+    # Formata lista de domínios (max 10)
+    local d_html=""
+    for ((i=0; i<${#domain_list[@]} && i<10; i++)); do d_html+="<span class='badge' style='background:rgba(255,255,255,0.1); margin:2px; font-weight:normal;'>${domain_list[$i]}</span>"; done
+    if [[ $domain_count -gt 10 ]]; then d_html+="<span style='opacity:0.6; font-size:0.8em'>+ $((domain_count - 10)) outros...</span>"; fi
+    
+    # Formata lista de grupos (max 10)
+    local g_html=""
+    for ((i=0; i<${#group_list[@]} && i<10; i++)); do g_html+="<span class='badge' style='background:rgba(255,255,255,0.1); margin:2px; font-weight:normal;'>${group_list[$i]}</span>"; done
+    if [[ $group_count -gt 10 ]]; then g_html+="<span style='opacity:0.6; font-size:0.8em'>+ $((group_count - 10)) outros...</span>"; fi
+
+    # Status Resumido de Serviços (Texto)
+    local svc_summary=""
+    if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+        local tcp_percent=0; [[ $((TCP_SUCCESS + TCP_FAIL)) -gt 0 ]] && tcp_percent=$(( (TCP_SUCCESS * 100) / (TCP_SUCCESS + TCP_FAIL) ))
+        svc_summary+="<div style='margin-top:10px; font-size:0.9rem;'>🔌 <strong>TCP:</strong> <span style='color:${GREEN}'>${TCP_SUCCESS} OK</span> <span style='opacity:0.5'>/ $((TCP_SUCCESS + TCP_FAIL)) Total (${tcp_percent}%)</span></div>"
+    fi
+    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+        local sec_percent=0; [[ $((DNSSEC_SUCCESS + DNSSEC_FAIL)) -gt 0 ]] && sec_percent=$(( (DNSSEC_SUCCESS * 100) / (DNSSEC_SUCCESS + DNSSEC_FAIL) ))
+        svc_summary+="<div style='margin-top:5px; font-size:0.9rem;'>🔐 <strong>DNSSEC:</strong> <span style='color:${GREEN}'>${DNSSEC_SUCCESS} OK</span> <span style='opacity:0.5'>/ $((DNSSEC_SUCCESS + DNSSEC_FAIL)) Total (${sec_percent}%)</span></div>"
+    fi
+
+    cat > "logs/temp_obj_summary_$$.html" << EOF
+        <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 25px;">
+            <h4 style="margin: 0 0 15px 0; color: var(--text-primary); border-bottom:1px solid var(--border-color); padding-bottom:10px;">📋 Resumo da Execução & Escopo</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                <!-- Domínios -->
+                <div>
+                    <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">📁 Domínios Alvo ($domain_count)</h5>
+                    <div style="line-height:1.6;">$d_html</div>
+                </div>
+                
+                <!-- Grupos -->
+                <div>
+                    <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">🏢 Grupos DNS ($group_count)</h5>
+                    <div style="line-height:1.6;">$g_html</div>
+                </div>
+
+                <!-- Serviços -->
+                <div>
+                    <h5 style="margin:0 0 8px 0; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">🛡️ Status de Serviços</h5>
+                    $svc_summary
+                </div>
+            </div>
+        </div>
+EOF
+
 }
 
 generate_timing_html() {
@@ -878,14 +979,19 @@ EOF
 
 assemble_html() {
     generate_stats_block
+    generate_object_summary
     generate_timing_html
     generate_disclaimer_html 
     generate_config_html
     generate_modal_html
+    generate_help_html
+
     
     cat "$TEMP_HEADER" >> "$HTML_FILE"
     cat "$TEMP_MODAL" >> "$HTML_FILE"
     cat "$TEMP_STATS" >> "$HTML_FILE"
+    cat "logs/temp_obj_summary_$$.html" >> "$HTML_FILE"
+
 
 
     cat "$TEMP_DISCLAIMER" >> "$HTML_FILE"
@@ -940,6 +1046,8 @@ EOF
     echo "</div>" >> "$HTML_FILE"
     cat "$TEMP_CONFIG" >> "$HTML_FILE"
     cat "$TEMP_TIMING" >> "$HTML_FILE"
+    cat "logs/temp_help_$$.html" >> "$HTML_FILE"
+
 
     cat >> "$HTML_FILE" << EOF
         <footer>
@@ -953,7 +1061,7 @@ EOF
 </body>
 </html>
 EOF
-    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES"
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html"
     # Trap will handle final cleanup, but we can keep explicit removal here too to be sure
 }
 
@@ -1074,7 +1182,10 @@ run_trace_diagnostics() {
 
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
-    echo -e "LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail ${GREEN}T${NC}=TCP ${GREEN}D${NC}=DNSSEC"
+    local legend="LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
+    [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}=TCP_OK ${RED}T${NC}=TCP_Fail"
+    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC_OK ${RED}D${NC}=SEC_Fail"
+    echo -e "$legend"
     
     # Temp files for buffering
     local TEMP_DOMAIN_BODY="logs/temp_domain_body_$$.html"
@@ -1127,8 +1238,12 @@ process_tests() {
                              
                              if echo "$out_tcp" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                  CACHE_TCP_BADGE[$srv]="<span class='badge-mini fail' title='TCP Failed'>T</span>"
+                                 TCP_FAIL+=1
+                                 echo -ne "${RED}T${NC}"
                              else
                                  CACHE_TCP_BADGE[$srv]="<span class='badge-mini success' title='TCP OK'>T</span>"
+                                 TCP_SUCCESS+=1
+                                 echo -ne "${GREEN}T${NC}"
                              fi
                         fi
 
@@ -1141,12 +1256,19 @@ process_tests() {
                              
                              if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                  CACHE_SEC_BADGE[$srv]="<span class='badge-mini fail' title='DNSSEC Error'>D</span>"
+                                 DNSSEC_FAIL+=1
+                                 echo -ne "${RED}D${NC}"
                              else
                                  if echo "$out_sec" | grep -q ";; flags:.* ad" || echo "$out_sec" | grep -q "RRSIG"; then
                                      CACHE_SEC_BADGE[$srv]="<span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span>"
+                                     DNSSEC_SUCCESS+=1
+                                     echo -ne "${GREEN}D${NC}"
                                  else
                                      # Unsigned zone is Neutral
                                      CACHE_SEC_BADGE[$srv]="<span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span>"
+                                     # Neutral counts as success for operation, or separate? Let's treat as OK but unsigned.
+                                     DNSSEC_SUCCESS+=1
+                                     echo -ne "${GRAY}D${NC}"
                                  fi
                              fi
                         fi
@@ -1293,6 +1415,12 @@ print_final_terminal_summary() {
     echo -e "  ⚠️  Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
     echo -e "  ❌ Falhas Críticas : ${RED}${FAILED_TESTS}${NC}"
     echo -e "  🔀 Divergências    : ${PURPLE}${DIVERGENT_TESTS}${NC}"
+    if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+        echo -e "  🔌 TCP Checks      : ${GREEN}${TCP_SUCCESS}${NC} OK / ${RED}${TCP_FAIL}${NC} Fail"
+    fi
+    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+        echo -e "  🔐 DNSSEC Checks   : ${GREEN}${DNSSEC_SUCCESS}${NC} OK / ${RED}${DNSSEC_FAIL}${NC} Fail"
+    fi
     
     local p_succ=0
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
@@ -1304,14 +1432,15 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" 2>/dev/null' EXIT
 
-    while getopts ":n:g:lhytd" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; t) ENABLE_TCP_CHECK="true" ;; d) ENABLE_DNSSEC_CHECK="true" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
+    while getopts ":n:g:lhy" opt; do case ${opt} in n) FILE_DOMAINS=$OPTARG ;; g) FILE_GROUPS=$OPTARG ;; l) GENERATE_LOG_TEXT="true" ;; y) INTERACTIVE_MODE="false" ;; h) show_help; exit 0 ;; *) echo "Opção inválida"; exit 1 ;; esac; done
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file
     interactive_configuration
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
     init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics
+
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     assemble_html
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"

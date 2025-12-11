@@ -1,4 +1,4 @@
-# 🔍 Diagnóstico DNS Avançado
+# 🔍 Diagnóstico DNS Avançado (v9.16)
 
 > "Porque a culpa é sempre do DNS, mas agora você tem provas coloridas em HTML para diagnosticar o problema."
 
@@ -10,7 +10,8 @@ Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar tecnicam
 
 * **Verificação de Consistência:** Por que testar uma vez se você pode testar 10? O script repete as queries para garantir que o resultado é estável (pega DNS fazendo Load Balance com dados desatualizados).
 * **Critérios de Divergência (Strict Mode):** Você define o que é erro. Mudança de IP no Round-Robin deve alarmar? Ordem dos registros importa? TTL mudando é problema? Você decide.
-* **HTML Dashboard:** Gera um relatório visual com matriz de falhas, tempos de resposta e CSS "Dark Mode" embutido.
+* **HTML Dashboard:** Gera um relatório visual com matriz de falhas, tempos de resposta, **resumos de TCP/DNSSEC**, inventário de execução e o **manual de ajuda completo embutido**.
+* **Testes de Serviço (Features):** Valida se o servidor suporta **TCP** (RFC 7766) e se responde com validação **DNSSEC** (RRSIG/AD), com contadores de sucesso/falha no terminal e HTML.
 * **Validação de Conectividade:** Testa a porta 53 (TCP/UDP) antes de tentar o DNS. Se a porta estiver fechada, ele nem perde tempo tentando resolver (Smart Error Logging).
 * **Latência (ICMP):** Roda testes de ping contra os servidores DNS para saber se o problema é resolução ou se o link caiu mesmo.
 * **Modo Interativo:** Pergunta se você quer mudar os timeouts, número de tentativas de consistência e critérios rigorosos (Strict IP/TTL/Order).
@@ -59,12 +60,14 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
 ./diagnostico_dns.sh -y
 ```
 
+> **Nota:** No modo `-y`, o script usará as variáveis do arquivo `diagnostico.conf`. Certifique-se de configurar `ENABLE_TCP_CHECK` e `ENABLE_DNSSEC_CHECK` conforme necessário.
+
 ### Flags Disponíveis
 
   * `-n <arquivo>`: Caminho do CSV de domínios (Default: domains_tests.csv)
   * `-g <arquivo>`: Caminho do CSV de grupos DNS (Default: dns_groups.csv)
   * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
-  * `-y`: Modo Silencioso (Não interativo / Aceita defaults)
+  * `-y`: Modo Silencioso (Não interativo / Aceita defaults do .conf)
   * `-h`: Exibe este menu de ajuda
 
 ## 🕵️‍♂️ Critérios de Divergência (Strict Mode)
@@ -102,7 +105,17 @@ CLOUDFLARE;Resolver Publico Rapido;recursive;2;1.1.1.1,1.0.0.1
 AD_INTERNO;Active Directory Corp;mixed;1;192.168.10.5,192.168.10.6
 ```
 
-### 2\. `domains_tests.csv` (Suas Perguntas)
+### 2\. `diagnostico.conf` (Ajustes Finos)
+
+Arquivo opcional para definir defaults (se não quiser usar o menu interativo toda vez).
+
+```bash
+ENABLE_TCP_CHECK="true"      # Testa suporte a TCP/53
+ENABLE_DNSSEC_CHECK="true"   # Testa validação DNSSEC
+TIMEOUT=2                    # Timeout global
+```
+
+### 3\. `domains_tests.csv` (Suas Perguntas)
 
 Define **O QUE** você vai perguntar e para quem.
 
