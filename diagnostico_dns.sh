@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.13 (Doc Update)
-# "Doc Update"
+# Versão: 9.18.16
+# "Cards fix"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.13"
+SCRIPT_VERSION="9.18.16"
 
 
 # Carrega configurações externas
@@ -58,12 +58,16 @@ declare -i TCP_SUCCESS=0
 declare -i TCP_FAIL=0
 declare -i DNSSEC_SUCCESS=0
 declare -i DNSSEC_FAIL=0
+declare -i DNSSEC_ABSENT=0
 declare -i SEC_HIDDEN=0
 declare -i SEC_REVEALED=0
 declare -i SEC_AXFR_OK=0
 declare -i SEC_AXFR_RISK=0
 declare -i SEC_REC_OK=0
 declare -i SEC_REC_RISK=0
+declare -i SEC_VER_TIMEOUT=0
+declare -i SEC_AXFR_TIMEOUT=0
+declare -i SEC_REC_TIMEOUT=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -117,9 +121,11 @@ init_html_parts() {
     TEMP_JSON_Ping="logs/temp_json_ping_$$.json"
     TEMP_JSON_DNS="logs/temp_json_dns_$$.json"
     TEMP_JSON_Sec="logs/temp_json_sec_$$.json"
+    TEMP_JSON_Trace="logs/temp_json_trace_$$.json"
     > "$TEMP_JSON_Ping"
     > "$TEMP_JSON_DNS"
     > "$TEMP_JSON_Sec"
+    > "$TEMP_JSON_Trace"
 }
 # ==============================================
 # HELP & BANNER
@@ -219,7 +225,13 @@ show_help() {
     echo -e "  ${PURPLE}~${NC} (Til)       = Divergência (O servidor mudou a resposta durante o teste)."
     echo -e "  ${RED}x${NC} (Xis)        = Falha Crítica (Timeout, Erro de Conexão, REFUSED)."
     echo -e "  ${RED}T${NC} / ${GREEN}T${NC}        = Status do Teste TCP (Falha/Sucesso)."
-    echo -e "  ${RED}D${NC} / ${GREEN}D${NC}        = Status do Teste DNSSEC (Falha/Sucesso)."
+
+    echo -e "  ${RED}D${NC} / ${GREEN}D${NC} / ${GRAY}D${NC}    = Status do Teste DNSSEC (Falha/Sucesso/Ausente)."
+    echo -e ""
+    echo -e "  ${BLUE}--- LEGENDAS DE SEGURANÇA ---${NC}"
+    echo -e "  ${GREEN}HIDDEN/DENIED/CLOSED${NC} = Seguro (OK)"
+    echo -e "  ${RED}REVEALED/ALLOWED/OPEN${NC} = Risco (Falha de Segurança)"
+    echo -e "  ${GRAY}TIMEOUT/ERROR${NC}       = Erro de Rede (Inconclusivo)"
     echo -e ""
     echo -e "${BLUE}==============================================================================${NC}"
 }
@@ -937,7 +949,7 @@ EOF
     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
             <div class="card" style="border-color: #8b5cf6;">
-                <span class="card-num" style="color: #a78bfa;">${DNSSEC_SUCCESS} <small style="font-size:0.4em; color:#94a3b8;">/ $((${DNSSEC_SUCCESS} + ${DNSSEC_FAIL}))</small></span>
+                <span class="card-num" style="color: #a78bfa;">${DNSSEC_SUCCESS} <small style="font-size:0.4em; color:#94a3b8;">/ ${DNSSEC_ABSENT} / $((${DNSSEC_SUCCESS} + ${DNSSEC_FAIL} + ${DNSSEC_ABSENT}))</small></span>
                 <span class="card-label">DNSSEC Checks</span>
             </div>
 EOF
@@ -1405,7 +1417,13 @@ run_security_diagnostics() {
     for ip in "${unique_ips[@]}"; do
         echo -ne "   🛡️  Scanning $ip ... "
         local risk_summary=()
+        local error_summary=()
         
+        # Helper to detect network errors
+        is_network_error() {
+            echo "$1" | grep -q -E -i "connection timed out|communications error|no servers could be reached|couldn't get address|network is unreachable"
+        }
+
         # 1. VERSION CHECK
         if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
             local clean_ip=${ip//./_}
@@ -1418,7 +1436,6 @@ run_security_diagnostics() {
             rm -f "$tfile_ver"
             log_cmd_result "VERSION CHECK $ip" "$v_cmd" "$v_out" "0"
             
-            # Save raw details
             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
                 local safe_v_out=$(echo "$v_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                 echo "<div id=\"${ver_id}_content\" style=\"display:none\"><pre>$safe_v_out</pre></div>" >> "$TEMP_DETAILS"
@@ -1427,7 +1444,13 @@ run_security_diagnostics() {
             
             local v_res=""
             local v_class=""
-            if [[ -z "$v_out" ]] || echo "$v_out" | grep -qE "REFUSED|SERVFAIL|no servers|timed out"; then
+            
+            if is_network_error "$v_out"; then
+                 v_res="TIMEOUT"
+                 v_class="status-neutral" # Gray
+                 SEC_VER_TIMEOUT+=1
+                 if [[ "$VERBOSE" == "true" ]]; then echo -ne "${GRAY}Ver:TIMEOUT${NC} "; fi
+            elif [[ -z "$v_out" ]] || echo "$v_out" | grep -q -E "REFUSED|SERVFAIL|no servers|timed out"; then
                  v_res="HIDDEN (OK)"
                  v_class="status-ok"
                  SEC_HIDDEN+=1
@@ -1440,6 +1463,12 @@ run_security_diagnostics() {
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}Ver:RISK${NC} "
                  risk_summary+=("Ver")
             fi
+            
+            if echo "$v_out" | grep -q "connection timed out"; then
+                 v_res="TIMEOUT"
+                 v_class="status-neutral"
+            fi
+
             local html_ver="<a href=\"#\" onclick=\"showLog('${ver_id}'); return false;\" class=\"status-cell\"><span class=\"badge $v_class\">$v_res</span></a>"
         else
             local html_ver="<span class=\"badge neutral\">N/A</span>"
@@ -1447,8 +1476,6 @@ run_security_diagnostics() {
 
         # 2. AXFR CHECK (Zone Transfer)
         if [[ "$ENABLE_AXFR_CHECK" == "true" ]]; then
-            # Try to transfer common test zones or the first domain from the list if available
-            # Using the first domain definition from file or a dummy if empty
             local target_axfr=""
             if [[ -f "$FILE_DOMAINS" ]]; then
                 target_axfr=$(head -1 "$FILE_DOMAINS" | awk -F';' '{print $1}')
@@ -1463,7 +1490,6 @@ run_security_diagnostics() {
             rm -f "$tfile_axfr"
             log_cmd_result "AXFR CHECK $ip ($target_axfr)" "$axfr_cmd" "${axfr_out:0:500}..." "0"
             
-            # Save raw details
             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
                 local safe_axfr_out=$(echo "$axfr_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                 echo "<div id=\"${axfr_id}_content\" style=\"display:none\"><pre>$safe_axfr_out</pre></div>" >> "$TEMP_DETAILS"
@@ -1472,11 +1498,24 @@ run_security_diagnostics() {
             
             local axfr_res=""
             local axfr_class=""
-            if echo "$axfr_out" | grep -q -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
-                 axfr_res="DENIED (OK)"
-                 axfr_class="status-ok"
-                 SEC_AXFR_OK+=1
-                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
+            
+            if is_network_error "$axfr_out"; then
+                 axfr_res="TIMEOUT"
+                 axfr_class="status-neutral"
+                 SEC_AXFR_TIMEOUT+=1
+                 if [[ "$VERBOSE" == "true" ]]; then echo -ne "${GRAY}AXFR:TIMEOUT${NC} "; fi
+            elif echo "$axfr_out" | grep -q -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
+                 if echo "$axfr_out" | grep -q -E "REFUSED|Transfer failed"; then
+                     axfr_res="DENIED (OK)"
+                     axfr_class="status-ok"
+                     SEC_AXFR_OK+=1
+                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
+                 else 
+                     axfr_res="DENIED (OK)"
+                     axfr_class="status-ok"
+                     SEC_AXFR_OK+=1
+                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
+                 fi
             elif echo "$axfr_out" | grep -q "SOA"; then
                  axfr_res="ALLOWED (RISK)"
                  axfr_class="status-fail"
@@ -1484,8 +1523,6 @@ run_security_diagnostics() {
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}AXFR:RISK${NC} "
                  risk_summary+=("AXFR(SOA)")
             else
-                 # Uncertain (maybe not auth for this zone, but didn't explicitly refuse XFR op code)
-                 # Assume OK if no data data returned
                  axfr_res="NO DATA (OK)"
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
@@ -1499,7 +1536,6 @@ run_security_diagnostics() {
         # 3. RECURSION CHECK
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
             local rec_id="sec_rec_${clean_ip}"
-            # Query external domain (google.com)
             local rec_cmd="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
             local tfile_rec=$(mktemp)
             /usr/bin/dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1 > "$tfile_rec" 2>&1
@@ -1507,7 +1543,6 @@ run_security_diagnostics() {
             rm -f "$tfile_rec"
             log_cmd_result "RECURSION CHECK $ip" "$rec_cmd" "$rec_out" "0"
 
-            # Save raw details
             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
                 local safe_rec_out=$(echo "$rec_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                 echo "<div id=\"${rec_id}_content\" style=\"display:none\"><pre>$safe_rec_out</pre></div>" >> "$TEMP_DETAILS"
@@ -1516,8 +1551,13 @@ run_security_diagnostics() {
             
             local rec_res=""
             local rec_class=""
-            # Check if we got an A record for google.com
-            if echo "$rec_out" | grep -qE "^google\.com\..*IN.*A.*[0-9]"; then
+            
+            if is_network_error "$rec_out"; then
+                 rec_res="TIMEOUT"
+                 rec_class="status-neutral"
+                 SEC_REC_TIMEOUT+=1
+                 if [[ "$VERBOSE" == "true" ]]; then echo -ne "${GRAY}Rec:TIMEOUT${NC}"; fi
+            elif echo "$rec_out" | grep -qE "^google\.com\..*IN.*A.*[0-9]"; then
                  rec_res="OPEN (RISK)"
                  rec_class="status-fail"
                  SEC_REC_RISK+=1
@@ -1538,7 +1578,13 @@ run_security_diagnostics() {
            echo ""
         else
            if [[ ${#risk_summary[@]} -eq 0 ]]; then
-               echo -e "${GREEN}✅ Secure${NC}"
+               # Check if all were timeouts (no OKs, no Risks)
+               # If v_res=TIMEOUT and axfr_res=TIMEOUT and rec_res=TIMEOUT, then it's not "Secure", it's "Unreachable"
+               if [[ "$v_res" == "TIMEOUT" || "$axfr_res" == "TIMEOUT" || "$rec_res" == "TIMEOUT" ]]; then
+                    echo -e "${GRAY}⚠️ Timeouts${NC}"
+               else
+                    echo -e "${GREEN}✅ Secure${NC}"
+               fi
            else
                local risks=$(IFS=,; echo "${risk_summary[*]}")
                echo -e "${RED}⚠️ Risks: $risks${NC}"
@@ -1704,6 +1750,14 @@ run_trace_diagnostics() {
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE_SIMPLE"
         fi
+        
+        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+            # Clean output for JSON string to avoid breaking json
+            local j_out=$(echo "$output" | tr '"' "'" | tr '\n' ' ' | sed 's/\\/\\\\/g')
+            local j_hops="$hops" # string or number
+            if [[ "$hops" == "-" ]]; then j_hops=0; fi
+            echo "{ \"ip\": \"$ip\", \"groups\": \"$groups_str\", \"hops\": $j_hops, \"last_hop\": \"$(echo $last_hop | tr '"' "'")\" }," >> "$TEMP_JSON_Trace"
+        fi
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
     echo "</tbody></table>" >> "$TEMP_TRACE_SIMPLE"
@@ -1715,7 +1769,7 @@ process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
     local legend="LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
     [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}=TCP_OK ${RED}T${NC}=TCP_Fail"
-    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC_OK ${RED}D${NC}=SEC_Fail"
+    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC_OK ${RED}D${NC}=SEC_Fail ${GRAY}D${NC}=SEC_Abs"
     echo -e "$legend"
     
     # Temp files for buffering
@@ -1838,7 +1892,7 @@ process_tests() {
                                      # Unsigned zone is Neutral
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a>"
                                      sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral'>ABS</span></a>"
-                                     DNSSEC_SUCCESS+=1
+                                     DNSSEC_ABSENT+=1
                                      echo -ne "${GRAY}D${NC}"
                                  fi
                              fi
@@ -2031,6 +2085,7 @@ assemble_json() {
     local dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
     local ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
     local sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
+    local trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
     
     # Build complete JSON
     cat > "$JSON_FILE" << EOF
@@ -2069,6 +2124,9 @@ assemble_json() {
   "ping_results": [
     $ping_data
   ],
+  "traceroute_results": [
+    $trace_data
+  ],
   "security_scan": {
     "summary": {
        "privacy_hidden": $SEC_HIDDEN, "privacy_revealed": $SEC_REVEALED,
@@ -2097,7 +2155,7 @@ print_final_terminal_summary() {
         echo -e "  🔌 TCP Checks      : ${GREEN}${TCP_SUCCESS}${NC} OK / ${RED}${TCP_FAIL}${NC} Fail"
     fi
     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-        echo -e "  🔐 DNSSEC Checks   : ${GREEN}${DNSSEC_SUCCESS}${NC} OK / ${RED}${DNSSEC_FAIL}${NC} Fail"
+        echo -e "  🔐 DNSSEC Checks   : ${GREEN}${DNSSEC_SUCCESS}${NC} OK / ${GRAY}${DNSSEC_ABSENT}${NC} Absent / ${RED}${DNSSEC_FAIL}${NC} Fail"
     fi
     
     local p_succ=0
@@ -2105,9 +2163,9 @@ print_final_terminal_summary() {
     echo -e "  📊 Taxa de Sucesso : ${p_succ}%"
     
     echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
-    echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed"
-    echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed"
-    echo -e "  RECURSION : ${GREEN}${SEC_REC_OK}${NC} Closed / ${RED}${SEC_REC_RISK}${NC} Open"
+    echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed / ${GRAY}${SEC_VER_TIMEOUT}${NC} Error"
+    echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed  / ${GRAY}${SEC_AXFR_TIMEOUT}${NC} Error"
+    echo -e "  RECURSION : ${GREEN}${SEC_REC_OK}${NC} Closed / ${RED}${SEC_REC_RISK}${NC} Open    / ${GRAY}${SEC_REC_TIMEOUT}${NC} Error"
     
     echo -e "${BLUE}======================================================${NC}"
 }
@@ -2117,7 +2175,7 @@ main() {
 
     # Define cleanup trap
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" 2>/dev/null' EXIT
 
     GENERATE_FULL_REPORT="true"
     GENERATE_SIMPLE_REPORT="true"
