@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.5(Security Test)
+# Versão: 9.18.8(Security Dashboard)
 # "Security Dashboard"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.5"
+SCRIPT_VERSION="9.18.8"
 
 
 # Carrega configurações externas
@@ -715,6 +715,13 @@ cat > "$TEMP_HEADER" << EOF
         .st-warn { color: var(--accent-warning); }
         .st-fail { color: var(--accent-danger); }
         .st-div { color: var(--accent-divergent); }
+        
+        /* Aliases for script usage */
+        .status-ok { color: var(--accent-success) !important; }
+        .status-warn { color: var(--accent-warning) !important; } /* Warning alias */
+        .status-warning { color: var(--accent-warning) !important; }
+        .status-fail { color: var(--accent-danger) !important; }
+        .status-divergent { color: var(--accent-divergent) !important; }
         .time-val { font-size: 0.8em; color: var(--text-secondary); font-weight: 400; opacity: 0.7; }
 
         /* --- Modal & Logs --- */
@@ -774,8 +781,16 @@ cat > "$TEMP_HEADER" << EOF
         }
         
         function showLog(id) {
-            var rawContent = document.getElementById(id + '_content').innerHTML;
-            document.getElementById('modalTitle').innerText = document.getElementById(id + '_title').innerText;
+            var el = document.getElementById(id + '_content');
+            if (!el) {
+                alert("Detalhes técnicos não disponíveis neste relatório simplificado.");
+                return;
+            }
+            var rawContent = el.innerHTML;
+            var titleEl = document.getElementById(id + '_title');
+            var title = titleEl ? titleEl.innerText : 'Detalhes';
+            
+            document.getElementById('modalTitle').innerText = title;
             document.getElementById('modalText').innerHTML = rawContent;
             document.getElementById('logModal').style.display = "block";
             document.body.style.overflow = 'hidden'; 
@@ -845,6 +860,9 @@ cat > "$TEMP_STATS" << EOF
                 <span class="card-num">$DIVERGENT_TESTS</span>
                 <span class="card-label">Divergências</span>
             </div>
+        </div>
+    
+    <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
 EOF
 
     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
@@ -1042,6 +1060,48 @@ cat > "$TEMP_CONFIG" << EOF
                     </tbody>
                  </table>
                  </div>
+                 
+                 <!-- Config Files Dump -->
+                 <h3 style="margin-top:30px; font-size:1rem; color:var(--text-secondary); border-bottom:1px solid #334155; padding-bottom:5px;">📂 Arquivo de Domínios ($FILE_DOMAINS)</h3>
+                 <div class="table-responsive">
+                     <table>
+                        <thead><tr><th>Domínio</th><th>Grupos</th><th>Tipos Teste</th><th>Records</th><th>Hosts Extras</th></tr></thead>
+                        <tbody>
+EOF
+    if [[ -f "$FILE_DOMAINS" ]]; then
+        while IFS=';' read -r col1 col2 col3 col4 col5 || [ -n "$col1" ]; do
+             [[ "$col1" =~ ^# || -z "$col1" ]] && continue
+             echo "<tr><td>$col1</td><td>$col2</td><td>$col3</td><td>$col4</td><td>$col5</td></tr>" >> "$TEMP_CONFIG"
+        done < "$FILE_DOMAINS"
+    else
+        echo "<tr><td colspan='5'>Arquivo não encontrado.</td></tr>" >> "$TEMP_CONFIG"
+    fi
+
+    cat >> "$TEMP_CONFIG" << EOF
+                        </tbody>
+                     </table>
+                 </div>
+
+                 <h3 style="margin-top:30px; font-size:1rem; color:var(--text-secondary); border-bottom:1px solid #334155; padding-bottom:5px;">📂 Arquivo de Grupos DNS ($FILE_GROUPS)</h3>
+                 <div class="table-responsive">
+                     <table>
+                        <thead><tr><th>Nome Grupo</th><th>Descrição</th><th>Tipo</th><th>Timeout</th><th>Servidores</th></tr></thead>
+                        <tbody>
+EOF
+    if [[ -f "$FILE_GROUPS" ]]; then
+        while IFS=';' read -r g1 g2 g3 g4 g5 || [ -n "$g1" ]; do
+             [[ "$g1" =~ ^# || -z "$g1" ]] && continue
+             echo "<tr><td>$g1</td><td>$g2</td><td>$g3</td><td>$g4</td><td>$g5</td></tr>" >> "$TEMP_CONFIG"
+        done < "$FILE_GROUPS"
+    else
+        echo "<tr><td colspan='5'>Arquivo não encontrado.</td></tr>" >> "$TEMP_CONFIG"
+    fi
+
+    cat >> "$TEMP_CONFIG" << EOF
+                        </tbody>
+                     </table>
+                 </div>
+
              </div>
         </details>
 EOF
@@ -1196,9 +1256,9 @@ EOF
 
 generate_security_html() {
     # Generate HTML block if there is data
-    if [[ -s "$TEMP_SECURITY" ]]; then
+    if [[ -s "$TEMP_SEC_ROWS" ]]; then
         local sec_content
-        sec_content=$(cat "$TEMP_SECURITY")
+        sec_content=$(cat "$TEMP_SEC_ROWS")
         
         # Simple Mode
         cat >> "$TEMP_SECURITY_SIMPLE" << EOF
@@ -1223,7 +1283,8 @@ generate_security_html() {
 EOF
 
         # Full Mode (Uses same content for now, maybe add raw logs details later if needed)
-        cat >> "$TEMP_SECURITY" << EOF
+        # Full Mode: Overwrite TEMP_SECURITY with the final HTML block
+        cat > "$TEMP_SECURITY" << EOF
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
              <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
              <div class="table-responsive" style="padding:15px;">
@@ -1288,12 +1349,22 @@ run_security_diagnostics() {
         
         # 1. VERSION CHECK
         if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
+            local clean_ip=${ip//./_}
+            local ver_id="sec_ver_${clean_ip}"
+            
             local v_cmd="dig +noall +answer +time=$TIMEOUT @$ip version.bind chaos txt"
             local tfile_ver=$(mktemp)
             /usr/bin/dig +noall +answer +time=$TIMEOUT @$ip version.bind chaos txt > "$tfile_ver" 2>&1
             local v_out=$(cat "$tfile_ver")
             rm -f "$tfile_ver"
             log_cmd_result "VERSION CHECK $ip" "$v_cmd" "$v_out" "0"
+            
+            # Save raw details
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                local safe_v_out=$(echo "$v_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                echo "<div id=\"${ver_id}_content\" style=\"display:none\"><pre>$safe_v_out</pre></div>" >> "$TEMP_DETAILS"
+                echo "<div id=\"${ver_id}_title\" style=\"display:none\">Version Check | $ip</div>" >> "$TEMP_DETAILS"
+            fi
             
             local v_res=""
             local v_class=""
@@ -1310,7 +1381,7 @@ run_security_diagnostics() {
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}Ver:RISK${NC} "
                  risk_summary+=("Ver")
             fi
-            local html_ver="<span class=\"badge $v_class\">$v_res</span>"
+            local html_ver="<a href=\"#\" onclick=\"showLog('${ver_id}'); return false;\" class=\"status-cell\"><span class=\"badge $v_class\">$v_res</span></a>"
         else
             local html_ver="<span class=\"badge neutral\">N/A</span>"
         fi
@@ -1325,12 +1396,20 @@ run_security_diagnostics() {
             fi
             [[ -z "$target_axfr" ]] && target_axfr="example.com"
             
+            local axfr_id="sec_axfr_${clean_ip}"
             local axfr_cmd="dig @$ip $target_axfr AXFR +time=$TIMEOUT +tries=1"
             local tfile_axfr=$(mktemp)
             /usr/bin/dig @$ip $target_axfr AXFR +time=$TIMEOUT +tries=1 > "$tfile_axfr" 2>&1
             local axfr_out=$(cat "$tfile_axfr")
             rm -f "$tfile_axfr"
             log_cmd_result "AXFR CHECK $ip ($target_axfr)" "$axfr_cmd" "${axfr_out:0:500}..." "0"
+            
+            # Save raw details
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                local safe_axfr_out=$(echo "$axfr_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                echo "<div id=\"${axfr_id}_content\" style=\"display:none\"><pre>$safe_axfr_out</pre></div>" >> "$TEMP_DETAILS"
+                echo "<div id=\"${axfr_id}_title\" style=\"display:none\">AXFR Check | $ip ($target_axfr)</div>" >> "$TEMP_DETAILS"
+            fi
             
             local axfr_res=""
             local axfr_class=""
@@ -1353,13 +1432,14 @@ run_security_diagnostics() {
                  SEC_AXFR_OK+=1
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
             fi
-            local html_axfr="<span class=\"badge $axfr_class\">$axfr_res</span>"
+            local html_axfr="<a href=\"#\" onclick=\"showLog('${axfr_id}'); return false;\" class=\"status-cell\"><span class=\"badge $axfr_class\">$axfr_res</span></a>"
         else
             local html_axfr="<span class=\"badge neutral\">N/A</span>"
         fi
 
         # 3. RECURSION CHECK
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
+            local rec_id="sec_rec_${clean_ip}"
             # Query external domain (google.com)
             local rec_cmd="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
             local tfile_rec=$(mktemp)
@@ -1367,6 +1447,13 @@ run_security_diagnostics() {
             local rec_out=$(cat "$tfile_rec")
             rm -f "$tfile_rec"
             log_cmd_result "RECURSION CHECK $ip" "$rec_cmd" "$rec_out" "0"
+
+            # Save raw details
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                local safe_rec_out=$(echo "$rec_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                echo "<div id=\"${rec_id}_content\" style=\"display:none\"><pre>$safe_rec_out</pre></div>" >> "$TEMP_DETAILS"
+                echo "<div id=\"${rec_id}_title\" style=\"display:none\">Recursion Check | $ip</div>" >> "$TEMP_DETAILS"
+            fi
             
             local rec_res=""
             local rec_class=""
@@ -1383,7 +1470,7 @@ run_security_diagnostics() {
                  SEC_REC_OK+=1
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}Rec:OK${NC}"
             fi
-            local html_rec="<span class=\"badge $rec_class\">$rec_res</span>"
+            local html_rec="<a href=\"#\" onclick=\"showLog('${rec_id}'); return false;\" class=\"status-cell\"><span class=\"badge $rec_class\">$rec_res</span></a>"
         else
             local html_rec="<span class=\"badge neutral\">N/A</span>"
         fi
@@ -1404,8 +1491,6 @@ run_security_diagnostics() {
     done
     
     if [[ -s "$TEMP_SEC_ROWS" ]]; then
-        cat "$TEMP_SEC_ROWS" > "$TEMP_SECURITY"
-        rm -f "$TEMP_SEC_ROWS"
         generate_security_html 
     fi
 }
@@ -1602,20 +1687,30 @@ process_tests() {
 
                         # TCP Check
                         if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+                             local clean_srv=${srv//./_}
+                             local clean_tgt=${target//./_}
+                             local tcp_id="tcp_${clean_srv}_${clean_tgt}"
+                             
                              local opts_tcp; [[ "$mode" == "iterative" ]] && opts_tcp="$DEFAULT_DIG_OPTIONS" || opts_tcp="$RECURSIVE_DIG_OPTIONS"
                              [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"
                              opts_tcp+=" +tcp +time=$TIMEOUT"
                              local out_tcp=$(dig $opts_tcp @$srv $target A 2>&1)
                              log_cmd_result "TCP CHECK $srv -> $target" "dig $opts_tcp @$srv $target A" "$out_tcp" "0"
                              
+                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                                 local safe_tcp=$(echo "$out_tcp" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                 echo "<div id=\"${tcp_id}_content\" style=\"display:none\"><pre>$safe_tcp</pre></div>" >> "$TEMP_DETAILS"
+                                 echo "<div id=\"${tcp_id}_title\" style=\"display:none\">TCP Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
+                             fi
+
                              if echo "$out_tcp" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
-                                 CACHE_TCP_BADGE[$srv]="<span class='badge-mini fail' title='TCP Failed'>T</span>"
-                                 tcpres="<span class='badge-mini fail'>FAIL</span>"
+                                 CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Failed'>T</span></a>"
+                                 tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>FAIL</span></a>"
                                  TCP_FAIL+=1
                                  echo -ne "${RED}T${NC}"
                              else
-                                 CACHE_TCP_BADGE[$srv]="<span class='badge-mini success' title='TCP OK'>T</span>"
-                                 tcp_res="<span class='badge-mini success'>OK</span>"
+                                 CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP OK'>T</span></a>"
+                                 tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
                                  TCP_SUCCESS+=1
                                  echo -ne "${GREEN}T${NC}"
                              fi
@@ -1623,27 +1718,37 @@ process_tests() {
 
                         # DNSSEC Check
                         if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                             local clean_srv=${srv//./_}
+                             local clean_tgt=${target//./_}
+                             local sec_id="sec_${clean_srv}_${clean_tgt}"
+
                              local opts_sec; [[ "$mode" == "iterative" ]] && opts_sec="$DEFAULT_DIG_OPTIONS" || opts_sec="$RECURSIVE_DIG_OPTIONS"
                              [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"
                              opts_sec+=" +dnssec +time=$TIMEOUT"
                              local out_sec=$(dig $opts_sec @$srv $target A 2>&1)
                              log_cmd_result "DNSSEC CHECK $srv -> $target" "dig $opts_sec @$srv $target A" "$out_sec" "0"
                              
+                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                                 local safe_sec=$(echo "$out_sec" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                 echo "<div id=\"${sec_id}_content\" style=\"display:none\"><pre>$safe_sec</pre></div>" >> "$TEMP_DETAILS"
+                                 echo "<div id=\"${sec_id}_title\" style=\"display:none\">DNSSEC Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
+                             fi
+
                              if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
-                                 CACHE_SEC_BADGE[$srv]="<span class='badge-mini fail' title='DNSSEC Error'>D</span>"
-                                 sec_res="<span class='badge-mini fail'>ERR</span>"
+                                 CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail' title='DNSSEC Error'>D</span></a>"
+                                 sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
                                  DNSSEC_FAIL+=1
                                  echo -ne "${RED}D${NC}"
                              else
                                  if echo "$out_sec" | grep -q ";; flags:.* ad" || echo "$out_sec" | grep -q "RRSIG"; then
-                                     CACHE_SEC_BADGE[$srv]="<span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span>"
-                                     sec_res="<span class='badge-mini success'>OK</span>"
+                                     CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a>"
+                                     sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
                                      DNSSEC_SUCCESS+=1
                                      echo -ne "${GREEN}D${NC}"
                                  else
                                      # Unsigned zone is Neutral
-                                     CACHE_SEC_BADGE[$srv]="<span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span>"
-                                     sec_res="<span class='badge-mini neutral'>ABS</span>"
+                                     CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a>"
+                                     sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral'>ABS</span></a>"
                                      DNSSEC_SUCCESS+=1
                                      echo -ne "${GRAY}D${NC}"
                                  fi
