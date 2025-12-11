@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.1(Security Test)
+# Versão: 9.18.5(Security Test)
 # "Security Dashboard"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.1"
+SCRIPT_VERSION="9.18.5"
 
 
 # Carrega configurações externas
@@ -1284,11 +1284,15 @@ run_security_diagnostics() {
 
     for ip in "${unique_ips[@]}"; do
         echo -ne "   🛡️  Scanning $ip ... "
+        local risk_summary=()
         
         # 1. VERSION CHECK
         if [[ "$CHECK_BIND_VERSION" == "true" ]]; then
             local v_cmd="dig +noall +answer +time=$TIMEOUT @$ip version.bind chaos txt"
-            local v_out; v_out=$($v_cmd 2>&1)
+            local tfile_ver=$(mktemp)
+            /usr/bin/dig +noall +answer +time=$TIMEOUT @$ip version.bind chaos txt > "$tfile_ver" 2>&1
+            local v_out=$(cat "$tfile_ver")
+            rm -f "$tfile_ver"
             log_cmd_result "VERSION CHECK $ip" "$v_cmd" "$v_out" "0"
             
             local v_res=""
@@ -1297,13 +1301,14 @@ run_security_diagnostics() {
                  v_res="HIDDEN (OK)"
                  v_class="status-ok"
                  SEC_HIDDEN+=1
-                 echo -ne "${GREEN}Ver:OK${NC} "
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}Ver:OK${NC} "
             else
                  local ver_str=$(echo "$v_out" | grep "TXT" | cut -d'"' -f2)
                  v_res="REVEALED: ${ver_str:0:15}..."
                  v_class="status-fail"
                  SEC_REVEALED+=1
-                 echo -ne "${RED}Ver:RISK${NC} "
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}Ver:RISK${NC} "
+                 risk_summary+=("Ver")
             fi
             local html_ver="<span class=\"badge $v_class\">$v_res</span>"
         else
@@ -1321,7 +1326,10 @@ run_security_diagnostics() {
             [[ -z "$target_axfr" ]] && target_axfr="example.com"
             
             local axfr_cmd="dig @$ip $target_axfr AXFR +time=$TIMEOUT +tries=1"
-            local axfr_out; axfr_out=$($axfr_cmd 2>&1)
+            local tfile_axfr=$(mktemp)
+            /usr/bin/dig @$ip $target_axfr AXFR +time=$TIMEOUT +tries=1 > "$tfile_axfr" 2>&1
+            local axfr_out=$(cat "$tfile_axfr")
+            rm -f "$tfile_axfr"
             log_cmd_result "AXFR CHECK $ip ($target_axfr)" "$axfr_cmd" "${axfr_out:0:500}..." "0"
             
             local axfr_res=""
@@ -1330,19 +1338,20 @@ run_security_diagnostics() {
                  axfr_res="DENIED (OK)"
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
-                 echo -ne "${GREEN}AXFR:OK${NC} "
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
             elif echo "$axfr_out" | grep -q "SOA"; then
                  axfr_res="ALLOWED (RISK)"
                  axfr_class="status-fail"
                  SEC_AXFR_RISK+=1
-                 echo -ne "${RED}AXFR:RISK${NC} "
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}AXFR:RISK${NC} "
+                 risk_summary+=("AXFR(SOA)")
             else
                  # Uncertain (maybe not auth for this zone, but didn't explicitly refuse XFR op code)
                  # Assume OK if no data data returned
                  axfr_res="NO DATA (OK)"
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
-                 echo -ne "${GREEN}AXFR:OK${NC} "
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
             fi
             local html_axfr="<span class=\"badge $axfr_class\">$axfr_res</span>"
         else
@@ -1353,7 +1362,10 @@ run_security_diagnostics() {
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
             # Query external domain (google.com)
             local rec_cmd="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
-            local rec_out; rec_out=$($rec_cmd 2>&1)
+            local tfile_rec=$(mktemp)
+            /usr/bin/dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1 > "$tfile_rec" 2>&1
+            local rec_out=$(cat "$tfile_rec")
+            rm -f "$tfile_rec"
             log_cmd_result "RECURSION CHECK $ip" "$rec_cmd" "$rec_out" "0"
             
             local rec_res=""
@@ -1363,45 +1375,38 @@ run_security_diagnostics() {
                  rec_res="OPEN (RISK)"
                  rec_class="status-fail"
                  SEC_REC_RISK+=1
-                 echo -ne "${RED}Rec:RISK${NC}"
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}Rec:RISK${NC}"
+                 risk_summary+=("Rec")
             else
                  rec_res="CLOSED (OK)"
                  rec_class="status-ok"
                  SEC_REC_OK+=1
-                 echo -ne "${GREEN}Rec:OK${NC}"
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}Rec:OK${NC}"
             fi
             local html_rec="<span class=\"badge $rec_class\">$rec_res</span>"
         else
             local html_rec="<span class=\"badge neutral\">N/A</span>"
         fi
         
-        echo ""
+        if [[ "$VERBOSE" == "true" ]]; then
+           echo ""
+        else
+           if [[ ${#risk_summary[@]} -eq 0 ]]; then
+               echo -e "${GREEN}✅ Secure${NC}"
+           else
+               local risks=$(IFS=,; echo "${risk_summary[*]}")
+               echo -e "${RED}⚠️ Risks: $risks${NC}"
+           fi
+        fi
         
         # Add Row
-        echo "<tr><td><strong>$ip</strong></td><td>$html_ver</td><td>$html_axfr</td><td>$html_rec</td></tr>" >> "$TEMP_SECURITY" # Writing directly to buffer file used by generator logic later? 
-        # Wait, I defined generate_security_html to read from TEMP_SECURITY and write formatted block to TEMP_SECURITY/SIMPLE.
-        # So I should write RAW rows to a temp file, then wrap it.
-        # Let's fix the flow:
-        # 1. run_security_diagnostics writes ROWS to TEMP_SECURITY (which I'll rename to TEMP_SEC_ROWS in my mind, but use TEMP_SECURITY for now then swap).
-        # Actually, let's use a specific row buffer.
+        echo "<tr><td><strong>$ip</strong></td><td>$html_ver</td><td>$html_axfr</td><td>$html_rec</td></tr>" >> "$TEMP_SEC_ROWS" 
     done
-    
-    # Store rows in the var expected by generate_security_html
-    # In generate_security_html I read from TEMP_SECURITY as the CONTENT.
-    # So I should leave the rows in TEMP_SECURITY?
-    # No, generate_security_html logic I wrote above: sec_content=$(cat "$TEMP_SECURITY")
-    # So here I just append rows to TEMP_SECURITY.
-    # But wait, generate_security_html cat >> TEMP_SECURITY with the HEADER.
-    # So I need to perform a swap or use a dedicated rows file.
-    
-    # Let's simple: Write rows to TEMP_SEC_ROWS.
-    # Then cat TEMP_SEC_ROWS > TEMP_SECURITY (just content).
-    # Then call generate_security_html which wraps it.
     
     if [[ -s "$TEMP_SEC_ROWS" ]]; then
         cat "$TEMP_SEC_ROWS" > "$TEMP_SECURITY"
         rm -f "$TEMP_SEC_ROWS"
-        generate_security_html # This processes TEMP_SECURITY (rows) and wraps them into blocks
+        generate_security_html 
     fi
 }
 
@@ -1435,7 +1440,7 @@ run_ping_diagnostics() {
         
         log_cmd_result "PING $ip" "ping -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
         
-        local loss=$(echo "$output" | grep -oP '\d+(?=% packet loss)' | head -1)
+        local loss=$(echo "$output" | grep "packet loss" | awk -F'%' '{print $1}' | awk '{print $NF}')
         [[ -z "$loss" ]] && loss=100
         local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
         [[ -z "$rtt_avg" ]] && rtt_avg="N/A"
