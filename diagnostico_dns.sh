@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.17
-# "JSON fix"
+# Versão: 9.18.18
+# "Fix CLI Flags and JSON Safety"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.17"
+SCRIPT_VERSION="9.18.18"
 
 
 # Carrega configurações externas
@@ -2083,10 +2083,10 @@ assemble_json() {
     
     # Helper to clean trailing comma from file content for valid JSON array
     # If file is empty, this results in empty string, which is fine for empty array
-    local dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
-    local ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
-    local sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
-    local trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
+    local dns_data=""; [[ -f "$TEMP_JSON_DNS" ]] && dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
+    local ping_data=""; [[ -f "$TEMP_JSON_Ping" ]] && ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
+    local sec_data=""; [[ -f "$TEMP_JSON_Sec" ]] && sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
+    local trace_data=""; [[ -f "$TEMP_JSON_Trace" ]] && trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
     
     # Build complete JSON
     cat > "$JSON_FILE" << EOF
@@ -2182,13 +2182,17 @@ main() {
     GENERATE_SIMPLE_REPORT="true"
     GENERATE_JSON_REPORT="false"
     
-    while getopts ":n:g:lhyjs" opt; do case ${opt} in 
+    while getopts ":n:g:lhyjstdxr" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
         l) GENERATE_LOG_TEXT="true" ;; 
         y) INTERACTIVE_MODE="false" ;; 
         s) GENERATE_FULL_REPORT="false"; GENERATE_SIMPLE_REPORT="true" ;; 
         j) GENERATE_JSON_REPORT="true" ;;
+        t) ENABLE_TCP_CHECK="true" ;;
+        d) ENABLE_DNSSEC_CHECK="true" ;;
+        x) ENABLE_AXFR_CHECK="true" ;;
+        r) ENABLE_RECURSION_CHECK="true" ;;
         h) show_help; exit 0 ;; 
         *) echo "Opção inválida"; exit 1 ;; 
     esac; done
