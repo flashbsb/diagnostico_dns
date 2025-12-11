@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.16
-# "Cards fix"
+# Versão: 9.18.17
+# "JSON fix"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.16"
+SCRIPT_VERSION="9.18.17"
 
 
 # Carrega configurações externas
@@ -1756,7 +1756,8 @@ run_trace_diagnostics() {
             local j_out=$(echo "$output" | tr '"' "'" | tr '\n' ' ' | sed 's/\\/\\\\/g')
             local j_hops="$hops" # string or number
             if [[ "$hops" == "-" ]]; then j_hops=0; fi
-            echo "{ \"ip\": \"$ip\", \"groups\": \"$groups_str\", \"hops\": $j_hops, \"last_hop\": \"$(echo $last_hop | tr '"' "'")\" }," >> "$TEMP_JSON_Trace"
+            local clean_last_hop=$(echo "$last_hop" | tr '"' "'")
+            echo "{ \"ip\": \"$ip\", \"groups\": \"$groups_str\", \"hops\": $j_hops, \"last_hop\": \"$clean_last_hop\" }," >> "$TEMP_JSON_Trace"
         fi
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
