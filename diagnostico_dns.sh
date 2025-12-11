@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.8(Security Dashboard)
-# "Security Dashboard"
+# Versão: 9.18.9 (Auto-IP)
+# "Auto-IP"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.8"
+SCRIPT_VERSION="9.18.9"
 
 
 # Carrega configurações externas
@@ -228,7 +228,6 @@ print_execution_summary() {
     echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
     echo -e "  🔄 Consistência  : ${YELLOW}${CONSISTENCY_CHECKS} tentativas${NC}"
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
-    echo -e "  🌐 Versão IP     : ${CYAN}${IP_VERSION}${NC}"
     echo -e "  🔍 Check BIND Ver: ${CYAN}${CHECK_BIND_VERSION}${NC}"
     echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT, Timeout: ${PING_TIMEOUT}s)${NC}"
     echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
@@ -303,7 +302,7 @@ init_log_file() {
         echo "Date: $START_TIME_HUMAN"
         echo "  Config Dump:"
         echo "  Files: Domains='$FILE_DOMAINS', Groups='$FILE_GROUPS'"
-        echo "  Timeout: $TIMEOUT, Sleep: $SLEEP, IP: $IP_VERSION, ConnCheck: $VALIDATE_CONNECTIVITY"
+        echo "  Timeout: $TIMEOUT, Sleep: $SLEEP, ConnCheck: $VALIDATE_CONNECTIVITY"
         echo "  Consistency: $CONSISTENCY_CHECKS attempts"
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
@@ -367,7 +366,6 @@ interactive_configuration() {
         ask_variable "Timeout Global (segundos)" "TIMEOUT"
         ask_variable "Sleep entre queries (segundos)" "SLEEP"
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
-        ask_variable "Versão IP (ipv4/ipv6)" "IP_VERSION"
         ask_boolean "Checar versão BIND (chaos)?" "CHECK_BIND_VERSION"
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
@@ -1044,7 +1042,6 @@ cat > "$TEMP_CONFIG" << EOF
                         <tr><td>Timeout Global</td><td>${TIMEOUT}s</td><td>Tempo máximo de espera por resposta do DNS.</td></tr>
                         <tr><td>Sleep (Intervalo)</td><td>${SLEEP}s</td><td>Pausa entre tentativas consecutivas (consistency check).</td></tr>
                         <tr><td>Valida Conectividade</td><td>${VALIDATE_CONNECTIVITY}</td><td>Testa porta 53 antes do envio da query.</td></tr>
-                        <tr><td>Versão IP</td><td>${IP_VERSION}</td><td>Protocolo de transporte forçado (IPv4/IPv6).</td></tr>
                         <tr><td>Check BIND Version</td><td>${CHECK_BIND_VERSION}</td><td>Consulta caos class para versão do BIND.</td></tr>
                         <tr><td>Ping Enabled</td><td>${ENABLE_PING}</td><td>Verificação de latência ICMP (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s).</td></tr>
                         <tr><td>TCP Check (+tcp)</td><td>${ENABLE_TCP_CHECK}</td><td>Obrigatoriedade de suporte a DNS via TCP.</td></tr>
@@ -1518,12 +1515,19 @@ run_ping_diagnostics() {
         local groups_str="${IP_GROUPS_MAP[$ip]}"
         echo -ne "   📡 $ip ... "
         
-        [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Pinging $ip (Count=$PING_COUNT, Timeout=$PING_TIMEOUT)...${NC}"
+        # IP Version Auto-detection for Ping
+        local ping_cmd="ping"
+        if [[ "$ip" == *:* ]]; then
+            # IPv6 detected
+            if command -v ping6 &> /dev/null; then ping_cmd="ping6"; else ping_cmd="ping -6"; fi
+        fi
+        
+        [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Pinging $ip ($ping_cmd, Count=$PING_COUNT, Timeout=$PING_TIMEOUT)...${NC}"
         local start_p=$(date +%s%N)
-        local output; output=$(ping -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
+        local output; output=$($ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
         local end_p=$(date +%s%N); local dur_p=$(( (end_p - start_p) / 1000000 ))
         
-        log_cmd_result "PING $ip" "ping -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
+        log_cmd_result "PING $ip" "$ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
         
         local loss=$(echo "$output" | grep "packet loss" | awk -F'%' '{print $1}' | awk '{print $NF}')
         [[ -z "$loss" ]] && loss=100
@@ -1580,11 +1584,20 @@ run_trace_diagnostics() {
         local groups_str="${IP_GROUPS_MAP[$ip]}"
         echo -ne "   🛤️ $ip ... "
         
+        local current_trace_cmd="$cmd_trace"
+        if [[ "$ip" == *:* ]]; then
+             # If strictly traceroute command, append -6
+             if [[ "$cmd_trace" == *"traceroute"* ]]; then current_trace_cmd="$cmd_trace -6"; fi
+             # tracepath usually handles detection or needs explicit 6 if distinct binary, 
+             # but modern iputils tracepath auto-detects or tracepath6 exists. 
+             # simpler to rely on tool auto-detection if not traceroute legacy.
+        fi
+
         [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Tracing route to $ip...${NC}"
         local start_t=$(date +%s%N)
-        local output; output=$($cmd_trace $ip 2>&1); local ret=$?
+        local output; output=$($current_trace_cmd $ip 2>&1); local ret=$?
         local end_t=$(date +%s%N); local dur_t=$(( (end_t - start_t) / 1000000 ))
-        log_cmd_result "TRACE $ip" "$cmd_trace $ip" "$output" "$dur_t"
+        log_cmd_result "TRACE $ip" "$current_trace_cmd $ip" "$output" "$dur_t"
         
         # Validation of output
         local hops="-"
@@ -1723,7 +1736,6 @@ process_tests() {
                              local sec_id="sec_${clean_srv}_${clean_tgt}"
 
                              local opts_sec; [[ "$mode" == "iterative" ]] && opts_sec="$DEFAULT_DIG_OPTIONS" || opts_sec="$RECURSIVE_DIG_OPTIONS"
-                             [[ "$IP_VERSION" == "ipv4" ]] && opts_sec+=" -4"
                              opts_sec+=" +dnssec +time=$TIMEOUT"
                              local out_sec=$(dig $opts_sec @$srv $target A 2>&1)
                              log_cmd_result "DNSSEC CHECK $srv -> $target" "dig $opts_sec @$srv $target A" "$out_sec" "0"
@@ -1794,7 +1806,6 @@ process_tests() {
                             for (( iter=1; iter<=CONSISTENCY_CHECKS; iter++ )); do
                                 local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
                                 local opts_arr; read -ra opts_arr <<< "$opts_str"
-                                [[ "$IP_VERSION" == "ipv4" ]] && opts_arr+=("-4")
                                 local cur_timeout="${DNS_GROUP_TIMEOUT[$grp]}"; [[ -z "$cur_timeout" ]] && cur_timeout=$TIMEOUT
                                 opts_arr+=("+time=$cur_timeout")
                                 local cmd_arr=("dig" "${opts_arr[@]}" "@$srv" "$target" "$rec")
