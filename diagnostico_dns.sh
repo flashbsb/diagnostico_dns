@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.9 (Auto-IP)
-# "Auto-IP"
+# Versão: 9.18.10 (Fix Output Leak)
+# "Fix Output Leak"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.9"
+SCRIPT_VERSION="9.18.10"
 
 
 # Carrega configurações externas
@@ -1410,7 +1410,7 @@ run_security_diagnostics() {
             
             local axfr_res=""
             local axfr_class=""
-            if echo "$axfr_out" | grep -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
+            if echo "$axfr_out" | grep -q -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
                  axfr_res="DENIED (OK)"
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
