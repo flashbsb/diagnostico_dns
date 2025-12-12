@@ -79,7 +79,7 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
 
 ## 🕵️‍♂️ Critérios de Divergência (Strict Mode)
 
-O script possui um sistema inteligente para detectar "flapping" ou inconsistências entre as múltiplas tentativas (`CONSISTENCY_CHECKS`):
+O script possui um sistema inteligente para detectar "flapping" ou inconsistências entre as múltiplas tentativas ${CYAN}CONSISTENCY_CHECKS${NC} (Padrão: 3)
 
 * **Strict IP Check:** Se `true`, qualquer alteração no IP de resposta entre as tentativas é marcada como DIVERGÊNCIA. Se `false` (padrão), ele entende que Round-Robin é normal.
 * **Strict Order Check:** Se `true`, a ordem dos registros na resposta deve ser idêntica. Se `false` (padrão), a ordem é ignorada (sort) antes de comparar.

@@ -2,7 +2,7 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.26
+# Versão: 9.26.1
 # "Enhancements and Fixes"
 # ==============================================
 
@@ -166,6 +166,9 @@ print_help_text() {
     echo -e "  ${GREEN}-d${NC}            Habilita validação DNSSEC."
     echo -e "  ${GREEN}-x${NC}            Habilita teste de transferência de zona (AXFR)."
     echo -e "  ${GREEN}-r${NC}            Habilita teste de recursão aberta."
+    echo -e "  ${GREEN}-T${NC}            Habilita traceroute (Rota)."
+    echo -e "  ${GREEN}-V${NC}            Habilita verificação de versão BIND (Chaos)."
+    echo -e "  ${GREEN}-Z${NC}            Habilita verificação de sincronismo SOA."
     echo -e "  ${GREEN}-h${NC}            Exibe este manual detalhado."
     echo -e ""
     echo -e "${PURPLE}DICIONÁRIO DE VARIÁVEIS (Configuração Fina):${NC}"
@@ -176,7 +179,7 @@ print_help_text() {
     echo -e "      Define o tempo máximo (em segundos) que o script aguarda por respostas de rede."
     echo -e "      Afeta pings, traceroutes e consultas DIG. Default seguro: 4s."
     echo -e ""
-    echo -e "  ${CYAN}CONSISTENCY_CHECKS${NC} (Padrão: 10)"
+    echo -e "  ${CYAN}CONSISTENCY_CHECKS${NC} (Padrão: 3)"
     echo -e "      Define quantas vezes a MESMA consulta será repetida para o MESMO servidor."
     echo -e "      Se o servidor responder IPs diferentes nessas N tentativas, ele é marcado como"
     echo -e "      ${PURPLE}DIVERGENTE (~)${NC}. Isso pega balanceamentos Round-Robin mal configurados."
@@ -2489,7 +2492,7 @@ main() {
     GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT:-false}"
     # JSON Default comes from config file now (GENERATE_JSON_REPORT)
 
-    while getopts ":n:g:lhyjstdxr" opt; do case ${opt} in 
+    while getopts ":n:g:lhyjstdxrTVZ" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
         l) GENERATE_LOG_TEXT="true" ;; 
@@ -2508,6 +2511,9 @@ main() {
         d) ENABLE_DNSSEC_CHECK="true" ;;
         x) ENABLE_AXFR_CHECK="true" ;;
         r) ENABLE_RECURSION_CHECK="true" ;;
+        T) ENABLE_TRACE_CHECK="true" ;;
+        V) CHECK_BIND_VERSION="true" ;;
+        Z) ENABLE_SOA_SERIAL_CHECK="true" ;;
         h) show_help; exit 0 ;; 
         *) echo "Opção inválida"; exit 1 ;; 
     esac; done
@@ -2522,6 +2528,8 @@ main() {
     fi
 
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
+    if [[ "$ENABLE_PING" == "true" ]] && ! command -v ping &> /dev/null; then echo "Erro: 'ping' nao encontrado (necessario para -t/Ping)."; exit 1; fi
+    if [[ "$ENABLE_TRACE_CHECK" == "true" ]] && ! command -v traceroute &> /dev/null; then echo "Erro: 'traceroute' nao encontrado (necessario para -T)."; exit 1; fi
     init_log_file
     validate_csv_files
     interactive_configuration
