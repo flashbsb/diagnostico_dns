@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.23.5
-# "Fix help color in html and fix temp files simple report"
+# Versão: 9.26
+# "Enhancements and Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.23.5"
+SCRIPT_VERSION="9.26"
 
 
 # Carrega configurações externas
@@ -70,6 +70,8 @@ declare -i SEC_AXFR_TIMEOUT=0
 declare -i SEC_REC_TIMEOUT=0
 declare -i SOA_SYNC_FAIL=0
 declare -i SOA_SYNC_OK=0
+declare -i TOTAL_PING_SENT=0
+TOTAL_SLEEP_TIME=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -1145,22 +1147,27 @@ EOF
 
 generate_timing_html() {
 cat > "$TEMP_TIMING" << EOF
-        <div class="timing-container" style="display:flex; justify-content:center; gap:30px; margin: 40px auto 20px auto; padding: 15px; background:var(--bg-secondary); border-radius:12px; max-width:800px; border:1px solid var(--border-color);">
-            <div class="timing-item" style="text-align:center;">
+        <div class="timing-container" style="display:flex; justify-content:center; gap:20px; margin: 40px auto 20px auto; padding: 15px; background:var(--bg-secondary); border-radius:12px; max-width:900px; border:1px solid var(--border-color); flex-wrap: wrap;">
+            <div class="timing-item" style="text-align:center; min-width: 100px;">
                 <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Início</div>
                 <div style="font-size:1.1rem; font-weight:600;">$START_TIME_HUMAN</div>
             </div>
-            <div class="timing-item" style="text-align:center;">
+            <div class="timing-item" style="text-align:center; min-width: 100px;">
                 <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Final</div>
                 <div style="font-size:1.1rem; font-weight:600;">$END_TIME_HUMAN</div>
             </div>
-            <div class="timing-item" style="text-align:center;">
+            <div class="timing-item" style="text-align:center; min-width: 80px;">
                 <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Tentativas</div>
                 <div style="font-size:1.1rem; font-weight:600;">${CONSISTENCY_CHECKS}x</div>
             </div>
-            <div class="timing-item" style="text-align:center;">
-                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Duração</div>
+             <div class="timing-item" style="text-align:center; min-width: 80px;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Pings</div>
+                <div style="font-size:1.1rem; font-weight:600;">${TOTAL_PING_SENT}</div>
+            </div>
+            <div class="timing-item" style="text-align:center; min-width: 120px;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Duração Total</div>
                 <div style="font-size:1.1rem; font-weight:600;"><span id="total_time_footer">${TOTAL_DURATION}s</span></div>
+                 <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">(Sleep: ${TOTAL_SLEEP_TIME}s)</div>
             </div>
         </div>
 EOF
@@ -1517,17 +1524,20 @@ run_security_diagnostics() {
     local TEMP_SEC_ROWS="logs/temp_sec_rows_$$.html"
     > "$TEMP_SEC_ROWS"
 
-    declare -A CHECKED_IPS; local unique_ips=()
+    declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
     for grp in "${!DNS_GROUPS[@]}"; do
         # Filter if ONLY_TEST_ACTIVE_GROUPS is true
         if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" && -z "${ACTIVE_GROUPS[$grp]}" ]]; then continue; fi
         for ip in ${DNS_GROUPS[$grp]}; do
+            local grp_label="[$grp]"
+            [[ -z "${IP_GROUPS_MAP[$ip]}" ]] && IP_GROUPS_MAP[$ip]="$grp_label" || { [[ "${IP_GROUPS_MAP[$ip]}" != *"$grp_label"* ]] && IP_GROUPS_MAP[$ip]="${IP_GROUPS_MAP[$ip]} $grp_label"; }
             if [[ -z "${CHECKED_IPS[$ip]}" ]]; then CHECKED_IPS[$ip]=1; unique_ips+=("$ip"); fi
         done
     done
 
     for ip in "${unique_ips[@]}"; do
-        echo -ne "   🛡️  Scanning $ip ... "
+        local groups_str="${IP_GROUPS_MAP[$ip]}"
+        echo -ne "   🛡️  Scanning ${groups_str} $ip ... "
         local risk_summary=()
         local error_summary=()
         
@@ -1743,7 +1753,7 @@ run_ping_diagnostics() {
     for ip in "${unique_ips[@]}"; do
         ping_id=$((ping_id + 1))
         local groups_str="${IP_GROUPS_MAP[$ip]}"
-        echo -ne "   📡 $ip ... "
+        echo -ne "   📡 ${groups_str} $ip ... "
         
         # IP Version Auto-detection for Ping
         local ping_cmd="ping"
@@ -1755,6 +1765,7 @@ run_ping_diagnostics() {
         [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Pinging $ip ($ping_cmd, Count=$PING_COUNT, Timeout=$PING_TIMEOUT)...${NC}"
         local start_p=$(date +%s%N)
         local output; output=$($ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
+        TOTAL_PING_SENT+=$PING_COUNT
         local end_p=$(date +%s%N); local dur_p=$(( (end_p - start_p) / 1000000 ))
         
         log_cmd_result "PING $ip" "$ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
@@ -1823,7 +1834,7 @@ run_trace_diagnostics() {
     for ip in "${unique_ips[@]}"; do
         trace_id=$((trace_id + 1))
         local groups_str="${IP_GROUPS_MAP[$ip]}"
-        echo -ne "   🛤️ $ip ... "
+        echo -ne "   🛤️ ${groups_str} $ip ... "
         
         local current_trace_cmd="$cmd_trace"
         if [[ "$ip" == *:* ]]; then
@@ -2109,7 +2120,7 @@ process_tests() {
                                 final_status="$iter_status"
                                 [[ "$iter_status" == "NOERROR" ]] && final_class="status-ok" || { [[ "$iter_status" == "SERVFAIL" || "$iter_status" == "NXDOMAIN" || "$iter_status" == "NOANSWER" ]] && final_class="status-warning" || final_class="status-fail"; }
 
-                                [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && sleep "$SLEEP"
+                                [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && { sleep "$SLEEP"; TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {print $TOTAL_SLEEP_TIME + $SLEEP}"); }
                             done
                             
                             # Collect SOA Serial if applicable
@@ -2369,7 +2380,9 @@ assemble_json() {
     "failures": $FAILED_TESTS,
     "divergences": $DIVERGENT_TESTS,
     "tcp_checks": { "ok": $TCP_SUCCESS, "fail": $TCP_FAIL },
-    "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "fail": $DNSSEC_FAIL }
+    "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "fail": $DNSSEC_FAIL },
+    "total_sleep_seconds": $TOTAL_SLEEP_TIME,
+    "total_pings_sent": $TOTAL_PING_SENT
   },
   "results": [
     $dns_data
@@ -2396,6 +2409,7 @@ EOF
 }
 
 print_final_terminal_summary() {
+    # Print direct to terminal with colors
     echo -e "\n${BLUE}======================================================${NC}"
     echo -e "${BLUE}       RESUMO DA EXECUÇÃO (DASHBOARD TERMINAL)${NC}"
     echo -e "${BLUE}======================================================${NC}"
@@ -2404,6 +2418,7 @@ print_final_terminal_summary() {
     echo -e "  ⚠️ Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
     echo -e "  ❌ Falhas Críticas : ${RED}${FAILED_TESTS}${NC}"
     echo -e "  🔀 Divergências    : ${PURPLE}${DIVERGENT_TESTS}${NC}"
+    
     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
         echo -e "  🔌 TCP Checks      : ${GREEN}${TCP_SUCCESS}${NC} OK / ${RED}${TCP_FAIL}${NC} Fail"
     fi
@@ -2415,6 +2430,13 @@ print_final_terminal_summary() {
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
     echo -e "  📊 Taxa de Sucesso : ${p_succ}%"
     
+    echo -e "  🕒 Início          : ${START_TIME_HUMAN}"
+    echo -e "  🕒 Final           : ${END_TIME_HUMAN}"
+    echo -e "  🔄 Tentativas      : ${CONSISTENCY_CHECKS}x (Por check)"
+    echo -e "  📡 Pings Enviados  : ${TOTAL_PING_SENT}"
+    echo -e "  💤 Sleep Total     : ${TOTAL_SLEEP_TIME}s"
+    echo -e "  ⏳ Duração Total   : ${TOTAL_DURATION}s"
+
     echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
     echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed / ${GRAY}${SEC_VER_TIMEOUT}${NC} Error"
     echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed  / ${GRAY}${SEC_AXFR_TIMEOUT}${NC} Error"
@@ -2422,6 +2444,37 @@ print_final_terminal_summary() {
     echo -e "  SOA SYNC  : ${GREEN}${SOA_SYNC_OK}${NC} Synced / ${RED}${SOA_SYNC_FAIL}${NC} Divergent"
     
     echo -e "${BLUE}======================================================${NC}"
+
+    # Log to File (Strip ANSI codes)
+    if [[ "$GENERATE_LOG_TEXT" == "true" ]]; then
+         {
+             echo ""
+             echo "======================================================"
+             echo "       RESUMO DA EXECUÇÃO (DASHBOARD TERMINAL)"
+             echo "======================================================"
+             echo "  Total de Testes : ${TOTAL_TESTS}"
+             echo "  Sucesso         : ${SUCCESS_TESTS}"
+             echo "  Alertas         : ${WARNING_TESTS}"
+             echo "  Falhas Críticas : ${FAILED_TESTS}"
+             echo "  Divergências    : ${DIVERGENT_TESTS}"
+             [[ "$ENABLE_TCP_CHECK" == "true" ]] && echo "  TCP Checks      : ${TCP_SUCCESS} OK / ${TCP_FAIL} Fail"
+             [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && echo "  DNSSEC Checks   : ${DNSSEC_SUCCESS} OK / ${DNSSEC_ABSENT} Absent / ${DNSSEC_FAIL} Fail"
+             echo "  Taxa de Sucesso : ${p_succ}%"
+             echo "  Início          : ${START_TIME_HUMAN}"
+             echo "  Final           : ${END_TIME_HUMAN}"
+             echo "  Tentativas      : ${CONSISTENCY_CHECKS}x (Por check)"
+             echo "  Pings Enviados  : ${TOTAL_PING_SENT}"
+             echo "  Sleep Total     : ${TOTAL_SLEEP_TIME}s"
+             echo "  Duração Total   : ${TOTAL_DURATION}s"
+             echo ""
+             echo "--- SECURITY SCAN ---"
+             echo "  PRIVACY   : ${SEC_HIDDEN} Hidden / ${SEC_REVEALED} Revealed / ${SEC_VER_TIMEOUT} Error"
+             echo "  AXFR      : ${SEC_AXFR_OK} Denied / ${SEC_AXFR_RISK} Allowed  / ${SEC_AXFR_TIMEOUT} Error"
+             echo "  RECURSION : ${SEC_REC_OK} Closed / ${SEC_REC_RISK} Open    / ${SEC_REC_TIMEOUT} Error"
+             echo "  SOA SYNC  : ${SOA_SYNC_OK} Synced / ${SOA_SYNC_FAIL} Divergent"
+             echo "======================================================"
+         } >> "$LOG_FILE_TEXT"
+    fi
 }
 
 main() {
@@ -2477,6 +2530,10 @@ main() {
 
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     
+    # Format Sleep Time (2 decimals, ensure dot)
+    if [[ -z "$TOTAL_SLEEP_TIME" ]]; then TOTAL_SLEEP_TIME=0; fi
+    TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {printf \"%.2f\", $TOTAL_SLEEP_TIME}")
+
     if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
         assemble_html "full"
     fi
