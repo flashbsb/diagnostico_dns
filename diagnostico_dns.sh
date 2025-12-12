@@ -7,7 +7,7 @@
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.26"
+SCRIPT_VERSION="9.26.1"
 
 
 # Carrega configurações externas
