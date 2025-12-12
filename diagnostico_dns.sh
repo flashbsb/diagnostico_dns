@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.18.18
-# "Fix CLI Flags and JSON Safety"
+# Versão: 9.22.1
+# "Limiting Tests to Active Groups"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.18.18"
+SCRIPT_VERSION="9.22.1"
 
 
 # Carrega configurações externas
@@ -68,6 +68,8 @@ declare -i SEC_REC_RISK=0
 declare -i SEC_VER_TIMEOUT=0
 declare -i SEC_AXFR_TIMEOUT=0
 declare -i SEC_REC_TIMEOUT=0
+declare -i SOA_SYNC_FAIL=0
+declare -i SOA_SYNC_OK=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -209,6 +211,9 @@ show_help() {
     echo -e ""
     echo -e "  ${CYAN}ENABLE_AXFR_CHECK / ENABLE_RECURSION_CHECK${NC}"
     echo -e "      Testes de segurança para permissividade de transferência de zona e recursão."
+    echo -e "      "
+    echo -e "  ${CYAN}ENABLE_SOA_SERIAL_CHECK${NC}"
+    echo -e "      Verifica se os números de série SOA são idênticos entre todos os servidores do grupo."
     echo -e ""
     echo -e "  ${CYAN}LATENCY_WARNING_THRESHOLD${NC} (Default: 100ms)"
     echo -e "      Define o limiar para alertas amarelos de lentidão."
@@ -273,6 +278,8 @@ print_execution_summary() {
     echo -e "  🛡️ Ver Check     : ${CYAN}${CHECK_BIND_VERSION}${NC}"
     echo -e "  🛡️ AXFR Check    : ${CYAN}${ENABLE_AXFR_CHECK}${NC}"
     echo -e "  🛡️ Recurse Check : ${CYAN}${ENABLE_RECURSION_CHECK}${NC}"
+    echo -e "  🛡️ SOA Sync Check: ${CYAN}${ENABLE_SOA_SERIAL_CHECK}${NC}"
+    echo -e "  🛡️ Active Groups : ${CYAN}${ONLY_TEST_ACTIVE_GROUPS}${NC}"
     echo ""
     echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
     echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
@@ -345,7 +352,8 @@ init_log_file() {
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
         echo "  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK, Trace=$ENABLE_TRACE_CHECK"
-        echo "  Security: Version=$CHECK_BIND_VERSION, AXFR=$ENABLE_AXFR_CHECK, Recursion=$ENABLE_RECURSION_CHECK"
+        echo "  Security: Version=$CHECK_BIND_VERSION, AXFR=$ENABLE_AXFR_CHECK, Recursion=$ENABLE_RECURSION_CHECK, SOA_Sync=$ENABLE_SOA_SERIAL_CHECK
+"
         echo "  Ping: Enabled=$ENABLE_PING, Count=$PING_COUNT, Timeout=$PING_TIMEOUT, LossLimit=$PING_PACKET_LOSS_LIMIT%"
         echo "  Analysis: LatencyThreshold=${LATENCY_WARNING_THRESHOLD}ms, Color=$COLOR_OUTPUT"
         echo "  Reports: Full=$GENERATE_FULL_REPORT, Simple=$GENERATE_SIMPLE_REPORT"
@@ -417,11 +425,13 @@ interactive_configuration() {
         ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
         ask_boolean "Ativar Teste DNSSEC (+dnssec)?" "ENABLE_DNSSEC_CHECK"
         ask_boolean "Executar Traceroute (Rota)?" "ENABLE_TRACE_CHECK"
+        ask_boolean "Testar SOMENTE grupos usados?" "ONLY_TEST_ACTIVE_GROUPS"
         
         echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
         ask_boolean "Verificar Versão (BIND Privacy)?" "CHECK_BIND_VERSION"
         ask_boolean "Verificar Zone Transfer (AXFR)?" "ENABLE_AXFR_CHECK"
         ask_boolean "Verificar Recursão Aberta?" "ENABLE_RECURSION_CHECK"
+        ask_boolean "Verificar Sincronismo SOA?" "ENABLE_SOA_SERIAL_CHECK"
         
         echo -e "\n${BLUE}--- OPÇÕES AVANÇADAS (DIG) ---${NC}"
         ask_variable "Dig Options (Padrão/Iterativo)" "DEFAULT_DIG_OPTIONS"
@@ -794,6 +804,7 @@ cat > "$TEMP_HEADER" << EOF
         .status-warning { color: var(--accent-warning) !important; }
         .status-fail { color: var(--accent-danger) !important; }
         .status-divergent { color: var(--accent-divergent) !important; }
+        .status-neutral { color: var(--text-secondary) !important; }
         .time-val { font-size: 0.8em; color: var(--text-secondary); font-weight: 400; opacity: 0.7; }
 
         /* --- Modal & Logs --- */
@@ -995,6 +1006,25 @@ EOF
                  <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REC_RISK}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Open</span>
             </div>
         </div>
+EOF
+    # SOA Sync Card
+    if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]]; then
+    cat >> "$TEMP_STATS" << EOF
+        <div class="card" style="border-left: 4px solid var(--accent-divergent);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">SOA Sync</span>
+                 <span style="font-size:1.5rem;">⚖️</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SOA_SYNC_OK}</span> <span style="font-size:0.85em; color:var(--accent-success);">Synced</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SOA_SYNC_FAIL}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Divergent</span>
+            </div>
+        </div>
+EOF
+    fi
+
+    cat >> "$TEMP_STATS" << EOF
     </div>
 EOF
 }
@@ -1383,7 +1413,7 @@ EOF
 # ==============================================
 
 load_dns_groups() {
-    declare -gA DNS_GROUPS; declare -gA DNS_GROUP_DESC; declare -gA DNS_GROUP_TYPE; declare -gA DNS_GROUP_TIMEOUT
+    declare -gA DNS_GROUPS; declare -gA DNS_GROUP_DESC; declare -gA DNS_GROUP_TYPE; declare -gA DNS_GROUP_TIMEOUT; declare -gA ACTIVE_GROUPS
     [[ ! -f "$FILE_GROUPS" ]] && { echo -e "${RED}ERRO: $FILE_GROUPS não encontrado!${NC}"; exit 1; }
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
@@ -1409,6 +1439,8 @@ run_security_diagnostics() {
 
     declare -A CHECKED_IPS; local unique_ips=()
     for grp in "${!DNS_GROUPS[@]}"; do
+        # Filter if ONLY_TEST_ACTIVE_GROUPS is true
+        if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" && -z "${ACTIVE_GROUPS[$grp]}" ]]; then continue; fi
         for ip in ${DNS_GROUPS[$grp]}; do
             if [[ -z "${CHECKED_IPS[$ip]}" ]]; then CHECKED_IPS[$ip]=1; unique_ips+=("$ip"); fi
         done
@@ -1618,6 +1650,8 @@ run_ping_diagnostics() {
     
     declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
     for grp in "${!DNS_GROUPS[@]}"; do
+        # Filter if ONLY_TEST_ACTIVE_GROUPS is true
+        if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" && -z "${ACTIVE_GROUPS[$grp]}" ]]; then continue; fi
         for ip in ${DNS_GROUPS[$grp]}; do
             local grp_label="[$grp]"
             [[ -z "${IP_GROUPS_MAP[$ip]}" ]] && IP_GROUPS_MAP[$ip]="$grp_label" || { [[ "${IP_GROUPS_MAP[$ip]}" != *"$grp_label"* ]] && IP_GROUPS_MAP[$ip]="${IP_GROUPS_MAP[$ip]} $grp_label"; }
@@ -1691,6 +1725,8 @@ run_trace_diagnostics() {
 
     declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
     for grp in "${!DNS_GROUPS[@]}"; do
+        # Filter if ONLY_TEST_ACTIVE_GROUPS is true
+        if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" && -z "${ACTIVE_GROUPS[$grp]}" ]]; then continue; fi
         for ip in ${DNS_GROUPS[$grp]}; do
             local grp_label="[$grp]"
             [[ -z "${IP_GROUPS_MAP[$ip]}" ]] && IP_GROUPS_MAP[$ip]="$grp_label" || { [[ "${IP_GROUPS_MAP[$ip]}" != *"$grp_label"* ]] && IP_GROUPS_MAP[$ip]="${IP_GROUPS_MAP[$ip]} $grp_label"; }
@@ -1801,6 +1837,7 @@ process_tests() {
 
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
+            ACTIVE_GROUPS[$grp]=1 # Mark group as active
             local srv_list=(${DNS_GROUPS[$grp]})
             echo -ne "   [${PURPLE}${grp}${NC}] "
             
@@ -1909,6 +1946,11 @@ process_tests() {
                     for rec in "${rec_list[@]}"; do
                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        
+                        # SOA Serial Collection
+                        local collected_soa_serials=()
+                        local collected_soa_srvs=()
+                        
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_${test_id}"
@@ -1970,7 +2012,21 @@ process_tests() {
 
                                 [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && sleep "$SLEEP"
                             done
-
+                            
+                            # Collect SOA Serial if applicable
+                            local current_serial=""
+                            if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" && "${rec,,}" == "soa" && "$final_class" == "status-ok" ]]; then
+                                 # Robust Extraction Strategy
+                                 # 1. Try to find SOA record in ANSWER SECTION
+                                 current_serial=$(echo "$output" | awk '{for(i=1;i<=NF;i++) if($i=="SOA") print $(i+3)}' | grep -E '^[0-9]+$' | head -1)
+                                 
+                                 if [[ -n "$current_serial" ]]; then
+                                     collected_soa_serials+=("$current_serial")
+                                     collected_soa_srvs+=("$srv")
+                                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GRAY}[SOA:$current_serial]${NC}"
+                                 fi
+                            fi
+                            
                             if [[ "$final_class" == "status-ok" && $final_dur -gt $LATENCY_WARNING_THRESHOLD ]]; then
                                 final_class="status-warning"; final_status="SLOW"
                             fi
@@ -1995,6 +2051,11 @@ process_tests() {
                             local svc_badges=""
                             [[ -n "${CACHE_TCP_BADGE[$srv]}" ]] && svc_badges+=" ${CACHE_TCP_BADGE[$srv]}"
                             [[ -n "${CACHE_SEC_BADGE[$srv]}" ]] && svc_badges+=" ${CACHE_SEC_BADGE[$srv]}"
+                            
+                            # Inject SOA Serial into Badges if exists
+                            if [[ -n "$current_serial" ]]; then
+                                svc_badges+=" <span class='badge-mini neutral' title='SOA Serial: $current_serial' style='width:auto; padding:0 4px; font-family:monospace;'>#${current_serial: -4}</span>"
+                            fi
 
                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
                                 echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></a></td>" >> "$TEMP_GROUP_BODY"
@@ -2008,10 +2069,6 @@ process_tests() {
                             fi
                             
                             if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
-                                local j_tcp="N/A"; [[ "$ENABLE_TCP_CHECK" == "true" ]] && j_tcp="$tcp_res"
-                                # Strip HTML from tcp_res/sec_res if needed, or just keep simple status
-                                # Actually, tcp_res contains HTML. Let's rely on badge arrays or clean it.
-                                # Simplification: Use values from cache logic
                                 local j_tcp_status="skipped"
                                 if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
                                     if [[ "${CACHE_TCP_BADGE[$srv]}" == *"fail"* ]]; then j_tcp_status="FAIL"; else j_tcp_status="OK"; fi
@@ -2022,10 +2079,33 @@ process_tests() {
                                      elif [[ "${CACHE_SEC_BADGE[$srv]}" == *"neutral"* ]]; then j_sec_status="UNSIGNED"
                                      else j_sec_status="OK"; fi
                                 fi
+                                # Add serial to JSON
+                                local j_serial="null"; [[ -n "$current_serial" ]] && j_serial="\"$current_serial\""
 
-                                echo "{ \"domain\": \"$domain\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec\", \"mode\": \"$mode\", \"status\": \"$final_status\", \"latency_ms\": $final_dur, \"consistent\": \"$consistent_count/$CONSISTENCY_CHECKS\", \"divergent\": $is_divergent, \"tcp_check\": \"$j_tcp_status\", \"dnssec_check\": \"$j_sec_status\" }," >> "$TEMP_JSON_DNS"
+                                echo "{ \"domain\": \"$domain\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec\", \"mode\": \"$mode\", \"status\": \"$final_status\", \"latency_ms\": $final_dur, \"consistent\": \"$consistent_count/$CONSISTENCY_CHECKS\", \"divergent\": $is_divergent, \"tcp_check\": \"$j_tcp_status\", \"dnssec_check\": \"$j_sec_status\", \"soa_serial\": $j_serial }," >> "$TEMP_JSON_DNS"
                             fi
                         done
+                        
+                        # Post-Loop SOA Analysis for this Group/Domain
+                        if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" && "${rec,,}" == "soa" && ${#collected_soa_serials[@]} -ge 1 ]]; then
+                             local unique_serials=($(echo "${collected_soa_serials[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+                             if [[ ${#unique_serials[@]} -gt 1 ]]; then
+                                  SOA_SYNC_FAIL+=1
+                                  local warning_msg="SOA DIV: ${unique_serials[*]}"
+                                  echo -ne " ${RED}[${warning_msg}]${NC}"
+                                  
+                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
+                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                                  
+                                  log_entry "SOA SERIAL DIVERGENCE: Domain=$target Group=$grp Serials=${unique_serials[*]}"
+                             else
+                                  SOA_SYNC_OK+=1
+                                  echo -ne " ${GREEN}[SOA: ${unique_serials[0]}]${NC}"
+                             fi
+                        fi
+                        
+                        echo "</tr>" >> "$TEMP_GROUP_BODY"
+                        echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                     done
                 done
             done
@@ -2167,6 +2247,7 @@ print_final_terminal_summary() {
     echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed / ${GRAY}${SEC_VER_TIMEOUT}${NC} Error"
     echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed  / ${GRAY}${SEC_AXFR_TIMEOUT}${NC} Error"
     echo -e "  RECURSION : ${GREEN}${SEC_REC_OK}${NC} Closed / ${RED}${SEC_REC_RISK}${NC} Open    / ${GRAY}${SEC_REC_TIMEOUT}${NC} Error"
+    echo -e "  SOA SYNC  : ${GREEN}${SOA_SYNC_OK}${NC} Synced / ${RED}${SOA_SYNC_FAIL}${NC} Divergent"
     
     echo -e "${BLUE}======================================================${NC}"
 }
