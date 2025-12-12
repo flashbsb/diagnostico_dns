@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.23.1
-# "JSON Optimization & Help Colors"
+# Versão: 9.23.2
+# "Enable Configurable Simple Report"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.23.1"
+SCRIPT_VERSION="9.23.2"
 
 
 # Carrega configurações externas
@@ -340,7 +340,7 @@ print_execution_summary() {
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
     [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
-    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
+    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC} (Config: ${ENABLE_SIMPLE_REPORT})"
     [[ "$GENERATE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
@@ -2402,7 +2402,7 @@ main() {
     trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" 2>/dev/null' EXIT
 
     GENERATE_FULL_REPORT="true"
-    GENERATE_SIMPLE_REPORT="true"
+    GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT:-false}"
     # JSON Default comes from config file now
     
     while getopts ":n:g:lhyjstdxr" opt; do case ${opt} in 
