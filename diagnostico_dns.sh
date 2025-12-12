@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.23.2
-# "Enable Configurable Simple Report"
+# Versão: 9.23.5
+# "Fix help color in html and fix temp files simple report"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.23.2"
+SCRIPT_VERSION="9.23.5"
 
 
 # Carrega configurações externas
@@ -90,34 +90,32 @@ init_html_parts() {
     TEMP_DISCLAIMER="logs/temp_disclaimer_$$.html"
     TEMP_SERVICES="logs/temp_services_$$.html"
 
-    # Simple Mode Temp Files
-    TEMP_MATRIX_SIMPLE="logs/temp_matrix_simple_$$.html"
-    TEMP_PING_SIMPLE="logs/temp_ping_simple_$$.html"
-    TEMP_TRACE_SIMPLE="logs/temp_trace_simple_$$.html"
-    TEMP_SERVICES_SIMPLE="logs/temp_services_simple_$$.html"
-
-    > "$TEMP_HEADER"
-    > "$TEMP_STATS"
-    > "$TEMP_MATRIX"
-    > "$TEMP_DETAILS"
-    > "$TEMP_PING"
-    > "$TEMP_TRACE"
-    > "$TEMP_CONFIG"
-    > "$TEMP_TIMING"
-    > "$TEMP_MODAL"
-    > "$TEMP_DISCLAIMER"
-    > "$TEMP_SERVICES"
-    
-    > "$TEMP_MATRIX_SIMPLE"
-    > "$TEMP_PING_SIMPLE"
-    > "$TEMP_TRACE_SIMPLE"
-    > "$TEMP_SERVICES_SIMPLE"
+    # Simple Mode Temp Files - Conditional Creation
+    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        TEMP_MATRIX_SIMPLE="logs/temp_matrix_simple_$$.html"
+        TEMP_PING_SIMPLE="logs/temp_ping_simple_$$.html"
+        TEMP_TRACE_SIMPLE="logs/temp_trace_simple_$$.html"
+        TEMP_SERVICES_SIMPLE="logs/temp_services_simple_$$.html"
+        TEMP_SECURITY_SIMPLE="logs/temp_security_simple_$$.html"
+        
+        > "$TEMP_MATRIX_SIMPLE"
+        > "$TEMP_PING_SIMPLE"
+        > "$TEMP_TRACE_SIMPLE"
+        > "$TEMP_SERVICES_SIMPLE"
+        > "$TEMP_SECURITY_SIMPLE"
+    else
+        # Define empty vars to avoid unbound variable errors if referenced
+        TEMP_MATRIX_SIMPLE=""
+        TEMP_PING_SIMPLE=""
+        TEMP_TRACE_SIMPLE=""
+        TEMP_SERVICES_SIMPLE=""
+        TEMP_SECURITY_SIMPLE=""
+    fi
     
     # Security Temp Files
+    # Security Temp Files
     TEMP_SECURITY="logs/temp_security_$$.html"
-    TEMP_SECURITY_SIMPLE="logs/temp_security_simple_$$.html"
     > "$TEMP_SECURITY"
-    > "$TEMP_SECURITY_SIMPLE"
     
     # JSON Temp Files - Conditional Creation
     if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
@@ -135,12 +133,7 @@ init_html_parts() {
 # HELP & BANNER
 # ==============================================
 
-show_help() {
-    clear
-    echo -e "${BLUE}==============================================================================${NC}"
-    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA v${SCRIPT_VERSION}        ${NC}"
-    echo -e "${BLUE}==============================================================================${NC}"
-    echo -e ""
+print_help_text() {
     echo -e "${PURPLE}DESCRIÇÃO GERAL:${NC}"
     echo -e "  Esta ferramenta é um auditor de infraestrutura DNS projetado para validar a"
     echo -e "  confiabilidade, consistência e performance de servidores autoritativos e recursivos."
@@ -162,9 +155,11 @@ show_help() {
     echo -e "  ${GREEN}-n <arquivo>${NC}   Define arquivo CSV de domínios (Padrão: ${GRAY}domains_tests.csv${NC})"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
     echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
-
+    echo -e ""
     echo -e "  ${GREEN}-s${NC}            Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)."
     echo -e "  ${GREEN}-j${NC}            Gera saída em JSON estruturado (.json)."
+    echo -e "  ${GRAY}Nota: O uso de -s ou -j desabilita o Relatório Completo padrão, a menos que configurado o contrário.${NC}"
+    echo -e ""
     echo -e "  ${GREEN}-t${NC}            Habilita testes de conectividade TCP."
     echo -e "  ${GREEN}-d${NC}            Habilita validação DNSSEC."
     echo -e "  ${GREEN}-x${NC}            Habilita teste de transferência de zona (AXFR)."
@@ -253,7 +248,6 @@ show_help() {
     echo -e "  ${PURPLE}~${NC} (Til)       = Divergência (O servidor mudou a resposta durante o teste)."
     echo -e "  ${RED}x${NC} (Xis)        = Falha Crítica (Timeout, Erro de Conexão, REFUSED)."
     echo -e "  ${RED}T${NC} / ${GREEN}T${NC}        = Status do Teste TCP (Falha/Sucesso)."
-
     echo -e "  ${RED}D${NC} / ${GREEN}D${NC} / ${GRAY}D${NC}    = Status do Teste DNSSEC (Falha/Sucesso/Ausente)."
     echo -e ""
     echo -e "  ${BLUE}--- LEGENDAS DE SEGURANÇA ---${NC}"
@@ -261,6 +255,15 @@ show_help() {
     echo -e "  ${RED}REVEALED/ALLOWED/OPEN${NC} = Risco (Falha de Segurança)"
     echo -e "  ${GRAY}TIMEOUT/ERROR${NC}       = Erro de Rede (Inconclusivo)"
     echo -e ""
+}
+
+show_help() {
+    clear
+    echo -e "${BLUE}==============================================================================${NC}"
+    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA v${SCRIPT_VERSION}        ${NC}"
+    echo -e "${BLUE}==============================================================================${NC}"
+    echo -e ""
+    print_help_text
     echo -e "${BLUE}==============================================================================${NC}"
 }
 
@@ -276,16 +279,19 @@ generate_help_html() {
     # CYAN -> #06b6d4 (Cyan)
     # GRAY -> #94a3b8 (Secondary)
     
-    help_content=$(show_help | \
+    # Define ESC char for cleaner regex
+    local ESC=$(printf '\033')
+    
+    help_content=$(print_help_text | \
         sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' | \
-        sed "s/$(echo -e "\033[0;34m")/<span style='color:#3b82f6'>/g" | \
-        sed "s/$(echo -e "\033[0;32m")/<span style='color:#10b981'>/g" | \
-        sed "s/$(echo -e "\033[1;33m")/<span style='color:#f59e0b'>/g" | \
-        sed "s/$(echo -e "\033[0;31m")/<span style='color:#ef4444'>/g" | \
-        sed "s/$(echo -e "\033[0;35m")/<span style='color:#d946ef'>/g" | \
-        sed "s/$(echo -e "\033[0;36m")/<span style='color:#06b6d4'>/g" | \
-        sed "s/$(echo -e "\033[0;90m")/<span style='color:#94a3b8'>/g" | \
-        sed "s/$(echo -e "\033[0m")/<\/span>/g")
+        sed "s/${ESC}\[0;34m/<span style='color:#3b82f6'>/g" | \
+        sed "s/${ESC}\[0;32m/<span style='color:#10b981'>/g" | \
+        sed "s/${ESC}\[1;33m/<span style='color:#f59e0b'>/g" | \
+        sed "s/${ESC}\[0;31m/<span style='color:#ef4444'>/g" | \
+        sed "s/${ESC}\[0;35m/<span style='color:#d946ef'>/g" | \
+        sed "s/${ESC}\[0;36m/<span style='color:#06b6d4'>/g" | \
+        sed "s/${ESC}\[0;90m/<span style='color:#94a3b8'>/g" | \
+        sed "s/${ESC}\[0m/<\/span>/g")
     
     cat > "logs/temp_help_$$.html" << EOF
         <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
@@ -311,12 +317,11 @@ print_execution_summary() {
     echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
     echo -e "  🔄 Consistência  : ${YELLOW}${CONSISTENCY_CHECKS} tentativas${NC}"
     echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
-    echo -e "  🔍 Check BIND Ver: ${CYAN}${CHECK_BIND_VERSION}${NC}"
     echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT, Timeout: ${PING_TIMEOUT}s)${NC}"
     echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
     echo -e "  🔐 DNSSEC Check  : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
     echo -e "  🛤️ Trace Check   : ${CYAN}${ENABLE_TRACE_CHECK}${NC}"
-    echo -e "  🛡️ Ver Check     : ${CYAN}${CHECK_BIND_VERSION}${NC}"
+    echo -e "  🛡️ Version Check : ${CYAN}${CHECK_BIND_VERSION}${NC}"
     echo -e "  🛡️ AXFR Check    : ${CYAN}${ENABLE_AXFR_CHECK}${NC}"
     echo -e "  🛡️ Recurse Check : ${CYAN}${ENABLE_RECURSION_CHECK}${NC}"
     echo -e "  🛡️ SOA Sync Check: ${CYAN}${ENABLE_SOA_SERIAL_CHECK}${NC}"
@@ -340,7 +345,8 @@ print_execution_summary() {
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
     [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
-    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC} (Config: ${ENABLE_SIMPLE_REPORT})"
+    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
+    [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]] && echo -e "  ⚠️  ${YELLOW}Nenhum relatório selecionado? (Configurar e rodar)${NC}"
     [[ "$GENERATE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
@@ -455,6 +461,8 @@ interactive_configuration() {
         ask_boolean "Checar versão BIND (chaos)?" "CHECK_BIND_VERSION"
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
+        ask_boolean "Gerar relatório HTML Detalhado?" "ENABLE_FULL_REPORT"
+        ask_boolean "Gerar relatório HTML Simplificado?" "ENABLE_SIMPLE_REPORT"
         ask_boolean "Gerar relatório JSON?" "GENERATE_JSON_REPORT"
         
         echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
@@ -484,6 +492,19 @@ interactive_configuration() {
         ask_boolean "Habilitar Cores no Terminal?" "COLOR_OUTPUT"
         
         echo -e "\n${GREEN}Configurações atualizadas!${NC}"
+        
+        # Apply Logic for Interactive Changes
+        GENERATE_FULL_REPORT="${ENABLE_FULL_REPORT}"
+        GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT}"
+        # JSON is already direct
+        
+        # Fallback Logic (Prevent user from disabling everything without realizing)
+        if [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]]; then
+             echo -e "\n${YELLOW}⚠️  Aviso: Nenhum relatório foi selecionado. Reativando Relatório Completo por padrão.${NC}"
+             GENERATE_FULL_REPORT="true"
+             ENABLE_FULL_REPORT="true"
+        fi
+
         print_execution_summary
     fi
 }
@@ -1419,26 +1440,28 @@ generate_security_html() {
         sec_content=$(cat "$TEMP_SEC_ROWS")
         
         # Simple Mode
-        cat >> "$TEMP_SECURITY_SIMPLE" << EOF
-        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
-             <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
-             <div class="table-responsive" style="padding:15px;">
-             <table>
-                <thead>
-                    <tr>
-                        <th>Servidor</th>
-                        <th>Versão (Privacy)</th>
-                        <th>AXFR (Zone Transfer)</th>
-                        <th>Recursão (Open Relay)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    $sec_content
-                </tbody>
-             </table>
-             </div>
-        </details>
+        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            cat >> "$TEMP_SECURITY_SIMPLE" << EOF
+            <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
+                 <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
+                 <div class="table-responsive" style="padding:15px;">
+                 <table>
+                    <thead>
+                        <tr>
+                            <th>Servidor</th>
+                            <th>Versão (Privacy)</th>
+                            <th>AXFR (Zone Transfer)</th>
+                            <th>Recursão (Open Relay)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        $sec_content
+                    </tbody>
+                 </table>
+                 </div>
+            </details>
 EOF
+        fi
 
         # Full Mode (Uses same content for now, maybe add raw logs details later if needed)
         # Full Mode: Overwrite TEMP_SECURITY with the final HTML block
@@ -1754,7 +1777,7 @@ run_ping_diagnostics() {
         fi
 
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING_SIMPLE"
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING_SIMPLE"
         fi
         
         if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
@@ -1792,7 +1815,9 @@ run_trace_diagnostics() {
     done
 
     echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
-    echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE_SIMPLE"
+    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE_SIMPLE"
+    fi
 
     local trace_id=0
     for ip in "${unique_ips[@]}"; do
@@ -1854,7 +1879,10 @@ run_trace_diagnostics() {
         fi
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
-    echo "</tbody></table>" >> "$TEMP_TRACE_SIMPLE"
+    echo "</tbody></table>" >> "$TEMP_TRACE"
+    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        echo "</tbody></table>" >> "$TEMP_TRACE_SIMPLE"
+    fi
 }
 
 
@@ -2288,9 +2316,11 @@ process_tests() {
         cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
         echo "</details>" >> "$TEMP_MATRIX"
 
-        echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX_SIMPLE"
-        cat "$TEMP_DOMAIN_BODY_SIMPLE" >> "$TEMP_MATRIX_SIMPLE"
-        echo "</details>" >> "$TEMP_MATRIX_SIMPLE"
+        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX_SIMPLE"
+            cat "$TEMP_DOMAIN_BODY_SIMPLE" >> "$TEMP_MATRIX_SIMPLE"
+            echo "</details>" >> "$TEMP_MATRIX_SIMPLE"
+        fi
         
         echo ""
     done < "$FILE_DOMAINS"
@@ -2401,17 +2431,26 @@ main() {
     # Define cleanup trap
     trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" 2>/dev/null' EXIT
 
-    GENERATE_FULL_REPORT="true"
+    # Initialize Flags based on Config
+    GENERATE_FULL_REPORT="${ENABLE_FULL_REPORT:-true}"
     GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT:-false}"
-    # JSON Default comes from config file now
-    
+    # JSON Default comes from config file now (GENERATE_JSON_REPORT)
+
     while getopts ":n:g:lhyjstdxr" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
         l) GENERATE_LOG_TEXT="true" ;; 
         y) INTERACTIVE_MODE="false" ;; 
-        s) GENERATE_FULL_REPORT="false"; GENERATE_SIMPLE_REPORT="true" ;; 
-        j) GENERATE_JSON_REPORT="true" ;;
+        s) 
+            GENERATE_SIMPLE_REPORT="true" 
+            # Per user request: If -s is chosen, disable default full report
+            GENERATE_FULL_REPORT="false"
+            ;; 
+        j) 
+            GENERATE_JSON_REPORT="true" 
+            # Per user request: If -j is chosen, disable default full report
+            GENERATE_FULL_REPORT="false"
+            ;;
         t) ENABLE_TCP_CHECK="true" ;;
         d) ENABLE_DNSSEC_CHECK="true" ;;
         x) ENABLE_AXFR_CHECK="true" ;;
@@ -2419,6 +2458,15 @@ main() {
         h) show_help; exit 0 ;; 
         *) echo "Opção inválida"; exit 1 ;; 
     esac; done
+
+    # Fallback Logic: If everything is False, Default to Full
+    if [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]]; then
+        # Check if it was because of user CLI or Config?
+        # User requirement: "caso o usuário deixe as três opções [...] como false ... gera o html detalhado"
+        # This covers that.
+        [[ "$INTERACTIVE_MODE" == "false" ]] && echo "Info: Nenhum formato selecionado. Gerando HTML Detalhado (Padrão)."
+        GENERATE_FULL_REPORT="true"
+    fi
 
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     init_log_file

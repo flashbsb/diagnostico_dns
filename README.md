@@ -112,32 +112,36 @@ CLOUDFLARE;Resolver Publico Rapido;recursive;2;1.1.1.1,1.0.0.1
 AD_INTERNO;Active Directory Corp;mixed;1;192.168.10.5,192.168.10.6
 ```
 ### 2\. `diagnostico.conf` (Ajustes Finos)
-
-Arquivo opcional para definir defaults (se não quiser usar o menu interativo toda vez).
-
-```bash
-ENABLE_TCP_CHECK="true"      # Testa suporte a TCP/53
-ENABLE_DNSSEC_CHECK="true"   # Testa validação DNSSEC
-ENABLE_AXFR_CHECK="true"     # Testa transferência de zona (RISCO)
-ENABLE_RECURSION_CHECK="true"# Testa recursão aberta (RISCO)
-ENABLE_SOA_SERIAL_CHECK="true" # Valida consistência de Serial SOA
-ENABLE_TRACE_CHECK="true"    # Executa traceroute (pode ser lento)
-GENERATE_JSON_REPORT="false"   # Gera relatório JSON (Padrão: false)
-
-# Comportamento
-VALIDATE_CONNECTIVITY="true" # Testa porta 53 antes do dig
-ONLY_TEST_ACTIVE_GROUPS="true" # Otimização: Testar apenas IPs usados
-VERBOSE="false"              # Logs detalhados no terminal
-GENERATE_LOG_TEXT="false"    # Gera log .log além do HTML
-TIMEOUT=4                    # Timeout global
-LOG_PREFIX="dnsdiag"         # Prefixo dos arquivos de log
-
-# Ajustes do DIG
-DEFAULT_DIG_OPTIONS="...flags..."
-RECURSIVE_DIG_OPTIONS="...flags..."
-```
-
-### 3\. `domains_tests.csv` (Suas Perguntas)
+ 
+ Arquivo opcional para definir defaults (se não quiser usar o menu interativo toda vez).
+ 
+ ```bash
+ ENABLE_TCP_CHECK="true"      # Testa suporte a TCP/53
+ ENABLE_DNSSEC_CHECK="true"   # Testa validação DNSSEC
+ ENABLE_AXFR_CHECK="true"     # Testa transferência de zona (RISCO)
+ ENABLE_RECURSION_CHECK="true"# Testa recursão aberta (RISCO)
+ ENABLE_SOA_SERIAL_CHECK="true" # Valida consistência de Serial SOA
+ ENABLE_TRACE_CHECK="true"    # Executa traceroute (pode ser lento)
+ 
+ # Relatórios
+ ENABLE_FULL_REPORT="true"    # Gera relatório HTML Detalhado (Padrão: true)
+ ENABLE_SIMPLE_REPORT="false" # Gera relatório HTML Simplificado (Padrão: false)
+ GENERATE_JSON_REPORT="false" # Gera relatório JSON (Padrão: false)
+ 
+ # Comportamento
+ VALIDATE_CONNECTIVITY="true" # Testa porta 53 antes do dig
+ ONLY_TEST_ACTIVE_GROUPS="true" # Otimização: Testar apenas IPs usados
+ VERBOSE="false"              # Logs detalhados no terminal
+ GENERATE_LOG_TEXT="false"    # Gera log .log além do HTML
+ TIMEOUT=4                    # Timeout global
+ LOG_PREFIX="dnsdiag"         # Prefixo dos arquivos de log
+ 
+ # Ajustes do DIG
+ DEFAULT_DIG_OPTIONS="...flags..."
+ RECURSIVE_DIG_OPTIONS="...flags..."
+ ```
+ 
+ ### 3\. `domains_tests.csv` (Suas Perguntas)
 
 Define **O QUE** você vai perguntar e para quem.
 
