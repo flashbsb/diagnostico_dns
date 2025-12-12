@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.22.3
-# "fix soa color"
+# Versão: 9.22.6
+# "Fixing HTML Visuals & Interactions"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.22.3"
+SCRIPT_VERSION="9.22.6"
 
 
 # Carrega configurações externas
@@ -950,18 +950,34 @@ EOF
 
     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="border-color: #3b82f6;">
-                <span class="card-num" style="color: #60a5fa;">${TCP_SUCCESS} <small style="font-size:0.4em; color:#94a3b8;">/ $((${TCP_SUCCESS} + ${TCP_FAIL}))</small></span>
-                <span class="card-label">TCP Checks</span>
+            <div class="card" style="border-left: 4px solid var(--accent-info);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                     <span class="card-label">TCP Checks</span>
+                     <span style="font-size:1.5rem;">🔌</span>
+                </div>
+                <div style="margin-top:10px;">
+                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${TCP_SUCCESS}</span> <span style="font-size:0.85em; color:var(--accent-success);">OK</span>
+                     <span style="color:#666;">/</span>
+                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${TCP_FAIL}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Fail</span>
+                </div>
             </div>
 EOF
     fi
 
     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="border-color: #8b5cf6;">
-                <span class="card-num" style="color: #a78bfa;">${DNSSEC_SUCCESS} <small style="font-size:0.4em; color:#94a3b8;">/ ${DNSSEC_ABSENT} / $((${DNSSEC_SUCCESS} + ${DNSSEC_FAIL} + ${DNSSEC_ABSENT}))</small></span>
-                <span class="card-label">DNSSEC Checks</span>
+            <div class="card" style="border-left: 4px solid #8b5cf6;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                     <span class="card-label">DNSSEC Checks</span>
+                     <span style="font-size:1.5rem;">🔐</span>
+                </div>
+                <div style="margin-top:10px;">
+                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${DNSSEC_SUCCESS}</span> <span style="font-size:0.85em; color:var(--accent-success);">Valid</span>
+                     <span style="color:#666;">/</span>
+                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${DNSSEC_ABSENT}</span> <span style="font-size:0.85em; color:var(--text-secondary);">Absent</span>
+                     <span style="color:#666;">/</span>
+                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${DNSSEC_FAIL}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Fail</span>
+                </div>
             </div>
 EOF
     fi
@@ -2073,7 +2089,7 @@ process_tests() {
 
                                 echo "{ \"domain\": \"$domain\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec\", \"mode\": \"$mode\", \"status\": \"$final_status\", \"latency_ms\": $final_dur, \"consistent\": \"$consistent_count/$CONSISTENCY_CHECKS\", \"divergent\": $is_divergent, \"tcp_check\": \"$j_tcp_status\", \"dnssec_check\": \"$j_sec_status\", \"soa_serial\": $j_serial }," >> "$TEMP_JSON_DNS"
                             fi
-                        done
+
                             # Capture current serial for this server
                             RES_SOA_SERIAL[$srv]=""
                             [[ -n "$current_serial" ]] && RES_SOA_SERIAL[$srv]="$current_serial"
@@ -2131,7 +2147,9 @@ process_tests() {
                                            badge_color="success" # Green if consistent
                                       fi
                                       
-                                      s_badges+=" <span class='badge-mini $badge_color' title='SOA Serial: $myserial' style='width:auto; padding:0 4px; font-family:monospace;'>#${myserial: -4}</span>"
+                                      # Make Clickable
+                                      local click_handler="onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\""
+                                      s_badges+=" <a href='#' $click_handler><span class='badge-mini $badge_color' title='SOA Serial: $myserial' style='width:auto; padding:0 4px; font-family:monospace;'>#${myserial: -4}</span></a>"
                                   else
                                       # No Serial Found?
                                       # If status is NOERROR/OK but no serial, show "NO DATA"?
@@ -2151,7 +2169,13 @@ process_tests() {
                              fi
 
                              if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
-                                echo "<td><a href=\"#\" onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]} ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges <span class=\"time-val\" style='margin-left:4px'>${RES_DUR[$srv]}ms</span></div></a></td>" >> "$TEMP_GROUP_BODY"
+                                # Make Latency Clickable
+                                local lat_display="<a href='#' onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" style='color:inherit; text-decoration:none; border-bottom:1px dotted #ccc; cursor:pointer;'>${RES_DUR[$srv]}ms</a>"
+                                
+                                # Status Icon & Text Link
+                                local status_display="<a href='#' onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" style='text-decoration:none; color:inherit;'>${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]}</a>"
+                                
+                                echo "<td><div class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">$status_display ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges <span class=\"time-val\" style='margin-left:4px'>$lat_display</span></div></div></td>" >> "$TEMP_GROUP_BODY"
                                 local safe_log=$(echo "${RES_LOG_CONTENT[$srv]}" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                                 echo "<div id=\"${RES_UNIQUE_ID[$srv]}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
                                 echo "<div id=\"${RES_UNIQUE_ID[$srv]}_title\" style=\"display:none\">#$test_id ${RES_FINAL_STATUS[$srv]} | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
@@ -2168,10 +2192,13 @@ process_tests() {
                         fi
 
                         
+
                         echo "</tr>" >> "$TEMP_GROUP_BODY"
                         echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                     done
                 done
+            done
+            # Close table AFTER all modes and targets are done
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
 
