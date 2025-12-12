@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.22.6
-# "Fixing HTML Visuals & Interactions"
+# Versão: 9.22.7
+# "Fix HTML Visuals for Down Servers"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.22.6"
+SCRIPT_VERSION="9.22.7"
 
 
 # Carrega configurações externas
@@ -1984,14 +1984,20 @@ process_tests() {
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}";
                                     
-                                    [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell status-fail\">❌ DOWN</a></td>" >> "$TEMP_GROUP_BODY"
-                                    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo "<td><div class=\"status-cell status-fail\">❌ DOWN</div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
-
-                                    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
-                                         local safe_log=$(echo "Server $srv is unreachable via ping." | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                                         echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
-                                         echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id DOWN | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
-                                    fi
+                                    # Store results for DOWN state instead of writing HTML immediately
+                                    RES_FINAL_CLASS[$srv]="status-fail"
+                                    RES_FINAL_STATUS[$srv]="DOWN"
+                                    RES_ICON[$srv]="❌"
+                                    RES_BADGE[$srv]=""
+                                    RES_DUR[$srv]=""
+                                    RES_BASE_BADGES[$srv]=""
+                                    RES_SOA_SERIAL[$srv]=""
+                                    
+                                    local safe_log=$(echo "Server $srv is unreachable via ping." | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                    RES_LOG_CONTENT[$srv]="$safe_log"
+                                    RES_UNIQUE_ID[$srv]="$unique_id"
+                                    
+                                    # Skip to next server (do not run dig/check consistency)
                                     continue
                                 fi
                             fi
@@ -2169,8 +2175,11 @@ process_tests() {
                              fi
 
                              if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
-                                # Make Latency Clickable
-                                local lat_display="<a href='#' onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" style='color:inherit; text-decoration:none; border-bottom:1px dotted #ccc; cursor:pointer;'>${RES_DUR[$srv]}ms</a>"
+                                # Make Latency Clickable (Conditional "ms")
+                                local lat_display=""
+                                if [[ -n "${RES_DUR[$srv]}" ]]; then
+                                     lat_display="<a href='#' onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" style='color:inherit; text-decoration:none; border-bottom:1px dotted #ccc; cursor:pointer;'>${RES_DUR[$srv]}ms</a>"
+                                fi
                                 
                                 # Status Icon & Text Link
                                 local status_display="<a href='#' onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" style='text-decoration:none; color:inherit;'>${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]}</a>"
@@ -2182,7 +2191,9 @@ process_tests() {
                              fi
                              
                              if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-                                echo "<td><div class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]} ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges <span class=\"time-val\" style='margin-left:4px'>${RES_DUR[$srv]}ms</span></div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                                local simple_lat=""
+                                [[ -n "${RES_DUR[$srv]}" ]] && simple_lat="<span class=\"time-val\" style='margin-left:4px'>${RES_DUR[$srv]}ms</span>"
+                                echo "<td><div class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]} ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges $simple_lat</div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
                              fi
                         done
                         
