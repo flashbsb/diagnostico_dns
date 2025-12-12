@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.22.1
-# "Limiting Tests to Active Groups"
+# Versão: 9.22.3
+# "fix soa color"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.22.1"
+SCRIPT_VERSION="9.22.3"
 
 
 # Carrega configurações externas
@@ -1951,6 +1951,14 @@ process_tests() {
                         local collected_soa_serials=()
                         local collected_soa_srvs=()
                         
+                        # Buffer Arrays (Associative)
+                        declare -A RES_FINAL_CLASS; declare -A RES_FINAL_STATUS
+                        declare -A RES_BADGE; declare -A RES_DUR
+                        declare -A RES_BASE_BADGES; declare -A RES_ICON
+                        declare -A RES_UNIQUE_ID; declare -A RES_LOG_CONTENT
+                        declare -A RES_SOA_SERIAL
+
+                        
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
                             local unique_id="test_${test_id}"
@@ -2047,26 +2055,7 @@ process_tests() {
                             local icon=""; [[ "$final_class" == "status-ok" ]] && icon="✅"; [[ "$final_class" == "status-warning" ]] && icon="⚠️"
                             [[ "$final_class" == "status-fail" ]] && icon="❌"; [[ "$final_class" == "status-divergent" ]] && icon="🔀"
 
-                            # Append Service Badges
-                            local svc_badges=""
-                            [[ -n "${CACHE_TCP_BADGE[$srv]}" ]] && svc_badges+=" ${CACHE_TCP_BADGE[$srv]}"
-                            [[ -n "${CACHE_SEC_BADGE[$srv]}" ]] && svc_badges+=" ${CACHE_SEC_BADGE[$srv]}"
-                            
-                            # Inject SOA Serial into Badges if exists
-                            if [[ -n "$current_serial" ]]; then
-                                svc_badges+=" <span class='badge-mini neutral' title='SOA Serial: $current_serial' style='width:auto; padding:0 4px; font-family:monospace;'>#${current_serial: -4}</span>"
-                            fi
 
-                            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
-                                echo "<td><a href=\"#\" onclick=\"showLog('$unique_id'); return false;\" class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></a></td>" >> "$TEMP_GROUP_BODY"
-                                local safe_log=$(echo "$attempts_log" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                                echo "<div id=\"${unique_id}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
-                                echo "<div id=\"${unique_id}_title\" style=\"display:none\">#$test_id $final_status | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
-                            fi
-
-                            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-                                echo "<td><div class=\"status-cell $final_class\">$icon $final_status $badge <div style='margin-top:2px;'>$svc_badges <span class=\"time-val\" style='margin-left:4px'>${final_dur}ms</span></div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
-                            fi
                             
                             if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
                                 local j_tcp_status="skipped"
@@ -2085,18 +2074,41 @@ process_tests() {
                                 echo "{ \"domain\": \"$domain\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec\", \"mode\": \"$mode\", \"status\": \"$final_status\", \"latency_ms\": $final_dur, \"consistent\": \"$consistent_count/$CONSISTENCY_CHECKS\", \"divergent\": $is_divergent, \"tcp_check\": \"$j_tcp_status\", \"dnssec_check\": \"$j_sec_status\", \"soa_serial\": $j_serial }," >> "$TEMP_JSON_DNS"
                             fi
                         done
+                            # Capture current serial for this server
+                            RES_SOA_SERIAL[$srv]=""
+                            [[ -n "$current_serial" ]] && RES_SOA_SERIAL[$srv]="$current_serial"
+
+                            # Store individual results for post-processing buffer
+                            RES_FINAL_CLASS[$srv]="$final_class"
+                            RES_FINAL_STATUS[$srv]="$final_status"
+                            RES_BADGE[$srv]="$badge"
+                            RES_DUR[$srv]="$final_dur"
+                            
+                            # Base Badges (TCP/SEC) - exclude SOA for now
+                            local base_svc_badges=""
+                            [[ -n "${CACHE_TCP_BADGE[$srv]}" ]] && base_svc_badges+=" ${CACHE_TCP_BADGE[$srv]}"
+                            [[ -n "${CACHE_SEC_BADGE[$srv]}" ]] && base_svc_badges+=" ${CACHE_SEC_BADGE[$srv]}"
+                            RES_BASE_BADGES[$srv]="$base_svc_badges"
+                            
+                            RES_ICON[$srv]="$icon"
+                            RES_UNIQUE_ID[$srv]="$unique_id"
+                            RES_LOG_CONTENT[$srv]="$attempts_log"
+                            
+                            # Clean up old log logic (moved to post-loop)
+                            
+                        done # End Server Loop
                         
-                        # Post-Loop SOA Analysis for this Group/Domain
+                        # --- POST-LOOP ANALYSIS: SOA DIVERGENCE & HTML GENERATION ---
+                        local soa_divergence_detected="false"
+                        local unique_serials=()
+                        
                         if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" && "${rec,,}" == "soa" && ${#collected_soa_serials[@]} -ge 1 ]]; then
-                             local unique_serials=($(echo "${collected_soa_serials[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+                             unique_serials=($(echo "${collected_soa_serials[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
                              if [[ ${#unique_serials[@]} -gt 1 ]]; then
+                                  soa_divergence_detected="true"
                                   SOA_SYNC_FAIL+=1
                                   local warning_msg="SOA DIV: ${unique_serials[*]}"
                                   echo -ne " ${RED}[${warning_msg}]${NC}"
-                                  
-                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
-                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
-                                  
                                   log_entry "SOA SERIAL DIVERGENCE: Domain=$target Group=$grp Serials=${unique_serials[*]}"
                              else
                                   SOA_SYNC_OK+=1
@@ -2104,11 +2116,62 @@ process_tests() {
                              fi
                         fi
                         
+                        # Apply Colors and Write HTML
+                        for srv in "${srv_list[@]}"; do
+                             local s_badges="${RES_BASE_BADGES[$srv]}"
+                             local myserial="${RES_SOA_SERIAL[$srv]}"
+                             
+                             # Handle SOA Badge Coloring
+                             if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" && "${rec,,}" == "soa" ]]; then
+                                  if [[ -n "$myserial" ]]; then
+                                      local badge_color="neutral" # Default (Sync OK or Single)
+                                      if [[ "$soa_divergence_detected" == "true" ]]; then
+                                           badge_color="fail" # Red if divergent
+                                      else
+                                           badge_color="success" # Green if consistent
+                                      fi
+                                      
+                                      s_badges+=" <span class='badge-mini $badge_color' title='SOA Serial: $myserial' style='width:auto; padding:0 4px; font-family:monospace;'>#${myserial: -4}</span>"
+                                  else
+                                      # No Serial Found?
+                                      # If status is NOERROR/OK but no serial, show "NO DATA"?
+                                      # If status is already fail (e.g. REFUSED), standard status cell handles it.
+                                      # But user requested: "caso não tenha o registro soa, informe com o texto o retorno do status do dig"
+                                      # The standard status cell ALREADY shows "REFUSED", "SERVFAIL", etc.
+                                      # If it is NOERROR but no serial, we might want to highlight "EMPTY".
+                                      if [[ "${RES_FINAL_STATUS[$srv]}" == "NOERROR" || "${RES_FINAL_STATUS[$srv]}" == "OK" ]]; then
+                                           # It was successful but extraction failed (maybe empty answer)
+                                           # Modify final status display for clarity?
+                                           # Check if answer count was 0
+                                           # Actually, standard logic sets iter_status=NOANSWER if answer=0.
+                                           # So if Status is OK/NOERROR, we probably should have a serial.
+                                           :
+                                      fi
+                                  fi
+                             fi
+
+                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                                echo "<td><a href=\"#\" onclick=\"showLog('${RES_UNIQUE_ID[$srv]}'); return false;\" class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]} ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges <span class=\"time-val\" style='margin-left:4px'>${RES_DUR[$srv]}ms</span></div></a></td>" >> "$TEMP_GROUP_BODY"
+                                local safe_log=$(echo "${RES_LOG_CONTENT[$srv]}" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                echo "<div id=\"${RES_UNIQUE_ID[$srv]}_content\" style=\"display:none\"><pre>$safe_log</pre></div>" >> "$TEMP_DETAILS"
+                                echo "<div id=\"${RES_UNIQUE_ID[$srv]}_title\" style=\"display:none\">#$test_id ${RES_FINAL_STATUS[$srv]} | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
+                             fi
+                             
+                             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                                echo "<td><div class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]} ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges <span class=\"time-val\" style='margin-left:4px'>${RES_DUR[$srv]}ms</span></div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                             fi
+                        done
+                        
+                        if [[ "$soa_divergence_detected" == "true" ]]; then
+                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
+                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        fi
+
+                        
                         echo "</tr>" >> "$TEMP_GROUP_BODY"
                         echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                     done
                 done
-            done
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
 
