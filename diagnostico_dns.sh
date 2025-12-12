@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.22.7
-# "Fix HTML Visuals for Down Servers"
+# Versão: 9.23.1
+# "JSON Optimization & Help Colors"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.22.7"
+SCRIPT_VERSION="9.23.1"
 
 
 # Carrega configurações externas
@@ -119,15 +119,17 @@ init_html_parts() {
     > "$TEMP_SECURITY"
     > "$TEMP_SECURITY_SIMPLE"
     
-    # JSON Temp Files
-    TEMP_JSON_Ping="logs/temp_json_ping_$$.json"
-    TEMP_JSON_DNS="logs/temp_json_dns_$$.json"
-    TEMP_JSON_Sec="logs/temp_json_sec_$$.json"
-    TEMP_JSON_Trace="logs/temp_json_trace_$$.json"
-    > "$TEMP_JSON_Ping"
-    > "$TEMP_JSON_DNS"
-    > "$TEMP_JSON_Sec"
-    > "$TEMP_JSON_Trace"
+    # JSON Temp Files - Conditional Creation
+    if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+        TEMP_JSON_Ping="logs/temp_json_ping_$$.json"
+        TEMP_JSON_DNS="logs/temp_json_dns_$$.json"
+        TEMP_JSON_Sec="logs/temp_json_sec_$$.json"
+        TEMP_JSON_Trace="logs/temp_json_trace_$$.json"
+        > "$TEMP_JSON_Ping"
+        > "$TEMP_JSON_DNS"
+        > "$TEMP_JSON_Sec"
+        > "$TEMP_JSON_Trace"
+    fi
 }
 # ==============================================
 # HELP & BANNER
@@ -221,6 +223,27 @@ show_help() {
     echo -e "  ${CYAN}PING_PACKET_LOSS_LIMIT${NC} (Default: 10%)"
     echo -e "      Define a porcentagem aceitável de perda de pacotes antes de marcar como UNSTABLE."
     echo -e ""
+    echo -e "  ${CYAN}ENABLE_TRACE_CHECK${NC} (true/false)"
+    echo -e "      Executa traceroute para cada IP alvo para identificar o caminho de rede."
+    echo -e ""
+    echo -e "  ${CYAN}VALIDATE_CONNECTIVITY${NC} (true/false)"
+    echo -e "      Testa se a porta 53 (TCP/UDP) está aberta antes de tentar consultas DNS."
+    echo -e "      Evita timeouts desnecessários em servidores offline."
+    echo -e ""
+    echo -e "  ${CYAN}ONLY_TEST_ACTIVE_GROUPS${NC} (true/false)"
+    echo -e "      Se true, executa testes de Ping/Trace/Security APENAS nos servidores que"
+    echo -e "      estão sendo usados pelos domínios do CSV de testes."
+    echo -e ""
+    echo -e "  ${CYAN}LOG_PREFIX${NC}"
+    echo -e "      Prefixo dos arquivos de log gerados na pasta logs/."
+    echo -e ""
+    echo -e "  ${CYAN}DIG_OPTIONS (DEFAULT/RECURSIVE)${NC}"
+    echo -e "      Opções avançadas passadas ao binário 'dig'. Útil para ajustes de buffer,"
+    echo -e "      cookies ou flag +cd."
+    echo -e ""
+    echo -e "  ${CYAN}GENERATE_LOG_TEXT / VERBOSE${NC}"
+    echo -e "      Controle de verbosidade e geração de log forense em texto plano (.log)."
+    echo -e ""
     echo -e "  ${CYAN}COLOR_OUTPUT${NC} (true/false)"
     echo -e "      Habilita ou desabilita cores no terminal ANSI."
     echo -e ""
@@ -243,8 +266,26 @@ show_help() {
 
 generate_help_html() {
     local help_content
-    # Captura a saída da função show_help, removendo códigos de cores ANSI para o HTML
-    help_content=$(show_help | sed 's/\x1b\[[0-9;]*m//g' | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    # Captura a saída da função show_help, convertendo cores ANSI para HTML
+    # Mapa de Cores:
+    # BLUE -> #3b82f6 (Accent Primary)
+    # GREEN -> #10b981 (Success)
+    # YELLOW -> #f59e0b (Warning) 
+    # RED -> #ef4444 (Danger)
+    # PURPLE -> #d946ef (Divergent/Header)
+    # CYAN -> #06b6d4 (Cyan)
+    # GRAY -> #94a3b8 (Secondary)
+    
+    help_content=$(show_help | \
+        sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' | \
+        sed "s/$(echo -e "\033[0;34m")/<span style='color:#3b82f6'>/g" | \
+        sed "s/$(echo -e "\033[0;32m")/<span style='color:#10b981'>/g" | \
+        sed "s/$(echo -e "\033[1;33m")/<span style='color:#f59e0b'>/g" | \
+        sed "s/$(echo -e "\033[0;31m")/<span style='color:#ef4444'>/g" | \
+        sed "s/$(echo -e "\033[0;35m")/<span style='color:#d946ef'>/g" | \
+        sed "s/$(echo -e "\033[0;36m")/<span style='color:#06b6d4'>/g" | \
+        sed "s/$(echo -e "\033[0;90m")/<span style='color:#94a3b8'>/g" | \
+        sed "s/$(echo -e "\033[0m")/<\/span>/g")
     
     cat > "logs/temp_help_$$.html" << EOF
         <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
@@ -350,7 +391,6 @@ init_log_file() {
         echo "  Timeout: $TIMEOUT, Sleep: $SLEEP, ConnCheck: $VALIDATE_CONNECTIVITY"
         echo "  Consistency: $CONSISTENCY_CHECKS attempts"
         echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
-        echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
         echo "  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK, Trace=$ENABLE_TRACE_CHECK"
         echo "  Security: Version=$CHECK_BIND_VERSION, AXFR=$ENABLE_AXFR_CHECK, Recursion=$ENABLE_RECURSION_CHECK, SOA_Sync=$ENABLE_SOA_SERIAL_CHECK
 "
@@ -415,6 +455,7 @@ interactive_configuration() {
         ask_boolean "Checar versão BIND (chaos)?" "CHECK_BIND_VERSION"
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
+        ask_boolean "Gerar relatório JSON?" "GENERATE_JSON_REPORT"
         
         echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
@@ -2362,7 +2403,7 @@ main() {
 
     GENERATE_FULL_REPORT="true"
     GENERATE_SIMPLE_REPORT="true"
-    GENERATE_JSON_REPORT="false"
+    # JSON Default comes from config file now
     
     while getopts ":n:g:lhyjstdxr" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
