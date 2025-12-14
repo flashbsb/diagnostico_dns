@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>DNS Report v9.9.6 - 20251209_170311</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { color: #ce9178; text-align: center; margin-bottom: 20px; }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(2px); }
+        .modal-content { background-color: #252526; margin: 5% auto; padding: 0; border: 1px solid #444; width: 80%; max-width: 1000px; border-radius: 8px; box-shadow: 0 0 30px rgba(0,0,0,0.7); animation: slideDown 0.3s; }
+        @keyframes slideDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header { padding: 15px 20px; background: #333; border-bottom: 1px solid #444; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
+        .close-btn { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; transition: 0.2s; line-height: 1; }
+        .close-btn:hover { color: #f44747; }
+        #modalTitle { font-weight: bold; font-family: monospace; color: #9cdcfe; font-size: 1.1em; }
+        #modalText { font-family: 'Consolas', 'Courier New', monospace; white-space: pre-wrap; color: #d4d4d4; background: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #333; font-size: 0.9em; margin: 0; }
+        
+        .dashboard { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 10px; }
+        .card { background: #252526; padding: 15px; border-radius: 6px; text-align: center; border-bottom: 3px solid #444; }
+        .card-num { font-size: 2em; font-weight: bold; display: block; }
+        .card-label { font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        .st-total { border-color: #007acc; } .st-total .card-num { color: #007acc; }
+        .st-ok { border-color: #4ec9b0; } .st-ok .card-num { color: #4ec9b0; }
+        .st-warn { border-color: #ffcc02; } .st-warn .card-num { color: #ffcc02; }
+        .st-fail { border-color: #f44747; } .st-fail .card-num { color: #f44747; }
+        .st-div { border-color: #d16d9e; } .st-div .card-num { color: #d16d9e; }
+        
+        .timing-strip { background: #252526; padding: 10px; border-radius: 6px; border-left: 5px solid #666; margin-bottom: 20px; display: flex; justify-content: space-around; font-family: monospace; }
+        .timing-item { text-align: center; }
+        .timing-label { display: block; font-size: 0.8em; color: #888; margin-bottom: 3px; }
+        .timing-val { font-weight: bold; color: #fff; }
+
+        
+        /* Legenda de Criterios */
+        .criteria-legend { margin-top: 10px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; border: 1px dashed #444; }
+        .criteria-item { margin-bottom: 5px; font-family: monospace; }
+        .crit-true { color: #f44747; font-weight: bold; }
+        .crit-false { color: #4ec9b0; font-weight: bold; }
+        
+        /* Disclaimer Collapsible */
+        details.disclaimer-details { margin-bottom: 30px; border: 1px solid #ffcc02; border-left: 5px solid #ffcc02; border-radius: 4px; background: rgba(50, 40, 0, 0.4); }
+        summary.disclaimer-summary { background: rgba(50, 40, 0, 0.6); color: #ffcc02; font-weight: bold; padding: 15px; cursor: pointer; list-style: none; display: flex; align-items: center; }
+        summary.disclaimer-summary:hover { background: rgba(50, 40, 0, 0.8); }
+        summary.disclaimer-summary::after { content: '+'; margin-left: auto; font-size: 1.2em; }
+        details.disclaimer-details[open] summary.disclaimer-summary::after { content: '-'; }
+        .disclaimer-content { padding: 15px; font-size: 0.95em; line-height: 1.5; color: #e0e0e0; border-top: 1px solid rgba(255, 204, 2, 0.3); }
+        .disclaimer-content strong { color: #ffcc02; }
+        .disclaimer-content ul { margin: 5px 0; padding-left: 20px; color: #ccc; }
+        .disclaimer-content li { margin-bottom: 3px; }
+
+        
+        .domain-block { background: #252526; margin-bottom: 20px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); overflow: hidden; }
+        .domain-header { background: #333; padding: 10px 15px; font-weight: bold; border-left: 5px solid #007acc; display: flex; justify-content: space-between; align-items: center; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #3e3e42; font-size: 0.9em; }
+        th { background: #2d2d30; color: #dcdcaa; }
+        .cell-link { text-decoration: none; display: block; width: 100%; height: 100%; cursor: pointer; }
+        .cell-link:hover { background: rgba(255,255,255,0.05); }
+        .status-ok { color: #4ec9b0; }
+        .status-warning { color: #ffcc02; }
+        .status-fail { color: #f44747; font-weight: bold; background: rgba(244, 71, 71, 0.1); }
+        .status-divergent { color: #d16d9e; font-weight: bold; }
+        .time-badge { font-size: 0.75em; color: #808080; margin-left: 5px; }
+        .consistency-badge { font-size: 0.75em; padding: 1px 4px; border-radius: 3px; background: #333; border: 1px solid #555; margin-left: 5px; color: #fff; }
+        .consistency-bad { background: #5a1d1d; border-color: #f44747; color: #f44747; }
+        
+        .tech-section, .ping-section, .config-section { margin-top: 50px; border-top: 3px dashed #3e3e42; padding-top: 20px; }
+        .tech-controls { margin-bottom: 15px; }
+        .btn-ctrl { background: #3e3e42; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-right: 10px; font-size: 0.9em; }
+        .btn-ctrl:hover { background: #007acc; }
+        
+        .config-table td { font-family: monospace; color: #9cdcfe; word-break: break-all; }
+        .config-table th { width: 250px; }
+        
+        details { background: #1e1e1e; margin-bottom: 10px; border: 1px solid #333; border-radius: 4px; }
+        summary { cursor: pointer; padding: 10px; background: #252526; list-style: none; font-family: monospace; }
+        summary:hover { background: #2a2d2e; }
+        summary::-webkit-details-marker { display: none; }
+        .log-header { display: flex; align-items: center; gap: 10px; }
+        .log-id { background: #007acc; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
+        pre { background: #000; color: #ccc; padding: 15px; margin: 0; overflow-x: auto; border-top: 1px solid #333; font-family: 'Consolas', monospace; font-size: 0.85em; }
+        .badge { padding: 2px 5px; border-radius: 3px; font-size: 0.8em; border: 1px solid #444; }
+        
+        .conn-error-block summary { background: #2d0e0e; border-left: 3px solid #f44747; }
+        .conn-error-block summary:hover { background: #3d1414; }
+        
+        .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #333; text-align: center; color: #666; font-size: 0.9em; }
+        .footer a { color: #007acc; text-decoration: none; transition: color 0.3s; }
+        .scroll-top { position: fixed; bottom: 20px; right: 20px; background: #007acc; color: white; padding: 10px; border-radius: 50%; text-decoration: none; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+    </style>
+    <script>
+        function toggleDetails(state) {
+            const elements = document.querySelectorAll('details');
+            elements.forEach(el => el.open = state);
+        }
+        function showLog(id) {
+            var logDetails = document.getElementById(id);
+            if (!logDetails) { console.error("Log ID not found: " + id); return; }
+            var rawText = logDetails.querySelector('pre').innerHTML;
+            var headerText = logDetails.querySelector('summary').innerText;
+            document.getElementById('modalTitle').innerText = headerText;
+            document.getElementById('modalText').innerHTML = rawText;
+            document.getElementById('logModal').style.display = "block";
+        }
+        function closeModal() { document.getElementById('logModal').style.display = "none"; }
+        window.onclick = function(event) { if (event.target == document.getElementById('logModal')) { closeModal(); } }
+        document.addEventListener('keydown', function(event){ if(event.key === "Escape"){ closeModal(); } });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Relatório de Diagnóstico DNS (v9.9.6)</h1>
+        <a name="top"></a>
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="modalTitle">Detalhes do Log</div>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <pre id="modalText"></pre>
+            </div>
+        </div>
+    </div>
+        <div class="dashboard">
+            <div class="card st-total">
+                <span class="card-num">6</span>
+                <span class="card-label">Total Testes</span>
+            </div>
+            <div class="card st-ok">
+                <span class="card-num">6</span>
+                <span class="card-label">Sucesso (100%)</span>
+            </div>
+            <div class="card st-warn">
+                <span class="card-num">0</span>
+                <span class="card-label">Alertas</span>
+            </div>
+            <div class="card st-fail">
+                <span class="card-num">0</span>
+                <span class="card-label">Falhas Críticas</span>
+            </div>
+            <div class="card st-div">
+                <span class="card-num">0</span>
+                <span class="card-label">Divergências</span>
+            </div>
+        </div>
+        <div class="timing-strip">
+            <div class="timing-item">
+                <span class="timing-label">Início</span>
+                <span class="timing-val">09/12/2025 17:03:11</span>
+            </div>
+            <div class="timing-item">
+                <span class="timing-label">Final</span>
+                <span class="timing-val">09/12/2025 17:04:45</span>
+            </div>
+            <div class="timing-item">
+                <span class="timing-label">Tentativas p/ Teste</span>
+                <span class="timing-val">10x</span>
+            </div>
+            <div class="timing-item">
+                <span class="timing-label">Duração Total</span>
+                <span class="timing-val">94s</span>
+            </div>
+        </div>
+        <details class="disclaimer-details">
+            <summary class="disclaimer-summary">⚠️ AVISO DE ISENÇÃO DE RESPONSABILIDADE (CLIQUE PARA EXPANDIR) ⚠️</summary>
+            <div class="disclaimer-content">
+                Este relatório reflete apenas o que <strong>sobreviveu</strong> à viagem de volta para este script, e não necessariamente a Verdade Absoluta do Universo™.<br>
+                Lembre-se que entre o seu terminal e o servidor DNS existe uma selva hostil habitada por:
+                <ul>
+                    <li><strong>Firewalls Paranoicos:</strong> Que bloqueiam até pensamento positivo (e pacotes UDP legítimos).</li>
+                    <li><strong>Middleboxes Criativos:</strong> Filtros de segurança que acham que sua query DNS é um ataque nuclear.</li>
+                    <li><strong>Rate Limits:</strong> Porque ninguém gosta de <em>spam</em>, nem mesmo o servidor.</li>
+                    <li><strong>Balanceamento de Carga:</strong> Onde servidores diferentes respondem com humores diferentes.</li>
+                </ul>
+                
+                <hr style="border: 0; border-top: 1px solid #ffcc02; margin: 15px 0;">
+                
+                <strong>🧐 CRITÉRIOS DE DIVERGÊNCIA ATIVOS (v9.9.6):</strong><br>
+                Além dos erros padrões, este relatório aplicou as seguintes regras de consistência (10 tentativas):
+                <div class="criteria-legend">
+                    <div class="criteria-item">Strict IP Check: <span class="crit-false">false</span> (True = Requer mesmo IP sempre)</div>
+                    <div class="criteria-item">Strict Order Check: <span class="crit-false">false</span> (True = Requer mesma ordem)</div>
+                    <div class="criteria-item">Strict TTL Check: <span class="crit-false">false</span> (True = Requer mesmo TTL)</div>
+                </div>
+                <div style="margin-top:5px; font-size:0.85em; font-style:italic;">
+                    (Se <strong>false</strong>, variações no campo foram ignoradas para evitar divergências irrelevantes em cenários dinâmicos).
+                </div>
+            </div>
+        </details>
+<div class="domain-block"><div class="domain-header"><span>🌐 example.com</span><span class="badge">recursive</span></div>
+<div style="padding:10px; border-bottom:1px solid #333; background:#2d2d30; color:#9cdcfe;">Grupo: GOOGLE</div>
+<table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>8.8.8.8</th>
+<th>8.8.4.4</th>
+</tr></thead><tbody>
+<tr><td><span class="badge">recursive</span> <strong>example.com</strong> <span style="color:#666">(a)</span></td>
+</tr>
+<tr><td><span class="badge">recursive</span> <strong>example.com</strong> <span style="color:#f44747">(TCP)</span></td>
+<td><a href="#" onclick="showLog('test_tcp_3'); return false;" class="cell-link status-ok">✅ OK <span class="time-badge">52ms</span></a></td>
+<td><a href="#" onclick="showLog('test_tcp_4'); return false;" class="cell-link status-ok">✅ OK <span class="time-badge">62ms</span></a></td>
+</tr>
+<tr><td><span class="badge">recursive</span> <strong>example.com</strong> <span style="color:#4ec9b0">(DNSSEC)</span></td>
+<td><a href="#" onclick="showLog('test_dnssec_5'); return false;" class="cell-link status-ok">🔐 OK <span class="time-badge">59ms</span></a></td>
+<td><a href="#" onclick="showLog('test_dnssec_6'); return false;" class="cell-link status-ok">🔐 OK <span class="time-badge">66ms</span></a></td>
+</tr>
+</tbody></table>
+</div>
+    <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
+        <div class="tech-controls">
+            <button class="btn-ctrl" onclick="toggleDetails(true)">➕ Expandir Todos</button>
+            <button class="btn-ctrl" onclick="toggleDetails(false)">➖ Recolher Todos</button>
+        </div>
+    </div>
+        <div class="ping-section">
+             <h2>📡 Latência e Disponibilidade (ICMP)</h2>
+             <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
+<tr><td><span class="badge">[GOOGLE]</span></td><td><strong>8.8.8.8</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>9.441ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #1</summary><pre>PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=255 time=8.22 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=255 time=8.55 ms
+64 bytes from 8.8.8.8: icmp_seq=3 ttl=255 time=21.1 ms
+64 bytes from 8.8.8.8: icmp_seq=4 ttl=255 time=7.61 ms
+64 bytes from 8.8.8.8: icmp_seq=5 ttl=255 time=10.5 ms
+64 bytes from 8.8.8.8: icmp_seq=6 ttl=255 time=6.64 ms
+64 bytes from 8.8.8.8: icmp_seq=7 ttl=255 time=6.54 ms
+64 bytes from 8.8.8.8: icmp_seq=8 ttl=255 time=9.79 ms
+64 bytes from 8.8.8.8: icmp_seq=9 ttl=255 time=7.58 ms
+64 bytes from 8.8.8.8: icmp_seq=10 ttl=255 time=7.82 ms
+
+--- 8.8.8.8 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9010ms
+rtt min/avg/max/mdev = 6.536/9.441/21.132/4.074 ms</pre></details></td></tr>
+<tr><td><span class="badge">[GOOGLE]</span></td><td><strong>8.8.4.4</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>10.259ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #2</summary><pre>PING 8.8.4.4 (8.8.4.4) 56(84) bytes of data.
+64 bytes from 8.8.4.4: icmp_seq=1 ttl=255 time=6.81 ms
+64 bytes from 8.8.4.4: icmp_seq=2 ttl=255 time=13.6 ms
+64 bytes from 8.8.4.4: icmp_seq=3 ttl=255 time=7.77 ms
+64 bytes from 8.8.4.4: icmp_seq=4 ttl=255 time=17.0 ms
+64 bytes from 8.8.4.4: icmp_seq=5 ttl=255 time=11.6 ms
+64 bytes from 8.8.4.4: icmp_seq=6 ttl=255 time=13.1 ms
+64 bytes from 8.8.4.4: icmp_seq=7 ttl=255 time=10.2 ms
+64 bytes from 8.8.4.4: icmp_seq=8 ttl=255 time=8.06 ms
+64 bytes from 8.8.4.4: icmp_seq=9 ttl=255 time=6.73 ms
+64 bytes from 8.8.4.4: icmp_seq=10 ttl=255 time=7.68 ms
+
+--- 8.8.4.4 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9007ms
+rtt min/avg/max/mdev = 6.734/10.259/17.042/3.302 ms</pre></details></td></tr>
+<tr><td><span class="badge">[OPENDNS]</span></td><td><strong>208.67.222.222</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>17.470ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #3</summary><pre>PING 208.67.222.222 (208.67.222.222) 56(84) bytes of data.
+64 bytes from 208.67.222.222: icmp_seq=1 ttl=255 time=15.9 ms
+64 bytes from 208.67.222.222: icmp_seq=2 ttl=255 time=17.8 ms
+64 bytes from 208.67.222.222: icmp_seq=3 ttl=255 time=21.9 ms
+64 bytes from 208.67.222.222: icmp_seq=4 ttl=255 time=15.4 ms
+64 bytes from 208.67.222.222: icmp_seq=5 ttl=255 time=17.6 ms
+64 bytes from 208.67.222.222: icmp_seq=6 ttl=255 time=17.7 ms
+64 bytes from 208.67.222.222: icmp_seq=7 ttl=255 time=16.8 ms
+64 bytes from 208.67.222.222: icmp_seq=8 ttl=255 time=19.4 ms
+64 bytes from 208.67.222.222: icmp_seq=9 ttl=255 time=15.8 ms
+64 bytes from 208.67.222.222: icmp_seq=10 ttl=255 time=16.4 ms
+
+--- 208.67.222.222 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9008ms
+rtt min/avg/max/mdev = 15.369/17.470/21.883/1.864 ms</pre></details></td></tr>
+<tr><td><span class="badge">[OPENDNS]</span></td><td><strong>208.67.220.220</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>21.774ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #4</summary><pre>PING 208.67.220.220 (208.67.220.220) 56(84) bytes of data.
+64 bytes from 208.67.220.220: icmp_seq=1 ttl=255 time=18.8 ms
+64 bytes from 208.67.220.220: icmp_seq=2 ttl=255 time=22.0 ms
+64 bytes from 208.67.220.220: icmp_seq=3 ttl=255 time=21.3 ms
+64 bytes from 208.67.220.220: icmp_seq=4 ttl=255 time=25.6 ms
+64 bytes from 208.67.220.220: icmp_seq=5 ttl=255 time=17.9 ms
+64 bytes from 208.67.220.220: icmp_seq=6 ttl=255 time=30.5 ms
+64 bytes from 208.67.220.220: icmp_seq=7 ttl=255 time=20.1 ms
+64 bytes from 208.67.220.220: icmp_seq=8 ttl=255 time=23.4 ms
+64 bytes from 208.67.220.220: icmp_seq=9 ttl=255 time=20.2 ms
+64 bytes from 208.67.220.220: icmp_seq=10 ttl=255 time=18.1 ms
+
+--- 208.67.220.220 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9022ms
+rtt min/avg/max/mdev = 17.905/21.774/30.459/3.678 ms</pre></details></td></tr>
+<tr><td><span class="badge">[ROOT_SERVERS]</span></td><td><strong>198.41.0.4</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>114.478ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #5</summary><pre>PING 198.41.0.4 (198.41.0.4) 56(84) bytes of data.
+64 bytes from 198.41.0.4: icmp_seq=1 ttl=255 time=115 ms
+64 bytes from 198.41.0.4: icmp_seq=2 ttl=255 time=113 ms
+64 bytes from 198.41.0.4: icmp_seq=3 ttl=255 time=113 ms
+64 bytes from 198.41.0.4: icmp_seq=4 ttl=255 time=112 ms
+64 bytes from 198.41.0.4: icmp_seq=5 ttl=255 time=114 ms
+64 bytes from 198.41.0.4: icmp_seq=6 ttl=255 time=115 ms
+64 bytes from 198.41.0.4: icmp_seq=7 ttl=255 time=115 ms
+64 bytes from 198.41.0.4: icmp_seq=8 ttl=255 time=113 ms
+64 bytes from 198.41.0.4: icmp_seq=9 ttl=255 time=118 ms
+64 bytes from 198.41.0.4: icmp_seq=10 ttl=255 time=117 ms
+
+--- 198.41.0.4 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9013ms
+rtt min/avg/max/mdev = 111.908/114.478/118.184/1.856 ms</pre></details></td></tr>
+<tr><td><span class="badge">[ROOT_SERVERS]</span></td><td><strong>192.58.128.30</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>8.539ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #6</summary><pre>PING 192.58.128.30 (192.58.128.30) 56(84) bytes of data.
+64 bytes from 192.58.128.30: icmp_seq=1 ttl=255 time=8.14 ms
+64 bytes from 192.58.128.30: icmp_seq=2 ttl=255 time=8.54 ms
+64 bytes from 192.58.128.30: icmp_seq=3 ttl=255 time=7.66 ms
+64 bytes from 192.58.128.30: icmp_seq=4 ttl=255 time=9.22 ms
+64 bytes from 192.58.128.30: icmp_seq=5 ttl=255 time=8.78 ms
+64 bytes from 192.58.128.30: icmp_seq=6 ttl=255 time=7.70 ms
+64 bytes from 192.58.128.30: icmp_seq=7 ttl=255 time=10.5 ms
+64 bytes from 192.58.128.30: icmp_seq=8 ttl=255 time=9.84 ms
+64 bytes from 192.58.128.30: icmp_seq=9 ttl=255 time=7.27 ms
+64 bytes from 192.58.128.30: icmp_seq=10 ttl=255 time=7.73 ms
+
+--- 192.58.128.30 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9009ms
+rtt min/avg/max/mdev = 7.270/8.539/10.521/1.001 ms</pre></details></td></tr>
+<tr><td><span class="badge">[QUAD9]</span></td><td><strong>9.9.9.9</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>12.488ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #7</summary><pre>PING 9.9.9.9 (9.9.9.9) 56(84) bytes of data.
+64 bytes from 9.9.9.9: icmp_seq=1 ttl=255 time=8.28 ms
+64 bytes from 9.9.9.9: icmp_seq=2 ttl=255 time=13.5 ms
+64 bytes from 9.9.9.9: icmp_seq=3 ttl=255 time=9.30 ms
+64 bytes from 9.9.9.9: icmp_seq=4 ttl=255 time=8.15 ms
+64 bytes from 9.9.9.9: icmp_seq=5 ttl=255 time=11.2 ms
+64 bytes from 9.9.9.9: icmp_seq=6 ttl=255 time=9.22 ms
+64 bytes from 9.9.9.9: icmp_seq=7 ttl=255 time=11.0 ms
+64 bytes from 9.9.9.9: icmp_seq=8 ttl=255 time=11.1 ms
+64 bytes from 9.9.9.9: icmp_seq=9 ttl=255 time=35.8 ms
+64 bytes from 9.9.9.9: icmp_seq=10 ttl=255 time=7.42 ms
+
+--- 9.9.9.9 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9016ms
+rtt min/avg/max/mdev = 7.416/12.488/35.818/7.964 ms</pre></details></td></tr>
+<tr><td><span class="badge">[QUAD9]</span></td><td><strong>149.112.112.112</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>10.670ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #8</summary><pre>PING 149.112.112.112 (149.112.112.112) 56(84) bytes of data.
+64 bytes from 149.112.112.112: icmp_seq=1 ttl=255 time=9.74 ms
+64 bytes from 149.112.112.112: icmp_seq=2 ttl=255 time=8.78 ms
+64 bytes from 149.112.112.112: icmp_seq=3 ttl=255 time=12.6 ms
+64 bytes from 149.112.112.112: icmp_seq=4 ttl=255 time=13.0 ms
+64 bytes from 149.112.112.112: icmp_seq=5 ttl=255 time=9.26 ms
+64 bytes from 149.112.112.112: icmp_seq=6 ttl=255 time=8.84 ms
+64 bytes from 149.112.112.112: icmp_seq=7 ttl=255 time=12.9 ms
+64 bytes from 149.112.112.112: icmp_seq=8 ttl=255 time=12.4 ms
+64 bytes from 149.112.112.112: icmp_seq=9 ttl=255 time=11.3 ms
+64 bytes from 149.112.112.112: icmp_seq=10 ttl=255 time=7.87 ms
+
+--- 149.112.112.112 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9017ms
+rtt min/avg/max/mdev = 7.867/10.670/12.985/1.873 ms</pre></details></td></tr>
+<tr><td><span class="badge">[CLOUDFLARE]</span></td><td><strong>1.1.1.1</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>50.858ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #9</summary><pre>PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=255 time=50.1 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=255 time=48.6 ms
+64 bytes from 1.1.1.1: icmp_seq=3 ttl=255 time=53.0 ms
+64 bytes from 1.1.1.1: icmp_seq=4 ttl=255 time=52.0 ms
+64 bytes from 1.1.1.1: icmp_seq=5 ttl=255 time=54.8 ms
+64 bytes from 1.1.1.1: icmp_seq=6 ttl=255 time=72.7 ms
+64 bytes from 1.1.1.1: icmp_seq=7 ttl=255 time=42.6 ms
+64 bytes from 1.1.1.1: icmp_seq=8 ttl=255 time=44.9 ms
+64 bytes from 1.1.1.1: icmp_seq=9 ttl=255 time=44.1 ms
+64 bytes from 1.1.1.1: icmp_seq=10 ttl=255 time=45.8 ms
+
+--- 1.1.1.1 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9011ms
+rtt min/avg/max/mdev = 42.592/50.858/72.731/8.252 ms</pre></details></td></tr>
+<tr><td><span class="badge">[CLOUDFLARE]</span></td><td><strong>1.0.0.1</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>45.719ms</td></tr>
+<tr><td colspan="5" style="padding:0; border:none;"><details style="margin:5px;"><summary style="font-size:0.8em; color:#888;">Ver output ping #10</summary><pre>PING 1.0.0.1 (1.0.0.1) 56(84) bytes of data.
+64 bytes from 1.0.0.1: icmp_seq=1 ttl=255 time=40.0 ms
+64 bytes from 1.0.0.1: icmp_seq=2 ttl=255 time=59.6 ms
+64 bytes from 1.0.0.1: icmp_seq=3 ttl=255 time=40.6 ms
+64 bytes from 1.0.0.1: icmp_seq=4 ttl=255 time=57.1 ms
+64 bytes from 1.0.0.1: icmp_seq=5 ttl=255 time=49.3 ms
+64 bytes from 1.0.0.1: icmp_seq=6 ttl=255 time=44.9 ms
+64 bytes from 1.0.0.1: icmp_seq=7 ttl=255 time=49.2 ms
+64 bytes from 1.0.0.1: icmp_seq=8 ttl=255 time=32.5 ms
+64 bytes from 1.0.0.1: icmp_seq=9 ttl=255 time=40.9 ms
+64 bytes from 1.0.0.1: icmp_seq=10 ttl=255 time=43.1 ms
+
+--- 1.0.0.1 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9015ms
+rtt min/avg/max/mdev = 32.483/45.719/59.551/7.811 ms</pre></details></td></tr>
+</tbody></table></div>
+        <div class="tech-section">
+            <h2>🛠️ Logs Técnicos Detalhados</h2>
+            <p style="color: #808080;">Logs brutos de execução. Mesmo em testes consistentes, variações ignoradas (IP/TTL) podem ser vistas aqui.</p>
+<details id="test_1"><summary class="log-header"><span class="log-id">#1</span> <span class="badge">NOERROR</span> <strong>8.8.8.8</strong> &rarr; example.com (a)</summary><pre>
+
+=== TENTATIVA #1 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 38591
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		33	IN	A	23.220.75.245
+example.com.		33	IN	A	23.215.0.136
+example.com.		33	IN	A	23.192.228.84
+example.com.		33	IN	A	23.220.75.232
+example.com.		33	IN	A	23.215.0.138
+example.com.		33	IN	A	23.192.228.80
+
+;; Query time: 12 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:11 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #2 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 19499
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		217	IN	A	23.215.0.136
+example.com.		217	IN	A	23.220.75.232
+example.com.		217	IN	A	23.192.228.80
+example.com.		217	IN	A	23.215.0.138
+example.com.		217	IN	A	23.220.75.245
+example.com.		217	IN	A	23.192.228.84
+
+;; Query time: 20 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:11 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #3 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 17283
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		217	IN	A	23.215.0.136
+example.com.		217	IN	A	23.192.228.80
+example.com.		217	IN	A	23.192.228.84
+example.com.		217	IN	A	23.220.75.232
+example.com.		217	IN	A	23.220.75.245
+example.com.		217	IN	A	23.215.0.138
+
+;; Query time: 8 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:11 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #4 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 35630
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		151	IN	A	23.215.0.138
+example.com.		151	IN	A	23.215.0.136
+example.com.		151	IN	A	23.220.75.245
+example.com.		151	IN	A	23.192.228.80
+example.com.		151	IN	A	23.192.228.84
+example.com.		151	IN	A	23.220.75.232
+
+;; Query time: 16 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:11 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #5 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 59489
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		245	IN	A	23.220.75.245
+example.com.		245	IN	A	23.220.75.232
+example.com.		245	IN	A	23.192.228.84
+example.com.		245	IN	A	23.192.228.80
+example.com.		245	IN	A	23.215.0.136
+example.com.		245	IN	A	23.215.0.138
+
+;; Query time: 16 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:12 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #6 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 25486
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		17	IN	A	23.215.0.136
+example.com.		17	IN	A	23.192.228.84
+example.com.		17	IN	A	23.220.75.232
+example.com.		17	IN	A	23.220.75.245
+example.com.		17	IN	A	23.215.0.138
+example.com.		17	IN	A	23.192.228.80
+
+;; Query time: 16 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:12 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #7 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 15330
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		32	IN	A	23.215.0.138
+example.com.		32	IN	A	23.215.0.136
+example.com.		32	IN	A	23.220.75.232
+example.com.		32	IN	A	23.220.75.245
+example.com.		32	IN	A	23.192.228.80
+example.com.		32	IN	A	23.192.228.84
+
+;; Query time: 8 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:12 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #8 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 44211
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		287	IN	A	23.215.0.136
+example.com.		287	IN	A	23.215.0.138
+example.com.		287	IN	A	23.220.75.245
+example.com.		287	IN	A	23.192.228.84
+example.com.		287	IN	A	23.220.75.232
+example.com.		287	IN	A	23.192.228.80
+
+;; Query time: 20 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:12 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #9 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 20905
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		222	IN	A	23.192.228.84
+example.com.		222	IN	A	23.220.75.245
+example.com.		222	IN	A	23.220.75.232
+example.com.		222	IN	A	23.215.0.138
+example.com.		222	IN	A	23.192.228.80
+example.com.		222	IN	A	23.215.0.136
+
+;; Query time: 16 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:12 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #10 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.8.8 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 8827
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		15	IN	A	23.215.0.138
+example.com.		15	IN	A	23.220.75.245
+example.com.		15	IN	A	23.220.75.232
+example.com.		15	IN	A	23.215.0.136
+example.com.		15	IN	A	23.192.228.84
+example.com.		15	IN	A	23.192.228.80
+
+;; Query time: 8 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:12 -03 2025
+;; MSG SIZE  rcvd: 136</pre></details>
+<details id="test_2"><summary class="log-header"><span class="log-id">#2</span> <span class="badge">NOERROR</span> <strong>8.8.4.4</strong> &rarr; example.com (a)</summary><pre>
+
+=== TENTATIVA #1 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 19991
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		150	IN	A	23.215.0.136
+example.com.		150	IN	A	23.215.0.138
+example.com.		150	IN	A	23.192.228.84
+example.com.		150	IN	A	23.192.228.80
+example.com.		150	IN	A	23.220.75.245
+example.com.		150	IN	A	23.220.75.232
+
+;; Query time: 24 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #2 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 61481
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		215	IN	A	23.215.0.138
+example.com.		215	IN	A	23.192.228.84
+example.com.		215	IN	A	23.215.0.136
+example.com.		215	IN	A	23.220.75.245
+example.com.		215	IN	A	23.220.75.232
+example.com.		215	IN	A	23.192.228.80
+
+;; Query time: 8 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #3 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 22310
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		31	IN	A	23.220.75.232
+example.com.		31	IN	A	23.215.0.138
+example.com.		31	IN	A	23.192.228.84
+example.com.		31	IN	A	23.220.75.245
+example.com.		31	IN	A	23.215.0.136
+example.com.		31	IN	A	23.192.228.80
+
+;; Query time: 16 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #4 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 31255
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		206	IN	A	23.220.75.245
+example.com.		206	IN	A	23.192.228.84
+example.com.		206	IN	A	23.220.75.232
+example.com.		206	IN	A	23.215.0.136
+example.com.		206	IN	A	23.215.0.138
+example.com.		206	IN	A	23.192.228.80
+
+;; Query time: 20 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #5 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 62112
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		150	IN	A	23.220.75.232
+example.com.		150	IN	A	23.220.75.245
+example.com.		150	IN	A	23.192.228.80
+example.com.		150	IN	A	23.215.0.138
+example.com.		150	IN	A	23.215.0.136
+example.com.		150	IN	A	23.192.228.84
+
+;; Query time: 16 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #6 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 8805
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		286	IN	A	23.215.0.138
+example.com.		286	IN	A	23.220.75.232
+example.com.		286	IN	A	23.192.228.84
+example.com.		286	IN	A	23.192.228.80
+example.com.		286	IN	A	23.215.0.136
+example.com.		286	IN	A	23.220.75.245
+
+;; Query time: 8 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #7 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 24586
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		14	IN	A	23.215.0.136
+example.com.		14	IN	A	23.192.228.84
+example.com.		14	IN	A	23.220.75.232
+example.com.		14	IN	A	23.220.75.245
+example.com.		14	IN	A	23.215.0.138
+example.com.		14	IN	A	23.192.228.80
+
+;; Query time: 20 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #8 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 31421
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		14	IN	A	23.220.75.245
+example.com.		14	IN	A	23.192.228.84
+example.com.		14	IN	A	23.215.0.136
+example.com.		14	IN	A	23.192.228.80
+example.com.		14	IN	A	23.215.0.138
+example.com.		14	IN	A	23.220.75.232
+
+;; Query time: 16 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:13 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #9 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 22178
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		14	IN	A	23.220.75.232
+example.com.		14	IN	A	23.215.0.138
+example.com.		14	IN	A	23.192.228.84
+example.com.		14	IN	A	23.215.0.136
+example.com.		14	IN	A	23.220.75.245
+example.com.		14	IN	A	23.192.228.80
+
+;; Query time: 20 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:14 -03 2025
+;; MSG SIZE  rcvd: 136
+
+=== TENTATIVA #10 (NOERROR) === 
+[Normalized Check:    ; (1 server found) ; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a ; EDNS: version: 0, flags:; udp: 512 ;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: XXX ;; ANSWER SECTION: ;; Got answer: ;; QUESTION SECTION: ;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1 ;; global options: +cmd ;example.com. TTL_IGN A ;example.com. TTL_IGN A example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN example.com. TTL_IGN IN A DATA_IGN ]
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 @8.8.4.4 example.com a
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 37252
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		243	IN	A	23.215.0.138
+example.com.		243	IN	A	23.192.228.80
+example.com.		243	IN	A	23.215.0.136
+example.com.		243	IN	A	23.220.75.245
+example.com.		243	IN	A	23.220.75.232
+example.com.		243	IN	A	23.192.228.84
+
+;; Query time: 20 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:14 -03 2025
+;; MSG SIZE  rcvd: 136</pre></details>
+<details id="test_tcp_3"><summary class="log-header"><span class="log-id">#3</span> <span class="badge">TCP</span> <strong>8.8.8.8</strong> &rarr; example.com</summary><pre>=== TCP TEST === 
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 +tcp @8.8.8.8 example.com A
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 22311
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		219	IN	A	23.220.75.245
+example.com.		219	IN	A	23.215.0.136
+example.com.		219	IN	A	23.192.228.80
+example.com.		219	IN	A	23.220.75.232
+example.com.		219	IN	A	23.192.228.84
+example.com.		219	IN	A	23.215.0.138
+
+;; Query time: 12 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:14 -03 2025
+;; MSG SIZE  rcvd: 136</pre></details>
+<details id="test_tcp_4"><summary class="log-header"><span class="log-id">#4</span> <span class="badge">TCP</span> <strong>8.8.4.4</strong> &rarr; example.com</summary><pre>=== TCP TEST === 
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 +tcp @8.8.4.4 example.com A
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 62633
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		14	IN	A	23.192.228.84
+example.com.		14	IN	A	23.220.75.245
+example.com.		14	IN	A	23.220.75.232
+example.com.		14	IN	A	23.192.228.80
+example.com.		14	IN	A	23.215.0.138
+example.com.		14	IN	A	23.215.0.136
+
+;; Query time: 24 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:14 -03 2025
+;; MSG SIZE  rcvd: 136</pre></details>
+<details id="test_dnssec_5"><summary class="log-header"><span class="log-id">#5</span> <span class="badge">DNSSEC</span> <strong>8.8.8.8</strong> &rarr; example.com</summary><pre>=== DNSSEC TEST (AD Flag Found) === 
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 +dnssec @8.8.8.8 example.com A
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 25261
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 7, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags: do; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		220	IN	A	23.220.75.232
+example.com.		220	IN	A	23.220.75.245
+example.com.		220	IN	A	23.192.228.84
+example.com.		220	IN	A	23.192.228.80
+example.com.		220	IN	A	23.215.0.138
+example.com.		220	IN	A	23.215.0.136
+example.com.		220	IN	RRSIG	A 13 2 300 20251225135143 20251204032259 9776 example.com. vnLAjoDLTTLIHbvd25LG9DXekPta2Xr+NbWN4dT6pPHT99k9HT5viSvb PQ5LSOPVZgq8Kdcwdu2IUeRVHy3GYw==
+
+;; Query time: 24 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Tue Dec 09 17:03:14 -03 2025
+;; MSG SIZE  rcvd: 243</pre></details>
+<details id="test_dnssec_6"><summary class="log-header"><span class="log-id">#6</span> <span class="badge">DNSSEC</span> <strong>8.8.4.4</strong> &rarr; example.com</summary><pre>=== DNSSEC TEST (AD Flag Found) === 
+
+; &lt;&lt;&gt;&gt; DiG 9.16.50-Debian &lt;&lt;&gt;&gt; +time +tries +nocookie +cd +bufsize -4 +dnssec @8.8.4.4 example.com A
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 7213
+;; flags: qr rd ra ad cd; QUERY: 1, ANSWER: 7, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags: do; udp: 512
+;; QUESTION SECTION:
+;example.com.			IN	A
+
+;; ANSWER SECTION:
+example.com.		233	IN	A	23.192.228.80
+example.com.		233	IN	A	23.220.75.245
+example.com.		233	IN	A	23.215.0.136
+example.com.		233	IN	A	23.220.75.232
+example.com.		233	IN	A	23.192.228.84
+example.com.		233	IN	A	23.215.0.138
+example.com.		233	IN	RRSIG	A 13 2 300 20251225135143 20251204032259 9776 example.com. vnLAjoDLTTLIHbvd25LG9DXekPta2Xr+NbWN4dT6pPHT99k9HT5viSvb PQ5LSOPVZgq8Kdcwdu2IUeRVHy3GYw==
+
+;; Query time: 20 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4)
+;; WHEN: Tue Dec 09 17:03:14 -03 2025
+;; MSG SIZE  rcvd: 243</pre></details>
+</div>
+        <div class="config-section">
+             <h2>⚙️ Bastidores da Execução (Inventário & Configs)</h2>
+             <p style="color: #808080; margin-bottom: 20px;">Para fins de auditoria (e para provar que você configurou o teste corretamente).</p>
+             
+             <table class="config-table" style="margin-bottom:30px;">
+                <tbody>
+                    <tr><th>Versão do Script</th><td>v9.9.6</td></tr>
+                    <tr><th>Timeout Global</th><td>2s</td></tr>
+                    <tr><th>Sleep (Intervalo)</th><td>0.05s</td></tr>
+                    <tr><th>Valida Conectividade</th><td>true</td></tr>
+                    <tr><th>Versão IP</th><td>ipv4</td></tr>
+                    <tr><th>Check BIND Version</th><td>false</td></tr>
+                    <tr><th>Ping Enabled</th><td>true (Count: 10, Timeout: 2s)</td></tr>
+                    <tr><th>TCP Check (+tcp)</th><td>true</td></tr>
+                    <tr><th>DNSSEC Check (+dnssec)</th><td>true</td></tr>
+                    <tr><th>Consistency Checks</th><td>10 tentativas</td></tr>
+                    <tr><th>Strict Criteria</th><td>IP=false | Order=false | TTL=false</td></tr>
+                    <tr><th>Iterative DIG Options</th><td>+norecurse +time=2 +tries=1 +nocookie +cd +bufsize=512</td></tr>
+                    <tr><th>Recursive DIG Options</th><td>+time=2 +tries=1 +nocookie +cd +bufsize=512</td></tr>
+                </tbody>
+             </table>
+</div>
+        <div class="footer">
+            Gerado automaticamente por <strong>DNS Diagnostic Tool (v9.9.6)</strong><br>
+            Repositório Oficial: <a href="https://github.com/flashbsb/diagnostico_dns" target="_blank">github.com/flashbsb/diagnostico_dns</a><br>
+            <br>
+            <span style="font-size:0.8em; border:1px solid #444; padding:5px; border-radius:4px;">
+            Critérios Ativos: IP[false] | Order[false] | TTL[false]
+            </span>
+        </div>
+    </div>
+    <a href="#top" class="scroll-top">⬆️</a>
+</body>
+</html>

@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório DNS v9.18.7 - 20251211_155907</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --bg-header: #1e293b;
+            --border-color: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6; 
+            --accent-success: #10b981;
+            --accent-warning: #f59e0b;
+            --accent-danger: #ef4444;
+            --accent-divergent: #d946ef;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* --- Header & Typography --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        h1 small {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            background: var(--bg-card);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary);
+            border-left: 4px solid var(--accent-primary);
+            padding-left: 10px;
+        }
+
+        /* --- Dashboard Cards --- */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border-color: var(--bg-card-hover);
+        }
+        .card-num {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+        .card-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .st-total .card-num { color: var(--accent-primary); }
+        .st-ok .card-num { color: var(--accent-success); }
+        .st-warn .card-num { color: var(--accent-warning); }
+        .st-fail .card-num { color: var(--accent-danger); }
+        .st-div .card-num { color: var(--accent-divergent); }
+
+        /* --- Nested Details Structure --- */
+        details {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+        
+        /* Domain Level (Level 1) */
+        details.domain-level {
+            border-left: 4px solid var(--accent-primary);
+        }
+        details.domain-level[open] {
+            margin-bottom: 20px;
+        }
+        details.domain-level > summary {
+            background: var(--bg-card);
+            padding: 15px 20px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        details.domain-level > summary:hover {
+            background: var(--bg-card-hover);
+        }
+
+        /* Group Level (Level 2) */
+        details.group-level {
+            margin: 10px 20px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color);
+        }
+        details.group-level > summary {
+            padding: 10px 15px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        details.group-level > summary:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.03);
+        }
+
+        summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary::after {
+            content: '+';
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            margin-left: 10px;
+        }
+        details[open] > summary::after { content: '−'; }
+
+        /* --- Tables --- */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background: rgba(0,0,0,0.3);
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        td {
+            font-family: 'Fira Code', monospace;
+        }
+        tr:hover td {
+            background: rgba(255,255,255,0.02);
+        }
+        
+        /* --- Badges & Status --- */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .badge-type { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge.consistent { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+        
+        .badge-mini {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            text-align: center;
+            line-height: 16px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: bold;
+            margin-right: 3px;
+            color: #0f172a;
+            vertical-align: middle;
+            cursor: help;
+        }
+        .badge-mini.success { background-color: var(--accent-success); }
+        .badge-mini.fail { background-color: var(--accent-danger); color: #fff; }
+        .badge-mini.neutral { background-color: var(--text-secondary); opacity: 0.5; color: #000; }
+                
+        .status-cell { font-weight: 600; display: flex; align-items: center; gap: 8px; text-decoration: none; transition: opacity 0.2s; }
+        .status-cell:hover { opacity: 0.8; }
+        .st-ok { color: var(--accent-success); }
+        .st-warn { color: var(--accent-warning); }
+        .st-fail { color: var(--accent-danger); }
+        .st-div { color: var(--accent-divergent); }
+        
+        /* Aliases for script usage */
+        .status-ok { color: var(--accent-success) !important; }
+        .status-warn { color: var(--accent-warning) !important; } /* Warning alias */
+        .status-warning { color: var(--accent-warning) !important; }
+        .status-fail { color: var(--accent-danger) !important; }
+        .status-divergent { color: var(--accent-divergent) !important; }
+        .time-val { font-size: 0.8em; color: var(--text-secondary); font-weight: 400; opacity: 0.7; }
+
+        /* --- Modal & Logs --- */
+        .modal {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: var(--bg-card); margin: 5vh auto; padding: 0;
+            border: 1px solid var(--border-color); width: 90%; max-width: 1200px;
+            border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; max-height: 90vh;
+        }
+        .modal-header {
+            padding: 20px; border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-body {
+            padding: 0; overflow-y: auto; flex: 1;
+            background: #000;
+        }
+        pre {
+            margin: 0; padding: 20px; color: #e5e5e5; font-family: 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.6;
+        }
+        
+        /* --- Controls & Utilities --- */
+        .tech-controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn {
+            background: var(--bg-card-hover); border: 1px solid var(--border-color);
+            color: var(--text-primary); padding: 8px 16px; border-radius: 6px;
+            cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--accent-primary); border-color: var(--accent-primary); color: white; }
+        
+        .section-header { margin-top: 40px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+        
+        /* Disclaimer */
+        .disclaimer-box {
+            background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 8px; padding: 15px; margin-bottom: 30px;
+        }
+        .disclaimer-box summary { color: var(--accent-warning); font-weight: 600; }
+        
+        /* Footer */
+        footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-secondary); font-size: 0.85rem; }
+        footer a { color: var(--accent-primary); text-decoration: none; }
+        
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .dashboard, .domain-level { animation: fadeIn 0.4s ease-out forwards; }
+    </style>
+    <script>
+        function toggleAll(level, state) {
+            const selector = level === 'domain' ? 'details.domain-level' : 'details.group-level';
+            document.querySelectorAll(selector).forEach(el => el.open = state);
+        }
+        
+        function showLog(id) {
+            var el = document.getElementById(id + '_content');
+            if (!el) {
+                alert("Detalhes técnicos não disponíveis neste relatório simplificado.");
+                return;
+            }
+            var rawContent = el.innerHTML;
+            var titleEl = document.getElementById(id + '_title');
+            var title = titleEl ? titleEl.innerText : 'Detalhes';
+            
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalText').innerHTML = rawContent;
+            document.getElementById('logModal').style.display = "block";
+            document.body.style.overflow = 'hidden'; 
+        }
+        
+        function closeModal() {
+            document.getElementById('logModal').style.display = "none";
+            document.body.style.overflow = 'auto';
+        }
+        
+        window.onclick = function(e) { if (e.target.className === 'modal') closeModal(); }
+        document.addEventListener('keydown', function(e) { if(e.key === "Escape") closeModal(); });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                🔍 Diagnóstico DNS
+                <small>v9.18.7</small>
+            </h1>
+            <div style="text-align: right; color: var(--text-secondary); font-size: 0.9rem;">
+                <div>Executado em: <strong>20251211_155907</strong></div>
+                <div style="font-size: 0.8em; margin-top:4px;">Tempo Total: <span id="total_time_placeholder">...</span></div>
+            </div>
+        </header>
+        <div style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--text-primary); padding: 12px; border-radius: 8px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; font-size: 0.9rem;">
+            <span style="font-size: 1.2rem;">ℹ️</span>
+            <div>
+                <strong>Modo Simplificado Ativo:</strong> 
+                Este relatório foi gerado em modo compacto. Logs técnicos detalhados (outputs de dig, traceroute e ping) foram suprimidos para reduzir o tamanho do arquivo.
+            </div>
+        </div>
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="modalTitle">Detalhes do Log</div>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <pre id="modalText"></pre>
+            </div>
+        </div>
+    </div>
+        <div class="dashboard">
+            <div class="card st-total">
+                <span class="card-num">76</span>
+                <span class="card-label">Total Testes</span>
+            </div>
+            <div class="card st-ok">
+                <span class="card-num">1</span>
+                <span class="card-label">Sucesso (1%)</span>
+            </div>
+            <div class="card st-warn">
+                <span class="card-num">2</span>
+                <span class="card-label">Alertas</span>
+            </div>
+            <div class="card st-fail">
+                <span class="card-num">0</span>
+                <span class="card-label">Falhas Críticas</span>
+            </div>
+            <div class="card st-div">
+                <span class="card-num">73</span>
+                <span class="card-label">Divergências</span>
+            </div>
+        </div>
+    
+    <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            <div class="card" style="border-color: #3b82f6;">
+                <span class="card-num" style="color: #60a5fa;">37 <small style="font-size:0.4em; color:#94a3b8;">/ 38</small></span>
+                <span class="card-label">TCP Checks</span>
+            </div>
+            <div class="card" style="border-color: #8b5cf6;">
+                <span class="card-num" style="color: #a78bfa;">38 <small style="font-size:0.4em; color:#94a3b8;">/ 38</small></span>
+                <span class="card-label">DNSSEC Checks</span>
+            </div>
+        </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+        <div class="card" style="border-left: 4px solid var(--accent-primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">Version Privacy</span>
+                 <span style="font-size:1.5rem;">🕵️</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">6</span> <span style="font-size:0.85em; color:var(--accent-success);">Hidden</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">4</span> <span style="font-size:0.85em; color:var(--accent-danger);">Revealed</span>
+            </div>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent-warning);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">Zone Transfer</span>
+                 <span style="font-size:1.5rem;">📂</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">10</span> <span style="font-size:0.85em; color:var(--accent-success);">Denied</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">0</span> <span style="font-size:0.85em; color:var(--accent-danger);">Allowed</span>
+            </div>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent-danger);">
+             <div style="display:flex; justify-content:space-between; align-items:center;">
+                 <span class="card-label">Recursion</span>
+                 <span style="font-size:1.5rem;">🔄</span>
+            </div>
+            <div style="margin-top:10px;">
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">2</span> <span style="font-size:0.85em; color:var(--accent-success);">Closed</span>
+                 <span style="color:#666;">/</span>
+                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">8</span> <span style="font-size:0.85em; color:var(--accent-danger);">Open</span>
+            </div>
+        </div>
+    </div>
+        <details class="disclaimer-details">
+            <summary class="disclaimer-summary">⚠️ AVISO DE ISENÇÃO DE RESPONSABILIDADE (CLIQUE PARA EXPANDIR) ⚠️</summary>
+            <div class="disclaimer-content">
+                Este relatório reflete apenas o que <strong>sobreviveu</strong> à viagem de volta para este script, e não necessariamente a Verdade Absoluta do Universo™.<br>
+                Lembre-se que entre o seu terminal e o servidor DNS existe uma selva hostil habitada por:
+                <ul>
+                    <li><strong>Firewalls Paranoicos:</strong> Que bloqueiam até pensamento positivo (e pacotes UDP legítimos).</li>
+                    <li><strong>Middleboxes Criativos:</strong> Filtros de segurança que acham que sua query DNS é um ataque nuclear.</li>
+                    <li><strong>Rate Limits:</strong> Porque ninguém gosta de <em>spam</em>, nem mesmo o servidor.</li>
+                    <li><strong>Balanceamento de Carga:</strong> Onde servidores diferentes respondem com humores diferentes.</li>
+                </ul>
+                
+                <hr style="border: 0; border-top: 1px solid #ffcc02; margin: 15px 0;">
+                
+                <strong>🧐 CRITÉRIOS DE DIVERGÊNCIA ATIVOS (v9.18.7):</strong><br>
+                Além dos erros padrões, este relatório aplicou as seguintes regras de consistência (3 tentativas):
+                <div class="criteria-legend">
+                    <div class="criteria-item">Strict IP Check: <span class="crit-false">false</span> (True = Requer mesmo IP sempre)</div>
+                    <div class="criteria-item">Strict Order Check: <span class="crit-false">false</span> (True = Requer mesma ordem)</div>
+                    <div class="criteria-item">Strict TTL Check: <span class="crit-true">true</span> (True = Requer mesmo TTL)</div>
+                </div>
+                <div style="margin-top:5px; font-size:0.85em; font-style:italic;">
+                    (Se <strong>false</strong>, variações no campo foram ignoradas para evitar divergências irrelevantes em cenários dinâmicos).
+                </div>
+            </div>
+        </details>
+<details class="domain-level"><summary>🌐 google.com <span style="font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;">Tests: <strong>36</strong> | <span class="st-ok">✅ 1</span> <span class="st-warn">⚠️ 1</span> <span class="st-div">🔀 34</span></span> <span style="font-size:0.8em; color:var(--text-secondary); margin-left:10px;">[Recs: a,aaaa,txt]</span> <span class="badge" style="margin-left:auto">recursive</span></summary>
+<details class="group-level"><summary>📂 Grupo: GOOGLE <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>18</strong> | <span class="st-ok">✅ 1</span> <span class="st-warn">⚠️ 1</span> <span class="st-div">🔀 16</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>8.8.8.8</th>
+<th>8.8.4.4</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>google.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>66ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>36ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>google.com</strong> <span style="color:var(--text-secondary)">(aaaa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>54ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>50ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>google.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>2028ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>2025ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>www.google.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>35ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>39ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>www.google.com</strong> <span style="color:var(--text-secondary)">(aaaa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>50ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>56ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>www.google.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-warning">⚠️ NOANSWER <span class="badge consistent">3x</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>109ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>158ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>mail.google.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>29ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>43ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>mail.google.com</strong> <span style="color:var(--text-secondary)">(aaaa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>158ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>33ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>mail.google.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-ok">✅ NOERROR <span class="badge consistent">3x</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>92ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>44ms</span></div></div></td>
+</tbody></table></div>
+</details>
+<details class="group-level"><summary>📂 Grupo: CLOUDFLARE <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>18</strong> | <span class="st-div">🔀 18</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>1.1.1.1</th>
+<th>1.0.0.1</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>google.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>52ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>57ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>google.com</strong> <span style="color:var(--text-secondary)">(aaaa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>49ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>126ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>google.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>98ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>123ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>www.google.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>66ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>52ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>www.google.com</strong> <span style="color:var(--text-secondary)">(aaaa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>53ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>48ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>www.google.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>101ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_www_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_www_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>281ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>mail.google.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>50ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>44ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>mail.google.com</strong> <span style="color:var(--text-secondary)">(aaaa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>135ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>50ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>mail.google.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>100ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>116ms</span></div></div></td>
+</tbody></table></div>
+</details>
+</details>
+<details class="domain-level"><summary>🌐 wikipedia.org <span style="font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;">Tests: <strong>24</strong> | <span class="st-div">🔀 24</span></span> <span style="font-size:0.8em; color:var(--text-secondary); margin-left:10px;">[Recs: a,soa]</span> <span class="badge" style="margin-left:auto">recursive</span></summary>
+<details class="group-level"><summary>📂 Grupo: QUAD9 <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>12</strong> | <span class="st-div">🔀 12</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>9.9.9.9</th>
+<th>149.112.112.112</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>wikipedia.org</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>101ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>40ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>wikipedia.org</strong> <span style="color:var(--text-secondary)">(soa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>84ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>53ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>pt.wikipedia.org</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>50ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>40ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>pt.wikipedia.org</strong> <span style="color:var(--text-secondary)">(soa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>52ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>42ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>en.wikipedia.org</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_en_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>26ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_en_wikipedia_org'); return false;"><span class='badge-mini fail' title='TCP Failed'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>55ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>en.wikipedia.org</strong> <span style="color:var(--text-secondary)">(soa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_en_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>45ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_en_wikipedia_org'); return false;"><span class='badge-mini fail' title='TCP Failed'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>37ms</span></div></div></td>
+</tbody></table></div>
+</details>
+<details class="group-level"><summary>📂 Grupo: OPENDNS <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>12</strong> | <span class="st-div">🔀 12</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>208.67.222.222</th>
+<th>208.67.220.220</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>wikipedia.org</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>178ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>190ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>wikipedia.org</strong> <span style="color:var(--text-secondary)">(soa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>59ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>47ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>pt.wikipedia.org</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>68ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>45ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>pt.wikipedia.org</strong> <span style="color:var(--text-secondary)">(soa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>48ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_pt_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_pt_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>193ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>en.wikipedia.org</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_en_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>50ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_en_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>40ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>en.wikipedia.org</strong> <span style="color:var(--text-secondary)">(soa)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_en_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>191ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_en_wikipedia_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_en_wikipedia_org'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>191ms</span></div></div></td>
+</tbody></table></div>
+</details>
+</details>
+<details class="domain-level"><summary>🌐 cisco.com <span style="font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;">Tests: <strong>4</strong> | <span class="st-div">🔀 4</span></span> <span style="font-size:0.8em; color:var(--text-secondary); margin-left:10px;">[Recs: mx,txt]</span> <span class="badge" style="margin-left:auto">recursive</span></summary>
+<details class="group-level"><summary>📂 Grupo: OPENDNS <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>4</strong> | <span class="st-div">🔀 4</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>208.67.222.222</th>
+<th>208.67.220.220</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>cisco.com</strong> <span style="color:var(--text-secondary)">(mx)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_cisco_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_cisco_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>43ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_cisco_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_cisco_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>40ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>cisco.com</strong> <span style="color:var(--text-secondary)">(txt)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_222_222_cisco_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_222_222_cisco_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>105ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_208_67_220_220_cisco_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_208_67_220_220_cisco_com'); return false;"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a> <span class="time-val" style='margin-left:4px'>89ms</span></div></div></td>
+</tbody></table></div>
+</details>
+</details>
+<details class="domain-level"><summary>🌐 ietf.org <span style="font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;">Tests: <strong>2</strong> | <span class="st-warn">⚠️ 1</span> <span class="st-div">🔀 1</span></span> <span style="font-size:0.8em; color:var(--text-secondary); margin-left:10px;">[Recs: ns]</span> <span class="badge" style="margin-left:auto">iterative</span></summary>
+<details class="group-level"><summary>📂 Grupo: ROOT_SERVERS <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>2</strong> | <span class="st-warn">⚠️ 1</span> <span class="st-div">🔀 1</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>198.41.0.4</th>
+<th>192.58.128.30</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">iterative</span> <strong>ietf.org</strong> <span style="color:var(--text-secondary)">(ns)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_198_41_0_4_ietf_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_198_41_0_4_ietf_org'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>143ms</span></div></div></td>
+<td><div class="status-cell status-warning">⚠️ NOANSWER <span class="badge consistent">3x</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_192_58_128_30_ietf_org'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_192_58_128_30_ietf_org'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>30ms</span></div></div></td>
+</tbody></table></div>
+</details>
+</details>
+<details class="domain-level"><summary>🌐 example.com <span style="font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;">Tests: <strong>6</strong> | <span class="st-div">🔀 6</span></span> <span style="font-size:0.8em; color:var(--text-secondary); margin-left:10px;">[Recs: a]</span> <span class="badge" style="margin-left:auto">recursive</span></summary>
+<details class="group-level"><summary>📂 Grupo: GOOGLE <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>2</strong> | <span class="st-div">🔀 2</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>8.8.8.8</th>
+<th>8.8.4.4</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>example.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_example_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_example_com'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>39ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_example_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_example_com'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>41ms</span></div></div></td>
+</tbody></table></div>
+</details>
+<details class="group-level"><summary>📂 Grupo: CLOUDFLARE <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>2</strong> | <span class="st-div">🔀 2</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>1.1.1.1</th>
+<th>1.0.0.1</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>example.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_1_1_1_example_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_1_1_1_example_com'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>46ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_1_0_0_1_example_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_1_0_0_1_example_com'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>55ms</span></div></div></td>
+</tbody></table></div>
+</details>
+<details class="group-level"><summary>📂 Grupo: QUAD9 <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>2</strong> | <span class="st-div">🔀 2</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>9.9.9.9</th>
+<th>149.112.112.112</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>example.com</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_9_9_9_9_example_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_9_9_9_9_example_com'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>44ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_149_112_112_112_example_com'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_149_112_112_112_example_com'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>41ms</span></div></div></td>
+</tbody></table></div>
+</details>
+</details>
+<details class="domain-level"><summary>🌐 fail-test.local <span style="font-size:0.85em; margin-left:15px; font-weight:normal; opacity:0.9;">Tests: <strong>4</strong> | <span class="st-div">🔀 4</span></span> <span style="font-size:0.8em; color:var(--text-secondary); margin-left:10px;">[Recs: a]</span> <span class="badge" style="margin-left:auto">recursive</span></summary>
+<details class="group-level"><summary>📂 Grupo: GOOGLE <span style="font-size:0.85em; margin-left:10px; font-weight:normal; opacity:0.9;">Total: <strong>4</strong> | <span class="st-div">🔀 4</span></span></summary>
+<div class="table-responsive"><table><thead><tr><th style="width:30%">Target (Record)</th>
+<th>8.8.8.8</th>
+<th>8.8.4.4</th>
+</tr></thead><tbody>
+<tr><td><span class="badge badge-type">recursive</span> <strong>fail-test.local</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_fail-test_local'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_fail-test_local'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>40ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_fail-test_local'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_fail-test_local'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>73ms</span></div></div></td>
+<tr><td><span class="badge badge-type">recursive</span> <strong>#EstedevegerarNXDOMAINparatestaroalertaamarelo.fail-test.local</strong> <span style="color:var(--text-secondary)">(a)</span></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">2/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_8_8_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_8_8_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>46ms</span></div></div></td>
+<td><div class="status-cell status-divergent">🔀 DIV <span class="consistency-badge consistency-bad">1/3</span> <div style='margin-top:2px;'> <a href='#' onclick="showLog('tcp_8_8_4_4_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success' title='TCP OK'>T</span></a> <a href='#' onclick="showLog('sec_8_8_4_4_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a> <span class="time-val" style='margin-left:4px'>42ms</span></div></div></td>
+</tbody></table></div>
+</details>
+</details>
+    <div style="display:flex; justify-content:flex-end; margin-bottom: 20px;">
+        <div class="tech-controls">
+            <button class="btn" onclick="toggleAll('domain', true)">➕ Expandir Domínios</button>
+            <button class="btn" onclick="toggleAll('domain', false)">➖ Recolher Domínios</button>
+            <button class="btn" onclick="toggleAll('group', true)">➕ Expandir Grupos</button>
+            <button class="btn" onclick="toggleAll('group', false)">➖ Recolher Grupos</button>
+        </div>
+    </div>
+        <details class="section-details" style="margin-top: 30px; border-left: 4px solid var(--accent-warning);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
+             <div class="table-responsive" style="padding:15px;">
+             <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
+<tr><td><span class="badge">[GOOGLE]</span></td><td><strong>8.8.8.8</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>32.353ms</td></tr>
+<tr><td><span class="badge">[GOOGLE]</span></td><td><strong>8.8.4.4</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>33.685ms</td></tr>
+<tr><td><span class="badge">[OPENDNS]</span></td><td><strong>208.67.222.222</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>18.292ms</td></tr>
+<tr><td><span class="badge">[OPENDNS]</span></td><td><strong>208.67.220.220</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>18.568ms</td></tr>
+<tr><td><span class="badge">[ROOT_SERVERS]</span></td><td><strong>198.41.0.4</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>124.788ms</td></tr>
+<tr><td><span class="badge">[ROOT_SERVERS]</span></td><td><strong>192.58.128.30</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>11.832ms</td></tr>
+<tr><td><span class="badge">[QUAD9]</span></td><td><strong>9.9.9.9</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>13.360ms</td></tr>
+<tr><td><span class="badge">[QUAD9]</span></td><td><strong>149.112.112.112</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>9.963ms</td></tr>
+<tr><td><span class="badge">[CLOUDFLARE]</span></td><td><strong>1.1.1.1</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>18.484ms</td></tr>
+<tr><td><span class="badge">[CLOUDFLARE]</span></td><td><strong>1.0.0.1</strong></td><td class="status-ok">✅ UP</td><td>0%</td><td>22.715ms</td></tr>
+</tbody></table></div></details>
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
+             <div class="table-responsive" style="padding:15px;">
+             <table>
+                <thead>
+                    <tr>
+                        <th>Servidor</th>
+                        <th>Versão (Privacy)</th>
+                        <th>AXFR (Zone Transfer)</th>
+                        <th>Recursão (Open Relay)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><strong>8.8.8.8</strong></td><td><a href="#" onclick="showLog('sec_ver_8_8_8_8'); return false;" class="status-cell"><span class="badge status-ok">HIDDEN (OK)</span></a></td><td><a href="#" onclick="showLog('sec_axfr_8_8_8_8'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_8_8_8_8'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>8.8.4.4</strong></td><td><a href="#" onclick="showLog('sec_ver_8_8_4_4'); return false;" class="status-cell"><span class="badge status-ok">HIDDEN (OK)</span></a></td><td><a href="#" onclick="showLog('sec_axfr_8_8_4_4'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_8_8_4_4'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>208.67.222.222</strong></td><td><a href="#" onclick="showLog('sec_ver_208_67_222_222'); return false;" class="status-cell"><span class="badge status-ok">HIDDEN (OK)</span></a></td><td><a href="#" onclick="showLog('sec_axfr_208_67_222_222'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_208_67_222_222'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>208.67.220.220</strong></td><td><a href="#" onclick="showLog('sec_ver_208_67_220_220'); return false;" class="status-cell"><span class="badge status-ok">HIDDEN (OK)</span></a></td><td><a href="#" onclick="showLog('sec_axfr_208_67_220_220'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_208_67_220_220'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>198.41.0.4</strong></td><td><a href="#" onclick="showLog('sec_ver_198_41_0_4'); return false;" class="status-cell"><span class="badge status-fail">REVEALED: ATLAS...</span></a></td><td><a href="#" onclick="showLog('sec_axfr_198_41_0_4'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_198_41_0_4'); return false;" class="status-cell"><span class="badge status-ok">CLOSED (OK)</span></a></td></tr>
+<tr><td><strong>192.58.128.30</strong></td><td><a href="#" onclick="showLog('sec_ver_192_58_128_30'); return false;" class="status-cell"><span class="badge status-fail">REVEALED: NSD...</span></a></td><td><a href="#" onclick="showLog('sec_axfr_192_58_128_30'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_192_58_128_30'); return false;" class="status-cell"><span class="badge status-ok">CLOSED (OK)</span></a></td></tr>
+<tr><td><strong>9.9.9.9</strong></td><td><a href="#" onclick="showLog('sec_ver_9_9_9_9'); return false;" class="status-cell"><span class="badge status-fail">REVEALED: Q9-P-7.6...</span></a></td><td><a href="#" onclick="showLog('sec_axfr_9_9_9_9'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_9_9_9_9'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>149.112.112.112</strong></td><td><a href="#" onclick="showLog('sec_ver_149_112_112_112'); return false;" class="status-cell"><span class="badge status-fail">REVEALED: Q9-U-7.6...</span></a></td><td><a href="#" onclick="showLog('sec_axfr_149_112_112_112'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_149_112_112_112'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>1.1.1.1</strong></td><td><a href="#" onclick="showLog('sec_ver_1_1_1_1'); return false;" class="status-cell"><span class="badge status-ok">HIDDEN (OK)</span></a></td><td><a href="#" onclick="showLog('sec_axfr_1_1_1_1'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_1_1_1_1'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+<tr><td><strong>1.0.0.1</strong></td><td><a href="#" onclick="showLog('sec_ver_1_0_0_1'); return false;" class="status-cell"><span class="badge status-ok">HIDDEN (OK)</span></a></td><td><a href="#" onclick="showLog('sec_axfr_1_0_0_1'); return false;" class="status-cell"><span class="badge status-ok">DENIED (OK)</span></a></td><td><a href="#" onclick="showLog('sec_rec_1_0_0_1'); return false;" class="status-cell"><span class="badge status-fail">OPEN (RISK)</span></a></td></tr>
+                </tbody>
+             </table>
+             </div>
+        </details>
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-divergent);">
+             <summary style="font-size: 1.1rem; font-weight: 600;">🛤️ Rota de Rede (Traceroute)</summary>
+             <div class="table-responsive" style="padding:15px;">
+<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>
+<tr><td><span class="badge">[GOOGLE]</span></td><td><strong>8.8.8.8</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[GOOGLE]</span></td><td><strong>8.8.4.4</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[OPENDNS]</span></td><td><strong>208.67.222.222</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[OPENDNS]</span></td><td><strong>208.67.220.220</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[ROOT_SERVERS]</span></td><td><strong>198.41.0.4</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[ROOT_SERVERS]</span></td><td><strong>192.58.128.30</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[QUAD9]</span></td><td><strong>9.9.9.9</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[QUAD9]</span></td><td><strong>149.112.112.112</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[CLOUDFLARE]</span></td><td><strong>1.1.1.1</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+<tr><td><span class="badge">[CLOUDFLARE]</span></td><td><strong>1.0.0.1</strong></td><td>15</td><td><span style="font-size:0.85em; color:#888;">15 *</span></td></tr>
+</tbody></table>
+</div></details>
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📋 Testes DNS TCP e DNS SEC</summary>
+            <div style="padding: 20px;">
+                <p style="color:var(--text-secondary); margin-bottom:15px; font-size:0.9rem;">
+                    Validação de recursos avançados (Transporte TCP e Assinatura DNSSEC) para cada servidor consultado.
+                </p>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Alvo Check</th>
+                                <th>Servidor</th>
+                                <th>TCP Status</th>
+                                <th>DNSSEC Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+<tr><td><strong>google.com</strong> (recursive)</td><td>GOOGLE / 8.8.8.8</td><td><a href='#' onclick="showLog('tcp_8_8_8_8_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_8_8_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>google.com</strong> (recursive)</td><td>GOOGLE / 8.8.4.4</td><td><a href='#' onclick="showLog('tcp_8_8_4_4_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_4_4_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>www.google.com</strong> (recursive)</td><td>GOOGLE / 8.8.8.8</td><td><a href='#' onclick="showLog('tcp_8_8_8_8_www_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_8_8_www_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>www.google.com</strong> (recursive)</td><td>GOOGLE / 8.8.4.4</td><td><a href='#' onclick="showLog('tcp_8_8_4_4_www_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_4_4_www_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>mail.google.com</strong> (recursive)</td><td>GOOGLE / 8.8.8.8</td><td><a href='#' onclick="showLog('tcp_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_8_8_mail_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>mail.google.com</strong> (recursive)</td><td>GOOGLE / 8.8.4.4</td><td><a href='#' onclick="showLog('tcp_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_4_4_mail_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>google.com</strong> (recursive)</td><td>CLOUDFLARE / 1.1.1.1</td><td><a href='#' onclick="showLog('tcp_1_1_1_1_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_1_1_1_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>google.com</strong> (recursive)</td><td>CLOUDFLARE / 1.0.0.1</td><td><a href='#' onclick="showLog('tcp_1_0_0_1_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_0_0_1_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>www.google.com</strong> (recursive)</td><td>CLOUDFLARE / 1.1.1.1</td><td><a href='#' onclick="showLog('tcp_1_1_1_1_www_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_1_1_1_www_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>www.google.com</strong> (recursive)</td><td>CLOUDFLARE / 1.0.0.1</td><td><a href='#' onclick="showLog('tcp_1_0_0_1_www_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_0_0_1_www_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>mail.google.com</strong> (recursive)</td><td>CLOUDFLARE / 1.1.1.1</td><td><a href='#' onclick="showLog('tcp_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_1_1_1_mail_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>mail.google.com</strong> (recursive)</td><td>CLOUDFLARE / 1.0.0.1</td><td><a href='#' onclick="showLog('tcp_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_0_0_1_mail_google_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>wikipedia.org</strong> (recursive)</td><td>QUAD9 / 9.9.9.9</td><td><a href='#' onclick="showLog('tcp_9_9_9_9_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_9_9_9_9_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>wikipedia.org</strong> (recursive)</td><td>QUAD9 / 149.112.112.112</td><td><a href='#' onclick="showLog('tcp_149_112_112_112_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_149_112_112_112_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>pt.wikipedia.org</strong> (recursive)</td><td>QUAD9 / 9.9.9.9</td><td><a href='#' onclick="showLog('tcp_9_9_9_9_pt_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_9_9_9_9_pt_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>pt.wikipedia.org</strong> (recursive)</td><td>QUAD9 / 149.112.112.112</td><td><a href='#' onclick="showLog('tcp_149_112_112_112_pt_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_149_112_112_112_pt_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>en.wikipedia.org</strong> (recursive)</td><td>QUAD9 / 9.9.9.9</td><td><a href='#' onclick="showLog('tcp_9_9_9_9_en_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_9_9_9_9_en_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>en.wikipedia.org</strong> (recursive)</td><td>QUAD9 / 149.112.112.112</td><td><a href='#' onclick="showLog('tcp_149_112_112_112_en_wikipedia_org'); return false;"><span class='badge-mini fail'>FAIL</span></a></td><td><a href='#' onclick="showLog('sec_149_112_112_112_en_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>wikipedia.org</strong> (recursive)</td><td>OPENDNS / 208.67.222.222</td><td><a href='#' onclick="showLog('tcp_208_67_222_222_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_222_222_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>wikipedia.org</strong> (recursive)</td><td>OPENDNS / 208.67.220.220</td><td><a href='#' onclick="showLog('tcp_208_67_220_220_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_220_220_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>pt.wikipedia.org</strong> (recursive)</td><td>OPENDNS / 208.67.222.222</td><td><a href='#' onclick="showLog('tcp_208_67_222_222_pt_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_222_222_pt_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>pt.wikipedia.org</strong> (recursive)</td><td>OPENDNS / 208.67.220.220</td><td><a href='#' onclick="showLog('tcp_208_67_220_220_pt_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_220_220_pt_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>en.wikipedia.org</strong> (recursive)</td><td>OPENDNS / 208.67.222.222</td><td><a href='#' onclick="showLog('tcp_208_67_222_222_en_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_222_222_en_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>en.wikipedia.org</strong> (recursive)</td><td>OPENDNS / 208.67.220.220</td><td><a href='#' onclick="showLog('tcp_208_67_220_220_en_wikipedia_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_220_220_en_wikipedia_org'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>cisco.com</strong> (recursive)</td><td>OPENDNS / 208.67.222.222</td><td><a href='#' onclick="showLog('tcp_208_67_222_222_cisco_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_222_222_cisco_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>cisco.com</strong> (recursive)</td><td>OPENDNS / 208.67.220.220</td><td><a href='#' onclick="showLog('tcp_208_67_220_220_cisco_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_208_67_220_220_cisco_com'); return false;"><span class='badge-mini neutral'>ABS</span></a></td></tr>
+<tr><td><strong>ietf.org</strong> (iterative)</td><td>ROOT_SERVERS / 198.41.0.4</td><td><a href='#' onclick="showLog('tcp_198_41_0_4_ietf_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_198_41_0_4_ietf_org'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>ietf.org</strong> (iterative)</td><td>ROOT_SERVERS / 192.58.128.30</td><td><a href='#' onclick="showLog('tcp_192_58_128_30_ietf_org'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_192_58_128_30_ietf_org'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>example.com</strong> (recursive)</td><td>GOOGLE / 8.8.8.8</td><td><a href='#' onclick="showLog('tcp_8_8_8_8_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_8_8_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>example.com</strong> (recursive)</td><td>GOOGLE / 8.8.4.4</td><td><a href='#' onclick="showLog('tcp_8_8_4_4_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_4_4_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>example.com</strong> (recursive)</td><td>CLOUDFLARE / 1.1.1.1</td><td><a href='#' onclick="showLog('tcp_1_1_1_1_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_1_1_1_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>example.com</strong> (recursive)</td><td>CLOUDFLARE / 1.0.0.1</td><td><a href='#' onclick="showLog('tcp_1_0_0_1_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_1_0_0_1_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>example.com</strong> (recursive)</td><td>QUAD9 / 9.9.9.9</td><td><a href='#' onclick="showLog('tcp_9_9_9_9_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_9_9_9_9_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>example.com</strong> (recursive)</td><td>QUAD9 / 149.112.112.112</td><td><a href='#' onclick="showLog('tcp_149_112_112_112_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_149_112_112_112_example_com'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>fail-test.local</strong> (recursive)</td><td>GOOGLE / 8.8.8.8</td><td><a href='#' onclick="showLog('tcp_8_8_8_8_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_8_8_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>fail-test.local</strong> (recursive)</td><td>GOOGLE / 8.8.4.4</td><td><a href='#' onclick="showLog('tcp_8_8_4_4_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_4_4_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>#EstedevegerarNXDOMAINparatestaroalertaamarelo.fail-test.local</strong> (recursive)</td><td>GOOGLE / 8.8.8.8</td><td><a href='#' onclick="showLog('tcp_8_8_8_8_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_8_8_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+<tr><td><strong>#EstedevegerarNXDOMAINparatestaroalertaamarelo.fail-test.local</strong> (recursive)</td><td>GOOGLE / 8.8.4.4</td><td><a href='#' onclick="showLog('tcp_8_8_4_4_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td><td><a href='#' onclick="showLog('sec_8_8_4_4_#EstedevegerarNXDOMAINparatestaroalertaamarelo_fail-test_local'); return false;"><span class='badge-mini success'>OK</span></a></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+        <div style="display:none;">
+</div>
+        <details class="section-details" style="margin-top: 30px; border-left: 4px solid #6b7280;">
+             <summary style="font-size: 1.1rem; font-weight: 600;">⚙️ Bastidores da Execução (Inventário & Configs)</summary>
+             <div style="padding:15px;">
+                 <p style="color: #808080; margin-bottom: 20px;">Parâmetros técnicos utilizados nesta bateria de testes.</p>
+                 
+                 <div class="table-responsive">
+                 <table>
+                    <thead>
+                        <tr>
+                            <th>Parâmetro</th>
+                            <th>Valor Configurado</th>
+                            <th>Descrição / Função</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Versão do Script</td><td>v9.18.7</td><td>Identificação da release utilizada.</td></tr>
+                        <tr><td>Timeout Global</td><td>2s</td><td>Tempo máximo de espera por resposta do DNS.</td></tr>
+                        <tr><td>Sleep (Intervalo)</td><td>0.05s</td><td>Pausa entre tentativas consecutivas (consistency check).</td></tr>
+                        <tr><td>Valida Conectividade</td><td>true</td><td>Testa porta 53 antes do envio da query.</td></tr>
+                        <tr><td>Versão IP</td><td>ipv4</td><td>Protocolo de transporte forçado (IPv4/IPv6).</td></tr>
+                        <tr><td>Check BIND Version</td><td>true</td><td>Consulta caos class para versão do BIND.</td></tr>
+                        <tr><td>Ping Enabled</td><td>true</td><td>Verificação de latência ICMP (Count: 3, Timeout: 2s).</td></tr>
+                        <tr><td>TCP Check (+tcp)</td><td>true</td><td>Obrigatoriedade de suporte a DNS via TCP.</td></tr>
+                        <tr><td>DNSSEC Check (+dnssec)</td><td>true</td><td>Validação da cadeia de confiança DNSSEC.</td></tr>
+                        <tr><td>Trace Route Check</td><td>true</td><td>Mapeamento de rota até o servidor.</td></tr>
+                        <tr><td>Consistency Checks</td><td>3 tentativas</td><td>Repetições para validar estabilidade da resposta.</td></tr>
+                        <tr><td>Strict Criteria</td><td>IP=false | Order=false | TTL=true</td><td>Regras rígidas para considerar divergência.</td></tr>
+                        <tr><td>Iterative DIG Options</td><td>+norecurse +tries=1 +nocookie +cd +bufsize=1232 +nsid</td><td>Flags RAW enviadas ao DIG (Modo Iterativo).</td></tr>
+                        <tr><td>Recursive DIG Options</td><td>+tries=1 +nocookie +cd +bufsize=1232 +nsid</td><td>Flags RAW enviadas ao DIG (Modo Recursivo).</td></tr>
+                        <tr><td>Latency Threshold</td><td>100ms</td><td>Acima deste valor, a resposta é marcada como 'Slow' (Alerta).</td></tr>
+                        <tr><td>Packet Loss Limit</td><td>10%</td><td>Tolerância máxima de perda de pacotes antes de falhar o teste.</td></tr>
+                        <tr><td>Color Output</td><td>true</td><td>Indica se a saída do terminal utiliza códigos de cores ANSI.</td></tr>
+                    </tbody>
+                 </table>
+                 </div>
+                 
+                 <!-- Config Files Dump -->
+                 <h3 style="margin-top:30px; font-size:1rem; color:var(--text-secondary); border-bottom:1px solid #334155; padding-bottom:5px;">📂 Arquivo de Domínios (domains_tests.csv)</h3>
+                 <div class="table-responsive">
+                     <table>
+                        <thead><tr><th>Domínio</th><th>Grupos</th><th>Tipos Teste</th><th>Records</th><th>Hosts Extras</th></tr></thead>
+                        <tbody>
+<tr><td>google.com</td><td>GOOGLE,CLOUDFLARE</td><td>recursive</td><td>a,aaaa,txt</td><td>www,mail</td></tr>
+<tr><td>wikipedia.org</td><td>QUAD9,OPENDNS</td><td>recursive</td><td>a,soa</td><td>pt,en</td></tr>
+<tr><td>cisco.com</td><td>OPENDNS</td><td>recursive</td><td>mx,txt</td><td></td></tr>
+<tr><td>ietf.org</td><td>ROOT_SERVERS</td><td>iterative</td><td>ns</td><td></td></tr>
+<tr><td>example.com</td><td>GOOGLE,CLOUDFLARE,QUAD9</td><td>recursive</td><td>a</td><td></td></tr>
+<tr><td>fail-test.local</td><td>GOOGLE</td><td>recursive</td><td>a</td><td> # Este deve gerar NXDOMAIN para testar o alerta amarelo</td></tr>
+                        </tbody>
+                     </table>
+                 </div>
+
+                 <h3 style="margin-top:30px; font-size:1rem; color:var(--text-secondary); border-bottom:1px solid #334155; padding-bottom:5px;">📂 Arquivo de Grupos DNS (dns_groups.csv)</h3>
+                 <div class="table-responsive">
+                     <table>
+                        <thead><tr><th>Nome Grupo</th><th>Descrição</th><th>Tipo</th><th>Timeout</th><th>Servidores</th></tr></thead>
+                        <tbody>
+<tr><td>GOOGLE</td><td>Google Public DNS</td><td>recursive</td><td>2</td><td>8.8.8.8,8.8.4.4</td></tr>
+<tr><td>CLOUDFLARE</td><td>Cloudflare DNS</td><td>recursive</td><td>2</td><td>1.1.1.1,1.0.0.1</td></tr>
+<tr><td>QUAD9</td><td>Quad9 Security DNS</td><td>recursive</td><td>3</td><td>9.9.9.9,149.112.112.112</td></tr>
+<tr><td>OPENDNS</td><td>Cisco OpenDNS</td><td>recursive</td><td>3</td><td>208.67.222.222,208.67.220.220</td></tr>
+<tr><td>ROOT_SERVERS</td><td>Root Servers (Letra A e J)</td><td>authoritative</td><td>5</td><td>198.41.0.4,192.58.128.30</td></tr>
+                        </tbody>
+                     </table>
+                 </div>
+
+             </div>
+        </details>
+        <div class="timing-container" style="display:flex; justify-content:center; gap:30px; margin: 40px auto 20px auto; padding: 15px; background:var(--bg-secondary); border-radius:12px; max-width:800px; border:1px solid var(--border-color);">
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Início</div>
+                <div style="font-size:1.1rem; font-weight:600;">11/12/2025 15:59:07</div>
+            </div>
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Final</div>
+                <div style="font-size:1.1rem; font-weight:600;">11/12/2025 16:00:42</div>
+            </div>
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Tentativas</div>
+                <div style="font-size:1.1rem; font-weight:600;">3x</div>
+            </div>
+            <div class="timing-item" style="text-align:center;">
+                <div style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Duração</div>
+                <div style="font-size:1.1rem; font-weight:600;"><span id="total_time_footer">95s</span></div>
+            </div>
+        </div>
+        <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📚 Manual de Referência (Help)</summary>
+            <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: 'Fira Code', monospace; font-size: 0.85rem; overflow-x: auto;">
+                <pre style="white-space: pre-wrap;">[H[2J[3J==============================================================================
+       🔍 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA v9.18.7        
+==============================================================================
+
+DESCRIÇÃO GERAL:
+  Esta ferramenta é um auditor de infraestrutura DNS projetado para validar a
+  confiabilidade, consistência e performance de servidores autoritativos e recursivos.
+
+  O script executa uma bateria de testes para cada domínio alvo contra um grupo de
+  servidores DNS definidos, identificando:
+   1. Disponibilidade: Se os servidores estão alcançáveis (ICMP/TCP).
+   2. Consistência: Se múltiplos servidores retornam a mesma resposta (SOAs, IPs).
+   3. Estabilidade: Se a resposta varia ao longo de múltiplas consultas (Flapping).
+   4. Features: Suporte a TCP (obrigatório RFC 7766) e validação DNSSEC.
+   5. Performance: Latência de resposta e perda de pacotes.
+
+MODOS DE OPERAÇÃO:
+  Modo Interativo (Padrão): Um wizard guia a configuração das variáveis antes do início.
+  Modo Silencioso (-y): Executa imediatamente usando os valores padrão ou editados no script.
+
+OPÇÕES DE LINHA DE COMANDO:
+  -n &lt;arquivo&gt;   Define arquivo CSV de domínios (Padrão: domains_tests.csv)
+  -g &lt;arquivo&gt;   Define arquivo CSV de grupos DNS (Padrão: dns_groups.csv)
+  -y            Bypassa o menu interativo (Non-interactive/Batch execution).
+  -s            Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho).
+  -t            Habilita testes de conectividade TCP.
+  -d            Habilita validação DNSSEC.
+  -x            Habilita teste de transferência de zona (AXFR).
+  -r            Habilita teste de recursão aberta.
+  -h            Exibe este manual detalhado.
+
+DICIONÁRIO DE VARIÁVEIS (Configuração Fina):
+  Abaixo estão as variáveis que controlam o comportamento do motor de testes.
+  Elas podem ser ajustadas editando o cabeçalho do script ou via menu interativo.
+
+  TIMEOUT
+      Define o tempo máximo (em segundos) que o script aguarda por respostas de rede.
+      Afeta pings, traceroutes e consultas DIG. Se um servidor levar mais que isso,
+      será marcado como TIMEOUT/DOWN.
+
+  CONSISTENCY_CHECKS (Padrão: 10)
+      Define quantas vezes a MESMA consulta será repetida para o MESMO servidor.
+      Se o servidor responder IPs diferentes nessas N tentativas, ele é marcado como
+      DIVERGENTE (~). Isso pega balanceamentos Round-Robin mal configurados.
+
+  SLEEP (Padrão: 0.05s)
+      Pausa entre cada tentativa do loop de consistência. Aumente se o firewall
+      do alvo estiver bloqueando as requisições por rate-limit.
+
+  STRICT_IP_CHECK (true/false)
+      true: Exige que o IP de resposta seja IDÊNTICO em todas as tentativas.
+      false: Aceita IPs diferentes (útil para CDNs ou pools de balanceamento).
+
+  STRICT_ORDER_CHECK (true/false)
+      true: A ordem dos registros (ex: NS1 antes de NS2) deve ser idêntica.
+      false: A ordem é ignorada, desde que o conteúdo seja o mesmo.
+
+  STRICT_TTL_CHECK (true/false)
+      true: Considera erro se o TTL mudar entre consultas (ex: 300 -&gt; 299).
+      false: Ignora variações de TTL (Comportamento recomendado para recursivos).
+
+  ENABLE_PING / PING_COUNT / PING_TIMEOUT
+      Módulo de latência ICMP. Executa N pings antes dos testes DNS para verificar
+      a saúde básica da rota e perda de pacotes.
+
+  CHECK_BIND_VERSION
+      Tenta extrair a versão do software DNS usando consultas CHAOS TXT.
+      (Geralmente bloqueado por segurança em servidores de produção).
+
+LEGENDA DE SAÍDA (O que significam os símbolos?):
+  . (Ponto)      = Sucesso (Resposta consistente e válida).
+  ! (Exclamação)= Alerta (Sucesso, mas servidor lento ou resposta estranha).
+  ~ (Til)       = Divergência (O servidor mudou a resposta durante o teste).
+  x (Xis)        = Falha Crítica (Timeout, Erro de Conexão, REFUSED).
+  T / T        = Status do Teste TCP (Falha/Sucesso).
+  D / D        = Status do Teste DNSSEC (Falha/Sucesso).
+
+==============================================================================</pre>
+            </div>
+        </details>
+        <footer>
+            Gerado automaticamente por <strong>DNS Diagnostic Tool (v9.18.7)</strong><br>
+        </footer>
+    </div>
+    <a href="#top" style="position:fixed; bottom:20px; right:20px; background:var(--accent-primary); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); font-size:1.2rem;">⬆️</a>
+    <script>
+        document.getElementById('total_time_placeholder').innerText = "95s";
+    </script>
+</body>
+</html>

@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.28.1
-# "FIX cards and wizard"
+# Versão: 10.0.3
+# "Chart Debugging and Enhancements Walkthrough"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.28.1"
+SCRIPT_VERSION="10.0.3"
 
 
 # Carrega configurações externas
@@ -358,6 +358,7 @@ print_execution_summary() {
     echo -e "${PURPLE}[ANÁLISE & VISUALIZAÇÃO]${NC}"
     echo -e "  ⚠️ Limiar Latência : ${YELLOW}${LATENCY_WARNING_THRESHOLD}ms${NC}"
     echo -e "  📉 Perda Pcts Max : ${YELLOW}${PING_PACKET_LOSS_LIMIT}%${NC}"
+    echo -e "  📊 Gráficos HTML  : ${CYAN}${ENABLE_CHARTS}${NC}"
     echo -e "  🎨 Color Output   : ${CYAN}${COLOR_OUTPUT}${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
@@ -482,6 +483,7 @@ interactive_configuration() {
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
         ask_boolean "Gerar relatório HTML Detalhado?" "ENABLE_FULL_REPORT"
         ask_boolean "Gerar relatório HTML Simplificado?" "ENABLE_SIMPLE_REPORT"
+        ask_boolean "Habilitar Gráficos no HTML?" "ENABLE_CHARTS"
         ask_boolean "Gerar relatório JSON?" "GENERATE_JSON_REPORT"
         
         echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
@@ -585,6 +587,25 @@ validate_connectivity() {
     
     CONNECTIVITY_CACHE[$server]=$status
     return $status
+}
+
+check_internet_for_charts() {
+    if [[ "$ENABLE_CHARTS" != "true" ]]; then return 1; fi
+    
+    # Check simple connectivity to CDN
+    if command -v curl &>/dev/null; then
+         if curl -s --head --request GET "https://cdn.jsdelivr.net/npm/chart.js" | grep "200" > /dev/null; then
+             return 0
+         fi
+    elif command -v wget &>/dev/null; then
+         if wget -q --spider "https://cdn.jsdelivr.net/npm/chart.js"; then
+             return 0
+         fi
+    fi
+    
+    echo -e "${YELLOW}⚠️  Aviso: Acesso à internet para carregar gráficos FALHOU. Gráficos desabilitados.${NC}"
+    ENABLE_CHARTS="false"
+    return 1
 }
 
 # ==============================================
@@ -995,7 +1016,6 @@ cat > "$TEMP_HEADER" << EOF
         </header>
 EOF
 
-    local mode_hv="$1"
     if [[ "$mode_hv" == "simple" ]]; then
         cat >> "$TEMP_HEADER" << EOF
         <div style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--text-primary); padding: 12px; border-radius: 8px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; font-size: 0.9rem;">
@@ -1005,6 +1025,12 @@ EOF
                 Este relatório foi gerado em modo compacto. Logs técnicos detalhados (outputs de dig, traceroute e ping) foram suprimidos para reduzir o tamanho do arquivo.
             </div>
         </div>
+EOF
+    fi
+
+    if [[ "$ENABLE_CHARTS" == "true" ]]; then
+         cat >> "$TEMP_HEADER" << EOF
+         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 EOF
     fi
 
@@ -1031,7 +1057,7 @@ generate_stats_block() {
 cat > "$TEMP_STATS" << EOF
         <h2>📊 Estatísticas Gerais</h2>
         <!-- General Inventory Row -->
-        <div class="dashboard">
+        <div class="dashboard" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
             <div class="card" style="--card-accent: #64748b;">
                 <span class="card-num">${domain_count}</span>
                 <span class="card-label">Domínios</span>
@@ -1049,7 +1075,36 @@ cat > "$TEMP_STATS" << EOF
                 <span class="card-label">Latência Média</span>
             </div>
         </div>
+        
+EOF
 
+    if [[ "$ENABLE_CHARTS" == "true" ]]; then
+        cat >> "$TEMP_STATS" << EOF
+        <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px;">
+             <!-- Overview Chart Container -->
+             <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-primary); align-items: center; justify-content: center;">
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Visão Geral de Execução</h3>
+                 <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="chartOverview"></canvas>
+                 </div>
+                 <div style="margin-top:10px;">
+                    <button class="btn" style="font-size:0.8rem; padding:4px 10px;" onclick="updateChartType('chartOverview', 'doughnut')">Doughnut</button>
+                    <button class="btn" style="font-size:0.8rem; padding:4px 10px;" onclick="updateChartType('chartOverview', 'pie')">Pie</button>
+                    <button class="btn" style="font-size:0.8rem; padding:4px 10px;" onclick="updateChartType('chartOverview', 'bar')">Bar</button>
+                 </div>
+             </div>
+             <!-- Latency Chart Container (Placeholder) -->
+             <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-warning); align-items: center; justify-content: center;">
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Top Latência (Médias por Grupo)</h3>
+                 <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="chartLatency"></canvas>
+                 </div>
+             </div>
+        </div>
+EOF
+    fi
+
+    cat >> "$TEMP_STATS" << EOF
         <div class="dashboard">
             <div class="card st-total" style="--card-accent: var(--accent-primary);">
                 <span class="card-num">$TOTAL_TESTS</span>
@@ -1163,6 +1218,18 @@ generate_object_summary() {
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
             <summary style="font-size: 1.1rem; font-weight: 600;">📋 Testes DNS TCP e DNS SEC</summary>
             <div style="padding: 20px;">
+EOF
+    if [[ "$ENABLE_CHARTS" == "true" ]]; then
+        cat >> "logs/temp_obj_summary_$$.html" << EOF
+                <div class="card" style="margin-bottom: 20px; --card-accent: #8b5cf6;">
+                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Estatísticas de Serviços</h3>
+                     <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="chartServices"></canvas>
+                     </div>
+                 </div>
+EOF
+    fi
+    cat >> "logs/temp_obj_summary_$$.html" << EOF
                 <p style="color:var(--text-secondary); margin-bottom:15px; font-size:0.9rem;">
                     Validação de recursos avançados (Transporte TCP e Assinatura DNSSEC) para cada servidor consultado.
                 </p>
@@ -1292,6 +1359,7 @@ cat > "$TEMP_CONFIG" << EOF
                         <tr><td>Recursive DIG Options</td><td>${RECURSIVE_DIG_OPTIONS}</td><td>Flags RAW enviadas ao DIG (Modo Recursivo).</td></tr>
                         <tr><td>Latency Threshold</td><td>${LATENCY_WARNING_THRESHOLD}ms</td><td>Acima deste valor, a resposta é marcada como 'Slow' (Alerta).</td></tr>
                         <tr><td>Packet Loss Limit</td><td>${PING_PACKET_LOSS_LIMIT}%</td><td>Tolerância máxima de perda de pacotes antes de falhar o teste.</td></tr>
+                        <tr><td>HTML Charts</td><td>${ENABLE_CHARTS}</td><td>Geração de gráficos visuais (Requer Internet).</td></tr>
                         <tr><td>Color Output</td><td>${COLOR_OUTPUT}</td><td>Indica se a saída do terminal utiliza códigos de cores ANSI.</td></tr>
                     </tbody>
                  </table>
@@ -1360,6 +1428,236 @@ cat > "$TEMP_MODAL" << EOF
 EOF
 }
 
+
+
+generate_charts_script() {
+    cat << EOF
+    <script>
+        // Chart Configuration
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.borderColor = '#334155';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+
+        const ctxOverview = document.getElementById('chartOverview');
+        const ctxLatency = document.getElementById('chartLatency');
+        const ctxSecurity = document.getElementById('chartSecurity');
+        const ctxServices = document.getElementById('chartServices');
+
+        let overviewChart;
+
+        function initOverviewChart(type) {
+            if (overviewChart) overviewChart.destroy();
+            
+            if (ctxOverview) {
+                overviewChart = new Chart(ctxOverview, {
+                    type: type,
+                    data: {
+                        labels: ['Sucesso ($SUCCESS_TESTS)', 'Alertas ($WARNING_TESTS)', 'Falhas ($FAILED_TESTS)', 'Divergências ($DIVERGENT_TESTS)'],
+                        datasets: [{
+                            data: [$SUCCESS_TESTS, $WARNING_TESTS, $FAILED_TESTS, $DIVERGENT_TESTS],
+                            backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#d946ef'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { 
+                                position: 'bottom',
+                                labels: { color: '#cbd5e1', padding: 20, font: { size: 11 } }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.label || '';
+                                        let value = context.parsed;
+                                        let total = context.chart._metasets[context.datasetIndex].total;
+                                        let percentage = ((value / total) * 100).toFixed(1) + '%';
+                                        return label.split(' ')[0] + ': ' + value + ' (' + percentage + ')';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Initialize with default type
+        initOverviewChart('doughnut');
+
+        // Toggle Function
+        window.updateChartType = function(id, type) {
+            if (id === 'chartOverview') {
+                initOverviewChart(type);
+            }
+        };
+
+        // Latency Chart
+        const latencyLabels = [];
+        const latencyData = [];
+
+EOF
+
+    # Fix Latency Extraction: Strip HTML tags and handle decimals
+    if [[ -f "$TEMP_PING" ]]; then
+         sed "s/<\/td><td[^>]*>/|/g" "$TEMP_PING" | awk -F'|' '/<tr><td>/ { 
+             server=$2; gsub(/<[^>]*>/, "", server); # Strip HTML tags
+             val=$5; sub(/ms.*/, "", val); sub(/<.*/, "", val);
+             # Clean any non-numeric except dot
+             gsub(/[^0-9.]/, "", val);
+             if (val ~ /^[0-9]+(\.[0-9]+)?$/) print server " " val 
+         }' | sort -k2 -nr | head -n 12 | while read -r srv lat; do
+             echo "        latencyLabels.push('$srv');"
+             echo "        latencyData.push($lat);"
+         done
+    fi
+
+        # Traceroute Chart Data Extraction
+        echo "        const traceLabels = [];"
+        echo "        const traceData = [];"
+    if [[ -f "$TEMP_TRACE" ]]; then
+         sed "s/<\/td><td[^>]*>/|/g" "$TEMP_TRACE" | awk -F'|' '/<tr><td>/ {
+             server=$2; gsub(/<[^>]*>/, "", server);
+             hops=$3; gsub(/[^0-9]/, "", hops);
+             if (hops ~ /^[0-9]+$/) print server " " hops
+         }' | head -n 15 | while read -r srv hops; do
+             echo "        traceLabels.push('$srv');"
+             echo "        traceData.push($hops);"
+         done
+    fi
+
+cat << EOF
+        if (ctxLatency && latencyData.length > 0) {
+            new Chart(ctxLatency, {
+                type: 'bar',
+                data: {
+                    labels: latencyLabels,
+                    datasets: [{
+                        label: 'Latência (ms)',
+                        data: latencyData,
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 4,
+                        barThickness: 15
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                         x: { beginAtZero: true, grid: { color: '#334155', drawBorder: false } },
+                         y: { grid: { display: false } }
+                    },
+                     plugins: { legend: { display: false } }
+                }
+            });
+        }
+        
+        // Traceroute Chart
+        const ctxTrace = document.getElementById('chartTrace');
+        if (ctxTrace && traceData.length > 0) {
+            new Chart(ctxTrace, {
+                type: 'bar',
+                data: {
+                    labels: traceLabels,
+                    datasets: [{
+                        label: 'Saltos (Hops)',
+                        data: traceData,
+                        backgroundColor: '#8b5cf6',
+                        borderRadius: 4,
+                        barThickness: 15
+                    }]
+                },
+                options: {
+                    indexAxis: 'x', // Vertical bars
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                         y: { beginAtZero: true, grid: { color: '#334155' } },
+                         x: { grid: { display: false } }
+                    },
+                     plugins: { legend: { display: false } }
+                }
+            });
+        }
+        
+        // Services Chart (TCP / DNSSEC)
+        if (ctxServices) {
+            new Chart(ctxServices, {
+                type: 'bar',
+                data: {
+                    labels: ['TCP Connection', 'DNSSEC Validation'],
+                    datasets: [
+                        {
+                            label: 'Success',
+                            data: [$TCP_SUCCESS, $DNSSEC_SUCCESS],
+                            backgroundColor: '#10b981'
+                        },
+                        {
+                            label: 'Fail/Absent',
+                            data: [$TCP_FAIL, $DNSSEC_FAIL + $DNSSEC_ABSENT],
+                            backgroundColor: '#ef4444'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
+
+        // Security Chart
+        if (ctxSecurity) {
+            new Chart(ctxSecurity, {
+                type: 'bar',
+                data: {
+                    labels: ['Version Hiding', 'Zone Transfer', 'Recursion Control'],
+                    datasets: [
+                        {
+                            label: 'Secure',
+                            data: [$SEC_HIDDEN, $SEC_AXFR_OK, $SEC_REC_OK],
+                            backgroundColor: '#10b981',
+                             stack: 'Stack 0'
+                        },
+                        {
+                            label: 'Risk/Open',
+                            data: [$SEC_REVEALED, $SEC_AXFR_RISK, $SEC_REC_RISK],
+                            backgroundColor: '#ef4444',
+                             stack: 'Stack 0'
+                        },
+                         {
+                            label: 'Error',
+                            data: [$SEC_VER_TIMEOUT, $SEC_AXFR_TIMEOUT, $SEC_REC_TIMEOUT],
+                            backgroundColor: '#94a3b8',
+                             stack: 'Stack 0'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: { stacked: true, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
+    </script>
+EOF
+}
+
 assemble_html() {
     local mode="$1"
     local target_file="$HTML_FILE"
@@ -1367,6 +1665,10 @@ assemble_html() {
     if [[ "$mode" == "simple" ]]; then
         target_file="${HTML_FILE%.html}_simple.html"
     fi
+    
+    
+    # Check internet before generation if charts enabled
+    check_internet_for_charts
     
     generate_stats_block
     generate_object_summary
@@ -1384,7 +1686,6 @@ assemble_html() {
     cat "$TEMP_MODAL" >> "$target_file"
     cat "$TEMP_STATS" >> "$target_file"
     
-
     
     if [[ "$mode" == "simple" ]]; then
         cat "$TEMP_MATRIX_SIMPLE" >> "$target_file"
@@ -1418,16 +1719,31 @@ EOF
         echo "</tbody></table></div></details>" >> "$target_file"
     fi
 
-    # ADD SECURITY SECTION
-    # Only if TEMP_SECURITY has content (it was populated by generate_security_html which reads from the raw log buffer)
-    # Actually wait, run_security_diagnostics populates a buffer, then we wrap it. 
-    # Let's adjust: run_security_diagnostics writes rows to TEMP_SECURITY_ROWS.
-    # Then generate_security_html wraps it into TEMP_SECURITY (block).
-    
+    # SECTION: SECURITY (AXFR, Version, Recursion)
     if [[ -s "$TEMP_SECURITY" ]]; then
+        # Inject Chart BEFORE the details block? No, inside description or after title.
+        # Ideally inside the details block for clean layout, but standard approach here is appending files.
+        # We can construct the header manually here to inject chart.
+        
         if [[ "$mode" == "simple" ]]; then
              cat "$TEMP_SECURITY_SIMPLE" >> "$target_file"
         else
+             # For Full Mode, TEMP_SECURITY contains the whole block wrapper if generated by generate_security_html?
+             # No, generate_security_html wraps it.
+             # Let's check generate_security_html (It wraps in <details>).
+             # To inject chart inside, we would need to edit generate_security_html.
+             # ALTERNATIVE: Place chart ABOVE the table, but we can't edit the temp file easily now.
+             # BETTER: Place chart ABOVE the details block.
+             if [[ "$ENABLE_CHARTS" == "true" ]]; then
+                 cat >> "$target_file" << EOF
+                 <div class="card" style="margin-top: 20px; --card-accent: var(--accent-danger);">
+                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Gráfico de Conformidade de Segurança</h3>
+                     <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="chartSecurity"></canvas>
+                     </div>
+                 </div>
+EOF
+             fi
              cat "$TEMP_SECURITY" >> "$target_file"
         fi
     fi
@@ -1438,6 +1754,16 @@ EOF
              <summary style="font-size: 1.1rem; font-weight: 600;">🛤️ Rota de Rede (Traceroute)</summary>
              <div class="table-responsive" style="padding:15px;">
 EOF
+        if [[ "$ENABLE_CHARTS" == "true" ]]; then
+             cat >> "$target_file" << EOF
+                 <div class="card" style="margin-bottom: 20px; --card-accent: var(--accent-divergent);">
+                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Topologia de Rede (Hops)</h3>
+                     <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="chartTrace"></canvas>
+                     </div>
+                 </div>
+EOF
+        fi
         if [[ "$mode" == "simple" ]]; then
              cat "$TEMP_TRACE_SIMPLE" >> "$target_file"
         else
@@ -1446,19 +1772,13 @@ EOF
         echo "</div></details>" >> "$target_file"
     fi
 
-    if [[ -s "$TEMP_SERVICES" ]]; then
-         cat >> "$target_file" << EOF
-        <details class="section-details" style="margin-top: 20px; border-left: 4px solid #8b5cf6;">
-             <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Serviços DNS & Capabilities (TCP/DNSSEC)</summary>
-             <div class="table-responsive" style="padding:15px;">
-EOF
-        if [[ "$mode" == "simple" ]]; then
-             cat "$TEMP_SERVICES_SIMPLE" >> "$target_file"
-        else
-             cat "$TEMP_SERVICES" >> "$target_file"
-        fi
-        echo "</div></details>" >> "$target_file"
+    # SECTION: SERVICES (TCP, DNSSEC) - Moved to generate_object_summary
+    # Content handled by logs/temp_obj_summary_$$.html
+    
+    if [[ "$ENABLE_CHARTS" == "true" ]]; then
+        generate_charts_script >> "$target_file"
     fi
+
 
     # Mover Resumo da Execução para cá (após os resultados, antes das configs)
     cat "logs/temp_obj_summary_$$.html" >> "$target_file"

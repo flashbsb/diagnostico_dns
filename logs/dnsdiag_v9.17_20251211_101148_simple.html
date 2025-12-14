@@ -1,0 +1,122 @@
+    <div style="display:flex; justify-content:flex-end; margin-bottom: 20px;">
+        <div class="tech-controls">
+            <button class="btn" onclick="toggleAll('domain', true)">➕ Expandir Domínios</button>
+            <button class="btn" onclick="toggleAll('domain', false)">➖ Recolher Domínios</button>
+            <button class="btn" onclick="toggleAll('group', true)">➕ Expandir Grupos</button>
+            <button class="btn" onclick="toggleAll('group', false)">➖ Recolher Grupos</button>
+        </div>
+    </div>
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📋 Testes DNS TCP e DNS SEC</summary>
+            <div style="padding: 20px;">
+                <p style="color:var(--text-secondary); margin-bottom:15px; font-size:0.9rem;">
+                    Validação de recursos avançados (Transporte TCP e Assinatura DNSSEC) para cada servidor consultado.
+                </p>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Alvo Check</th>
+                                <th>Servidor</th>
+                                <th>TCP Status</th>
+                                <th>DNSSEC Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+<tr><td><strong>google.com</strong> (iterative)</td><td>GOOGLE / 8.8.8.8</td><td><span class='badge-mini success'>OK</span></td><td><span class='badge-mini neutral'>ABS</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+        <div style="display:none;">
+</div>
+        <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📚 Manual de Referência (Help)</summary>
+            <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: 'Fira Code', monospace; font-size: 0.85rem; overflow-x: auto;">
+                <pre style="white-space: pre-wrap;">[H[2J[3J==============================================================================
+       🔍 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA v9.17        
+==============================================================================
+
+DESCRIÇÃO GERAL:
+  Esta ferramenta é um auditor de infraestrutura DNS projetado para validar a
+  confiabilidade, consistência e performance de servidores autoritativos e recursivos.
+
+  O script executa uma bateria de testes para cada domínio alvo contra um grupo de
+  servidores DNS definidos, identificando:
+   1. Disponibilidade: Se os servidores estão alcançáveis (ICMP/TCP).
+   2. Consistência: Se múltiplos servidores retornam a mesma resposta (SOAs, IPs).
+   3. Estabilidade: Se a resposta varia ao longo de múltiplas consultas (Flapping).
+   4. Features: Suporte a TCP (obrigatório RFC 7766) e validação DNSSEC.
+   5. Performance: Latência de resposta e perda de pacotes.
+
+MODOS DE OPERAÇÃO:
+  Modo Interativo (Padrão): Um wizard guia a configuração das variáveis antes do início.
+  Modo Silencioso (-y): Executa imediatamente usando os valores padrão ou editados no script.
+
+OPÇÕES DE LINHA DE COMANDO:
+  -n &lt;arquivo&gt;   Define arquivo CSV de domínios (Padrão: domains_tests.csv)
+  -g &lt;arquivo&gt;   Define arquivo CSV de grupos DNS (Padrão: dns_groups.csv)
+  -y            Bypassa o menu interativo (Non-interactive/Batch execution).
+  -s            Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho).
+  -h            Exibe este manual detalhado.
+
+DICIONÁRIO DE VARIÁVEIS (Configuração Fina):
+  Abaixo estão as variáveis que controlam o comportamento do motor de testes.
+  Elas podem ser ajustadas editando o cabeçalho do script ou via menu interativo.
+
+  TIMEOUT
+      Define o tempo máximo (em segundos) que o script aguarda por respostas de rede.
+      Afeta pings, traceroutes e consultas DIG. Se um servidor levar mais que isso,
+      será marcado como TIMEOUT/DOWN.
+
+  CONSISTENCY_CHECKS (Padrão: 10)
+      Define quantas vezes a MESMA consulta será repetida para o MESMO servidor.
+      Se o servidor responder IPs diferentes nessas N tentativas, ele é marcado como
+      DIVERGENTE (~). Isso pega balanceamentos Round-Robin mal configurados.
+
+  SLEEP (Padrão: 0.05s)
+      Pausa entre cada tentativa do loop de consistência. Aumente se o firewall
+      do alvo estiver bloqueando as requisições por rate-limit.
+
+  STRICT_IP_CHECK (true/false)
+      true: Exige que o IP de resposta seja IDÊNTICO em todas as tentativas.
+      false: Aceita IPs diferentes (útil para CDNs ou pools de balanceamento).
+
+  STRICT_ORDER_CHECK (true/false)
+      true: A ordem dos registros (ex: NS1 antes de NS2) deve ser idêntica.
+      false: A ordem é ignorada, desde que o conteúdo seja o mesmo.
+
+  STRICT_TTL_CHECK (true/false)
+      true: Considera erro se o TTL mudar entre consultas (ex: 300 -&gt; 299).
+      false: Ignora variações de TTL (Comportamento recomendado para recursivos).
+
+  ENABLE_PING / PING_COUNT / PING_TIMEOUT
+      Módulo de latência ICMP. Executa N pings antes dos testes DNS para verificar
+      a saúde básica da rota e perda de pacotes.
+
+  CHECK_BIND_VERSION
+      Tenta extrair a versão do software DNS usando consultas CHAOS TXT.
+      (Geralmente bloqueado por segurança em servidores de produção).
+
+LEGENDA DE SAÍDA (O que significam os símbolos?):
+  . (Ponto)      = Sucesso (Resposta consistente e válida).
+  ! (Exclamação)= Alerta (Sucesso, mas servidor lento ou resposta estranha).
+  ~ (Til)       = Divergência (O servidor mudou a resposta durante o teste).
+  x (Xis)        = Falha Crítica (Timeout, Erro de Conexão, REFUSED).
+  T / T        = Status do Teste TCP (Falha/Sucesso).
+  D / D        = Status do Teste DNSSEC (Falha/Sucesso).
+
+==============================================================================</pre>
+            </div>
+        </details>
+        <footer>
+            Gerado automaticamente por <strong>DNS Diagnostic Tool (v9.17)</strong><br>
+        </footer>
+    </div>
+    <a href="#top" style="position:fixed; bottom:20px; right:20px; background:var(--accent-primary); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); font-size:1.2rem;">⬆️</a>
+    <script>
+        document.getElementById('total_time_placeholder').innerText = "14s";
+    </script>
+</body>
+</html>
