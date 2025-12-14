@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.26.2
-# "Fix HTML simple mode"
+# Versão: 9.28
+# "Refine Security Terminology"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.26.2"
+SCRIPT_VERSION="9.28"
 
 
 # Carrega configurações externas
@@ -72,6 +72,9 @@ declare -i SOA_SYNC_FAIL=0
 declare -i SOA_SYNC_OK=0
 declare -i TOTAL_PING_SENT=0
 TOTAL_SLEEP_TIME=0
+# Latency Tracking
+TOTAL_LATENCY_SUM="0"
+declare -i TOTAL_LATENCY_COUNT=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -82,15 +85,24 @@ LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
 init_html_parts() {
     TEMP_HEADER="logs/temp_header_$$.html"
     TEMP_STATS="logs/temp_stats_$$.html"
-    TEMP_MATRIX="logs/temp_matrix_$$.html"
-    TEMP_DETAILS="logs/temp_details_$$.html"
-    TEMP_PING="logs/temp_ping_$$.html"
-    TEMP_TRACE="logs/temp_trace_$$.html"
+    TEMP_SERVICES="logs/temp_services_$$.html"
     TEMP_CONFIG="logs/temp_config_$$.html"
     TEMP_TIMING="logs/temp_timing_$$.html"
     TEMP_MODAL="logs/temp_modal_$$.html"
     TEMP_DISCLAIMER="logs/temp_disclaimer_$$.html"
-    TEMP_SERVICES="logs/temp_services_$$.html"
+
+    # Full Report Temp Files - Conditional Initialization
+    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        TEMP_MATRIX="logs/temp_matrix_$$.html"
+        TEMP_DETAILS="logs/temp_details_$$.html"
+        TEMP_PING="logs/temp_ping_$$.html"
+        TEMP_TRACE="logs/temp_trace_$$.html"
+    else
+        TEMP_MATRIX=""
+        TEMP_DETAILS=""
+        TEMP_PING=""
+        TEMP_TRACE=""
+    fi
 
     # Simple Mode Temp Files - Conditional Creation
     if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
@@ -256,7 +268,7 @@ print_help_text() {
     echo -e "  ${RED}D${NC} / ${GREEN}D${NC} / ${GRAY}D${NC}    = Status do Teste DNSSEC (Falha/Sucesso/Ausente)."
     echo -e ""
     echo -e "  ${BLUE}--- LEGENDAS DE SEGURANÇA ---${NC}"
-    echo -e "  ${GREEN}HIDDEN/DENIED/CLOSED${NC} = Seguro (OK)"
+    echo -e "  ${GREEN}HIDDEN/DENIED/CLOSED${NC} = Restrito (OK)"
     echo -e "  ${RED}REVEALED/ALLOWED/OPEN${NC} = Risco (Falha de Segurança)"
     echo -e "  ${GRAY}TIMEOUT/ERROR${NC}       = Erro de Rede (Inconclusivo)"
     echo -e ""
@@ -988,11 +1000,46 @@ generate_stats_block() {
     local p_succ=0
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
     
+    # Calculate Stats for HTML
+    local domain_count=0
+    [[ -f "$FILE_DOMAINS" ]] && domain_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
+    local group_count=${#ACTIVE_GROUPS[@]}
+    declare -A _uniq_srv_html
+    for g in "${!ACTIVE_GROUPS[@]}"; do
+        for ip in ${DNS_GROUPS[$g]}; do _uniq_srv_html[$ip]=1; done
+    done
+    local server_count=${#_uniq_srv_html[@]}
+    local avg_lat="N/A"
+    if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
+        avg_lat=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+    fi
+
 cat > "$TEMP_STATS" << EOF
+        <h2>📊 Estatísticas Gerais</h2>
+        <!-- General Inventory Row -->
+        <div class="dashboard" style="margin-bottom: 20px;">
+            <div class="card" style="border-left: 4px solid #64748b;">
+                <span class="card-num">${domain_count}</span>
+                <span class="card-label">Domínios</span>
+            </div>
+             <div class="card" style="border-left: 4px solid #64748b;">
+                <span class="card-num">${group_count}</span>
+                <span class="card-label">Grupos DNS</span>
+            </div>
+             <div class="card" style="border-left: 4px solid #64748b;">
+                <span class="card-num">${server_count}</span>
+                <span class="card-label">Servidores</span>
+            </div>
+            <div class="card" style="border-left: 4px solid #64748b;">
+                <span class="card-num">${avg_lat}<small style="font-size:0.4em;">ms</small></span>
+                <span class="card-label">Latência Média</span>
+            </div>
+        </div>
+
         <div class="dashboard">
             <div class="card st-total">
                 <span class="card-num">$TOTAL_TESTS</span>
-                <span class="card-label">Total Testes</span>
+                <span class="card-label">Total Queries</span>
             </div>
             <div class="card st-ok">
                 <span class="card-num">$SUCCESS_TESTS</span>
@@ -1337,7 +1384,7 @@ assemble_html() {
     cat "$TEMP_MODAL" >> "$target_file"
     cat "$TEMP_STATS" >> "$target_file"
     
-    cat "$TEMP_DISCLAIMER" >> "$target_file"
+
     
     if [[ "$mode" == "simple" ]]; then
         cat "$TEMP_MATRIX_SIMPLE" >> "$target_file"
@@ -1427,6 +1474,8 @@ EOF
     cat "$TEMP_TIMING" >> "$target_file"
     cat "logs/temp_help_$$.html" >> "$target_file"
 
+
+    cat "$TEMP_DISCLAIMER" >> "$target_file"
 
     cat >> "$target_file" << EOF
         <footer>
@@ -1708,7 +1757,7 @@ run_security_diagnostics() {
                if [[ "$v_res" == "TIMEOUT" || "$axfr_res" == "TIMEOUT" || "$rec_res" == "TIMEOUT" ]]; then
                     echo -e "${GRAY}⚠️ Timeouts${NC}"
                else
-                    echo -e "${GREEN}✅ Secure${NC}"
+                    echo -e "${GREEN}✅ Restricted${NC}"
                fi
            else
                local risks=$(IFS=,; echo "${risk_summary[*]}")
@@ -1777,6 +1826,12 @@ run_ping_diagnostics() {
         [[ -z "$loss" ]] && loss=100
         local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
         [[ -z "$rtt_avg" ]] && rtt_avg="N/A"
+
+        # Accumulate Latency for General Stats
+        if [[ "$rtt_avg" != "N/A" ]]; then
+             TOTAL_LATENCY_SUM=$(awk "BEGIN {print $TOTAL_LATENCY_SUM + $rtt_avg}")
+             TOTAL_LATENCY_COUNT=$((TOTAL_LATENCY_COUNT + 1))
+        fi
         
         local status_html=""; local class_html=""; local console_res=""
         if [[ "$ret" -ne 0 ]] || [[ "$loss" == "100" ]]; then status_html="❌ DOWN"; class_html="status-fail"; console_res="${RED}DOWN${NC}"
@@ -1925,8 +1980,9 @@ process_tests() {
         
         # Reset Domain Stats
         local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
-        > "$TEMP_DOMAIN_BODY"
-        > "$TEMP_DOMAIN_BODY"
+        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            > "$TEMP_DOMAIN_BODY"
+        fi
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
             > "$TEMP_DOMAIN_BODY_SIMPLE"
         fi
@@ -1945,18 +2001,22 @@ process_tests() {
             
             # Reset Group Stats
             local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
-            echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
+            fi
             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                 > "$TEMP_GROUP_BODY_SIMPLE"
                 echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
             for srv in "${srv_list[@]}"; do 
-                echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
+                [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
                 if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                     echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
                 fi
             done
-            echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY"
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY"
+            fi
             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                 echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
@@ -2050,7 +2110,7 @@ process_tests() {
                     done
 
                     for rec in "${rec_list[@]}"; do
-                        echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
+                        [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
                         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                             echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
                         fi
@@ -2290,7 +2350,7 @@ process_tests() {
                         done
                         
                         if [[ "$soa_divergence_detected" == "true" ]]; then
-                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
+                                  [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
                                   if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                                       echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                                   fi
@@ -2298,7 +2358,9 @@ process_tests() {
 
                         
 
-                        echo "</tr>" >> "$TEMP_GROUP_BODY"
+                        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                            echo "</tr>" >> "$TEMP_GROUP_BODY"
+                        fi
                         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                             echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                         fi
@@ -2306,7 +2368,9 @@ process_tests() {
                 done
             done
             # Close table AFTER all modes and targets are done
-            echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
+            fi
             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                 echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
@@ -2322,9 +2386,11 @@ process_tests() {
             [[ $g_div -gt 0 ]] && g_stats_html+="<span class=\"st-div\">🔀 $g_div</span>"
             g_stats_html+="</span>"
 
-            echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY"
-            cat "$TEMP_GROUP_BODY" >> "$TEMP_DOMAIN_BODY"
-            echo "</details>" >> "$TEMP_DOMAIN_BODY"
+            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY"
+                cat "$TEMP_GROUP_BODY" >> "$TEMP_DOMAIN_BODY"
+                echo "</details>" >> "$TEMP_DOMAIN_BODY"
+            fi
 
             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                 echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
@@ -2343,9 +2409,11 @@ process_tests() {
         [[ $d_div -gt 0 ]] && d_stats_html+="<span class=\"st-div\">🔀 $d_div</span>"
         d_stats_html+="</span>"
 
-        echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
-        cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
-        echo "</details>" >> "$TEMP_MATRIX"
+        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
+            cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
+            echo "</details>" >> "$TEMP_MATRIX"
+        fi
 
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
             echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX_SIMPLE"
@@ -2432,11 +2500,35 @@ EOF
 }
 
 print_final_terminal_summary() {
+    # Calculate General Stats
+    local domain_count=0
+    [[ -f "$FILE_DOMAINS" ]] && domain_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
+    
+    local group_count=${#ACTIVE_GROUPS[@]}
+    
+    # Calculate Unique Servers Involved
+    declare -A _uniq_srv
+    for g in "${!ACTIVE_GROUPS[@]}"; do
+        for ip in ${DNS_GROUPS[$g]}; do _uniq_srv[$ip]=1; done
+    done
+    local server_count=${#_uniq_srv[@]}
+
+    # Calculate Avg Latency
+    local avg_lat="N/A"
+    if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
+        avg_lat=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+    fi
+
     # Print direct to terminal with colors
     echo -e "\n${BLUE}======================================================${NC}"
-    echo -e "${BLUE}       RESUMO DA EXECUÇÃO (DASHBOARD TERMINAL)${NC}"
+    echo -e "${BLUE}       ESTATÍSTICAS GERAIS${NC}"
     echo -e "${BLUE}======================================================${NC}"
-    echo -e "  🔢 Total de Testes : ${TOTAL_TESTS}"
+    echo -e "  📂 Domínios      : ${domain_count}"
+    echo -e "  👥 Grupos DNS    : ${group_count}"
+    echo -e "  🖥️ Servidores    : ${server_count} (Únicos)"
+    echo -e "  📡 Total Queries : ${TOTAL_TESTS} (DNS)"
+    echo -e "  ⏱️ Latência Média: ${avg_lat}ms"
+    echo -e "${BLUE}------------------------------------------------------${NC}"
     echo -e "  ✅ Sucesso         : ${GREEN}${SUCCESS_TESTS}${NC}"
     echo -e "  ⚠️ Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
     echo -e "  ❌ Falhas Críticas : ${RED}${FAILED_TESTS}${NC}"
@@ -2461,9 +2553,9 @@ print_final_terminal_summary() {
     echo -e "  ⏳ Duração Total   : ${TOTAL_DURATION}s"
 
     echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
-    echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed / ${GRAY}${SEC_VER_TIMEOUT}${NC} Error"
-    echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed  / ${GRAY}${SEC_AXFR_TIMEOUT}${NC} Error"
-    echo -e "  RECURSION : ${GREEN}${SEC_REC_OK}${NC} Closed / ${RED}${SEC_REC_RISK}${NC} Open    / ${GRAY}${SEC_REC_TIMEOUT}${NC} Error"
+    echo -e "  PRIVACY   : ${GREEN}${SEC_HIDDEN}${NC} Hidden / ${RED}${SEC_REVEALED}${NC} Revealed / ${GRAY}${SEC_VER_TIMEOUT}${NC} Timeout"
+    echo -e "  AXFR      : ${GREEN}${SEC_AXFR_OK}${NC} Denied / ${RED}${SEC_AXFR_RISK}${NC} Allowed  / ${GRAY}${SEC_AXFR_TIMEOUT}${NC} Timeout"
+    echo -e "  RECURSION : ${GREEN}${SEC_REC_OK}${NC} Closed / ${RED}${SEC_REC_RISK}${NC} Open    / ${GRAY}${SEC_REC_TIMEOUT}${NC} Timeout"
     echo -e "  SOA SYNC  : ${GREEN}${SOA_SYNC_OK}${NC} Synced / ${RED}${SOA_SYNC_FAIL}${NC} Divergent"
     
     echo -e "${BLUE}======================================================${NC}"
@@ -2473,9 +2565,14 @@ print_final_terminal_summary() {
          {
              echo ""
              echo "======================================================"
-             echo "       RESUMO DA EXECUÇÃO (DASHBOARD TERMINAL)"
+             echo "       ESTATÍSTICAS GERAIS"
              echo "======================================================"
-             echo "  Total de Testes : ${TOTAL_TESTS}"
+             echo "  Domínios      : ${domain_count}"
+             echo "  Grupos DNS    : ${group_count}"
+             echo "  Servidores    : ${server_count} (Únicos)"
+             echo "  Total Queries : ${TOTAL_TESTS} (DNS)"
+             echo "  Latência Média: ${avg_lat}ms"
+             echo "------------------------------------------------------"
              echo "  Sucesso         : ${SUCCESS_TESTS}"
              echo "  Alertas         : ${WARNING_TESTS}"
              echo "  Falhas Críticas : ${FAILED_TESTS}"
@@ -2491,9 +2588,9 @@ print_final_terminal_summary() {
              echo "  Duração Total   : ${TOTAL_DURATION}s"
              echo ""
              echo "--- SECURITY SCAN ---"
-             echo "  PRIVACY   : ${SEC_HIDDEN} Hidden / ${SEC_REVEALED} Revealed / ${SEC_VER_TIMEOUT} Error"
-             echo "  AXFR      : ${SEC_AXFR_OK} Denied / ${SEC_AXFR_RISK} Allowed  / ${SEC_AXFR_TIMEOUT} Error"
-             echo "  RECURSION : ${SEC_REC_OK} Closed / ${SEC_REC_RISK} Open    / ${SEC_REC_TIMEOUT} Error"
+             echo "  PRIVACY   : ${SEC_HIDDEN} Hidden / ${SEC_REVEALED} Revealed / ${SEC_VER_TIMEOUT} Timeout"
+             echo "  AXFR      : ${SEC_AXFR_OK} Denied / ${SEC_AXFR_RISK} Allowed  / ${SEC_AXFR_TIMEOUT} Timeout"
+             echo "  RECURSION : ${SEC_REC_OK} Closed / ${SEC_REC_RISK} Open    / ${SEC_REC_TIMEOUT} Timeout"
              echo "  SOA SYNC  : ${SOA_SYNC_OK} Synced / ${SOA_SYNC_FAIL} Divergent"
              echo "======================================================"
          } >> "$LOG_FILE_TEXT"
