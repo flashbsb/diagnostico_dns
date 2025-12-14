@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.28
-# "Refine Security Terminology"
+# Versão: 9.28.1
+# "FIX cards and wizard"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.28"
+SCRIPT_VERSION="9.28.1"
 
 
 # Carrega configurações externas
@@ -471,11 +471,13 @@ interactive_configuration() {
         ask_boolean "Considerar mudança de TTL como divergência?" "STRICT_TTL_CHECK"
         
         echo -e "\n${BLUE}--- GERAL ---${NC}"
+        ask_variable "Arquivo de Domínios (CSV)" "FILE_DOMAINS"
+        ask_variable "Arquivo de Grupos (CSV)" "FILE_GROUPS"
+        ask_variable "Prefixo arquivos Log" "LOG_PREFIX"
         ask_variable "Tentativas por Teste (Consistência)" "CONSISTENCY_CHECKS"
         ask_variable "Timeout Global (segundos)" "TIMEOUT"
         ask_variable "Sleep entre queries (segundos)" "SLEEP"
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
-        ask_boolean "Checar versão BIND (chaos)?" "CHECK_BIND_VERSION"
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
         ask_boolean "Gerar relatório HTML Detalhado?" "ENABLE_FULL_REPORT"
@@ -710,13 +712,25 @@ cat > "$TEMP_HEADER" << EOF
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 20px;
+            padding: 24px;
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
+            align-items: center;
+            text-align: center;
+            justify-content: center;
             position: relative;
             overflow: hidden;
             transition: transform 0.2s, box-shadow 0.2s;
+            min-height: 120px;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--card-accent, #64748b);
         }
         .card:hover {
             transform: translateY(-2px);
@@ -1017,62 +1031,60 @@ generate_stats_block() {
 cat > "$TEMP_STATS" << EOF
         <h2>📊 Estatísticas Gerais</h2>
         <!-- General Inventory Row -->
-        <div class="dashboard" style="margin-bottom: 20px;">
-            <div class="card" style="border-left: 4px solid #64748b;">
+        <div class="dashboard">
+            <div class="card" style="--card-accent: #64748b;">
                 <span class="card-num">${domain_count}</span>
                 <span class="card-label">Domínios</span>
             </div>
-             <div class="card" style="border-left: 4px solid #64748b;">
+             <div class="card" style="--card-accent: #64748b;">
                 <span class="card-num">${group_count}</span>
                 <span class="card-label">Grupos DNS</span>
             </div>
-             <div class="card" style="border-left: 4px solid #64748b;">
+             <div class="card" style="--card-accent: #64748b;">
                 <span class="card-num">${server_count}</span>
                 <span class="card-label">Servidores</span>
             </div>
-            <div class="card" style="border-left: 4px solid #64748b;">
+            <div class="card" style="--card-accent: #64748b;">
                 <span class="card-num">${avg_lat}<small style="font-size:0.4em;">ms</small></span>
                 <span class="card-label">Latência Média</span>
             </div>
         </div>
 
         <div class="dashboard">
-            <div class="card st-total">
+            <div class="card st-total" style="--card-accent: var(--accent-primary);">
                 <span class="card-num">$TOTAL_TESTS</span>
                 <span class="card-label">Total Queries</span>
             </div>
-            <div class="card st-ok">
+            <div class="card st-ok" style="--card-accent: var(--accent-success);">
                 <span class="card-num">$SUCCESS_TESTS</span>
                 <span class="card-label">Sucesso ($p_succ%)</span>
             </div>
-            <div class="card st-warn">
+            <div class="card st-warn" style="--card-accent: var(--accent-warning);">
                 <span class="card-num">$WARNING_TESTS</span>
                 <span class="card-label">Alertas</span>
             </div>
-            <div class="card st-fail">
+            <div class="card st-fail" style="--card-accent: var(--accent-danger);">
                 <span class="card-num">$FAILED_TESTS</span>
                 <span class="card-label">Falhas Críticas</span>
             </div>
-            <div class="card st-div">
+            <div class="card st-div" style="--card-accent: var(--accent-divergent);">
                 <span class="card-num">$DIVERGENT_TESTS</span>
                 <span class="card-label">Divergências</span>
             </div>
         </div>
     
-    <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+        <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
 EOF
 
     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="border-left: 4px solid var(--accent-info);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                     <span class="card-label">TCP Checks</span>
-                     <span style="font-size:1.5rem;">🔌</span>
-                </div>
-                <div style="margin-top:10px;">
-                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${TCP_SUCCESS}</span> <span style="font-size:0.85em; color:var(--accent-success);">OK</span>
-                     <span style="color:#666;">/</span>
-                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${TCP_FAIL}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Fail</span>
+            <div class="card" style="--card-accent: var(--accent-info);">
+                <div style="font-size:1.5rem; margin-bottom:5px;">🔌</div>
+                <span class="card-label">TCP Compliance</span>
+                <div style="margin-top:10px; font-size:1.1rem;">
+                     <span style="font-weight:700; color:var(--text-primary);">${TCP_SUCCESS}</span> <span style="font-size:0.8em; color:var(--accent-success);">OK</span>
+                     <span style="color:#666; margin:0 5px;">|</span>
+                     <span style="font-weight:700; color:var(--text-primary);">${TCP_FAIL}</span> <span style="font-size:0.8em; color:var(--accent-danger);">Fail</span>
                 </div>
             </div>
 EOF
@@ -1080,75 +1092,62 @@ EOF
 
     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="border-left: 4px solid #8b5cf6;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                     <span class="card-label">DNSSEC Checks</span>
-                     <span style="font-size:1.5rem;">🔐</span>
-                </div>
-                <div style="margin-top:10px;">
-                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${DNSSEC_SUCCESS}</span> <span style="font-size:0.85em; color:var(--accent-success);">Valid</span>
-                     <span style="color:#666;">/</span>
-                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${DNSSEC_ABSENT}</span> <span style="font-size:0.85em; color:var(--text-secondary);">Absent</span>
-                     <span style="color:#666;">/</span>
-                     <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${DNSSEC_FAIL}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Fail</span>
+            <div class="card" style="--card-accent: #8b5cf6;">
+                <div style="font-size:1.5rem; margin-bottom:5px;">🔐</div>
+                <span class="card-label">DNSSEC Status</span>
+                <div style="margin-top:10px; font-size:1.1rem;">
+                     <span style="font-weight:700; color:var(--text-primary);">${DNSSEC_SUCCESS}</span> <span style="font-size:0.8em; color:var(--accent-success);">Valid</span>
+                     <span style="color:#666; margin:0 5px;">|</span>
+                     <span style="font-weight:700; color:var(--text-primary);">${DNSSEC_ABSENT}</span> <span style="font-size:0.8em; color:var(--text-secondary);">Absent</span>
+                     <span style="color:#666; margin:0 5px;">|</span>
+                     <span style="font-weight:700; color:var(--text-primary);">${DNSSEC_FAIL}</span> <span style="font-size:0.8em; color:var(--accent-danger);">Fail</span>
                 </div>
             </div>
 EOF
     fi
 
+    # Security Cards (Unified in same grid)
+    # Adding Counts for Timeouts/Errors to ensure totals match
     cat >> "$TEMP_STATS" << EOF
-        </div>
-EOF
-    
-    # Adding Security Cards Row
-    cat >> "$TEMP_STATS" << EOF
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
-        <div class="card" style="border-left: 4px solid var(--accent-primary);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                 <span class="card-label">Version Privacy</span>
-                 <span style="font-size:1.5rem;">🕵️</span>
-            </div>
-            <div style="margin-top:10px;">
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_HIDDEN}</span> <span style="font-size:0.85em; color:var(--accent-success);">Hidden</span>
-                 <span style="color:#666;">/</span>
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REVEALED}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Revealed</span>
+        <div class="card" style="--card-accent: var(--accent-primary);">
+            <div style="font-size:1.5rem; margin-bottom:5px;">🕵️</div>
+            <span class="card-label">Version Privacy</span>
+            <div style="margin-top:10px; font-size:0.95rem;">
+                 <span style="color:var(--accent-success);">Hide:</span> <strong>${SEC_HIDDEN}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--accent-danger);">Rev:</span> <strong>${SEC_REVEALED}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_VER_TIMEOUT}</strong>
             </div>
         </div>
-        <div class="card" style="border-left: 4px solid var(--accent-warning);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                 <span class="card-label">Zone Transfer</span>
-                 <span style="font-size:1.5rem;">📂</span>
-            </div>
-            <div style="margin-top:10px;">
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_AXFR_OK}</span> <span style="font-size:0.85em; color:var(--accent-success);">Denied</span>
-                 <span style="color:#666;">/</span>
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_AXFR_RISK}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Allowed</span>
+        <div class="card" style="--card-accent: var(--accent-warning);">
+            <div style="font-size:1.5rem; margin-bottom:5px;">📂</div>
+            <span class="card-label">Zone Transfer</span>
+            <div style="margin-top:10px; font-size:0.95rem;">
+                 <span style="color:var(--accent-success);">Deny:</span> <strong>${SEC_AXFR_OK}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--accent-danger);">Allow:</span> <strong>${SEC_AXFR_RISK}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_AXFR_TIMEOUT}</strong>
             </div>
         </div>
-        <div class="card" style="border-left: 4px solid var(--accent-danger);">
-             <div style="display:flex; justify-content:space-between; align-items:center;">
-                 <span class="card-label">Recursion</span>
-                 <span style="font-size:1.5rem;">🔄</span>
-            </div>
-            <div style="margin-top:10px;">
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REC_OK}</span> <span style="font-size:0.85em; color:var(--accent-success);">Closed</span>
-                 <span style="color:#666;">/</span>
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SEC_REC_RISK}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Open</span>
+        <div class="card" style="--card-accent: var(--accent-danger);">
+            <div style="font-size:1.5rem; margin-bottom:5px;">🔄</div>
+            <span class="card-label">Recursion</span>
+            <div style="margin-top:10px; font-size:0.95rem;">
+                 <span style="color:var(--accent-success);">Close:</span> <strong>${SEC_REC_OK}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--accent-danger);">Open:</span> <strong>${SEC_REC_RISK}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_REC_TIMEOUT}</strong>
             </div>
         </div>
 EOF
+
     # SOA Sync Card
     if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]]; then
     cat >> "$TEMP_STATS" << EOF
-        <div class="card" style="border-left: 4px solid var(--accent-divergent);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                 <span class="card-label">SOA Sync</span>
-                 <span style="font-size:1.5rem;">⚖️</span>
-            </div>
-            <div style="margin-top:10px;">
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SOA_SYNC_OK}</span> <span style="font-size:0.85em; color:var(--accent-success);">Synced</span>
-                 <span style="color:#666;">/</span>
-                 <span style="font-weight:700; font-size:1.2rem; color:var(--text-primary);">${SOA_SYNC_FAIL}</span> <span style="font-size:0.85em; color:var(--accent-danger);">Divergent</span>
+        <div class="card" style="--card-accent: var(--accent-divergent);">
+            <div style="font-size:1.5rem; margin-bottom:5px;">⚖️</div>
+            <span class="card-label">SOA Sync</span>
+            <div style="margin-top:10px; font-size:1.1rem;">
+                 <span style="font-weight:700; color:var(--text-primary);">${SOA_SYNC_OK}</span> <span style="font-size:0.8em; color:var(--accent-success);">Synced</span>
+                 <span style="color:#666; margin:0 5px;">|</span>
+                 <span style="font-weight:700; color:var(--text-primary);">${SOA_SYNC_FAIL}</span> <span style="font-size:0.8em; color:var(--accent-danger);">Div</span>
             </div>
         </div>
 EOF
@@ -1278,6 +1277,7 @@ cat > "$TEMP_CONFIG" << EOF
                     </thead>
                     <tbody>
                         <tr><td>Versão do Script</td><td>v${SCRIPT_VERSION}</td><td>Identificação da release utilizada.</td></tr>
+                        <tr><td>Prefixo Log</td><td>${LOG_PREFIX}</td><td>Prefixo para geração de arquivos.</td></tr>
                         <tr><td>Timeout Global</td><td>${TIMEOUT}s</td><td>Tempo máximo de espera por resposta do DNS.</td></tr>
                         <tr><td>Sleep (Intervalo)</td><td>${SLEEP}s</td><td>Pausa entre tentativas consecutivas (consistency check).</td></tr>
                         <tr><td>Valida Conectividade</td><td>${VALIDATE_CONNECTIVITY}</td><td>Testa porta 53 antes do envio da query.</td></tr>
