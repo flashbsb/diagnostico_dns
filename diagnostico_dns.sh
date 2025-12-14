@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 9.26.1
-# "Enhancements and Fixes"
+# Versão: 9.26.2
+# "Fix HTML simple mode"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="9.26.1"
+SCRIPT_VERSION="9.26.2"
 
 
 # Carrega configurações externas
@@ -1926,7 +1926,10 @@ process_tests() {
         # Reset Domain Stats
         local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
         > "$TEMP_DOMAIN_BODY"
-        > "$TEMP_DOMAIN_BODY_SIMPLE"
+        > "$TEMP_DOMAIN_BODY"
+        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            > "$TEMP_DOMAIN_BODY_SIMPLE"
+        fi
 
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
         local targets=("$domain"); for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
@@ -1942,17 +1945,21 @@ process_tests() {
             
             # Reset Group Stats
             local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
-            > "$TEMP_GROUP_BODY"
-            > "$TEMP_GROUP_BODY_SIMPLE"
-
             echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
-            echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                > "$TEMP_GROUP_BODY_SIMPLE"
+                echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            fi
             for srv in "${srv_list[@]}"; do 
                 echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
-                echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                    echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                fi
             done
             echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY"
-            echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            fi
             
             for mode in "${calc_modes[@]}"; do
                 for target in "${targets[@]}"; do
@@ -2044,7 +2051,9 @@ process_tests() {
 
                     for rec in "${rec_list[@]}"; do
                         echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
-                        echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                            echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        fi
                         
                         # SOA Serial Collection
                         local collected_soa_serials=()
@@ -2282,19 +2291,25 @@ process_tests() {
                         
                         if [[ "$soa_divergence_detected" == "true" ]]; then
                                   echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
-                                  echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                                  if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                                      echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                                  fi
                         fi
 
                         
 
                         echo "</tr>" >> "$TEMP_GROUP_BODY"
-                        echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                            echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        fi
                     done
                 done
             done
             # Close table AFTER all modes and targets are done
             echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
-            echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
+            fi
 
             d_total=$((d_total + g_total)); d_ok=$((d_ok + g_ok)); d_warn=$((d_warn + g_warn))
             d_fail=$((d_fail + g_fail)); d_div=$((d_div + g_div))
@@ -2311,9 +2326,11 @@ process_tests() {
             cat "$TEMP_GROUP_BODY" >> "$TEMP_DOMAIN_BODY"
             echo "</details>" >> "$TEMP_DOMAIN_BODY"
 
-            echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
-            cat "$TEMP_GROUP_BODY_SIMPLE" >> "$TEMP_DOMAIN_BODY_SIMPLE"
-            echo "</details>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
+            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
+                cat "$TEMP_GROUP_BODY_SIMPLE" >> "$TEMP_DOMAIN_BODY_SIMPLE"
+                echo "</details>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
+            fi
             
             echo "" 
         done
@@ -2339,7 +2356,10 @@ process_tests() {
         echo ""
     done < "$FILE_DOMAINS"
     
-    rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY" "$TEMP_DOMAIN_BODY_SIMPLE" "$TEMP_GROUP_BODY_SIMPLE"
+    rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY"
+    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        rm -f "$TEMP_DOMAIN_BODY_SIMPLE" "$TEMP_GROUP_BODY_SIMPLE"
+    fi
 }
 
 assemble_json() {
