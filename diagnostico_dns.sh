@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.0.3
-# "Chart Debugging and Enhancements Walkthrough"
+# Versão: 10.0.12
+# "Fix legenda SOA Sync"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.0.3"
+SCRIPT_VERSION="10.0.12"
 
 
 # Carrega configurações externas
@@ -1214,21 +1214,23 @@ EOF
 }
 
 generate_object_summary() {
-    cat > "logs/temp_obj_summary_$$.html" << EOF
-        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
-            <summary style="font-size: 1.1rem; font-weight: 600;">📋 Testes DNS TCP e DNS SEC</summary>
-            <div style="padding: 20px;">
-EOF
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
         cat >> "logs/temp_obj_summary_$$.html" << EOF
-                <div class="card" style="margin-bottom: 20px; --card-accent: #8b5cf6;">
+                <div class="card" style="margin-bottom: 20px; --card-accent: #8b5cf6; cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
                      <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Estatísticas de Serviços</h3>
                      <div style="position: relative; height: 300px; width: 100%;">
                         <canvas id="chartServices"></canvas>
                      </div>
+                     <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
                  </div>
 EOF
     fi
+
+    cat >> "logs/temp_obj_summary_$$.html" << EOF
+        <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📋 Testes DNS TCP e DNS SEC</summary>
+            <div style="padding: 20px;">
+EOF
     cat >> "logs/temp_obj_summary_$$.html" << EOF
                 <p style="color:var(--text-secondary); margin-bottom:15px; font-size:0.9rem;">
                     Validação de recursos avançados (Transporte TCP e Assinatura DNSSEC) para cada servidor consultado.
@@ -1529,6 +1531,8 @@ EOF
     fi
 
 cat << EOF
+        const colorPalette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+
         if (ctxLatency && latencyData.length > 0) {
             new Chart(ctxLatency, {
                 type: 'bar',
@@ -1537,9 +1541,37 @@ cat << EOF
                     datasets: [{
                         label: 'Latência (ms)',
                         data: latencyData,
-                        backgroundColor: '#f59e0b',
+                        backgroundColor: colorPalette,
                         borderRadius: 4,
                         barThickness: 15
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                         x: { beginAtZero: true, grid: { color: '#334155', drawBorder: false } },
+                         y: { grid: { display: false } }
+                    },
+                     plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // Detailed Latency Chart for ICMP Section
+        const ctxLatencyDetail = document.getElementById('chartLatencyDetail');
+        if (ctxLatencyDetail && latencyData.length > 0) {
+            new Chart(ctxLatencyDetail, {
+                type: 'bar',
+                data: {
+                    labels: latencyLabels,
+                    datasets: [{
+                        label: 'Latência (ms)',
+                        data: latencyData,
+                        backgroundColor: colorPalette,
+                        borderRadius: 4,
+                        barThickness: 20
                     }]
                 },
                 options: {
@@ -1565,7 +1597,7 @@ cat << EOF
                     datasets: [{
                         label: 'Saltos (Hops)',
                         data: traceData,
-                        backgroundColor: '#8b5cf6',
+                        backgroundColor: colorPalette,
                         borderRadius: 4,
                         barThickness: 15
                     }]
@@ -1596,9 +1628,14 @@ cat << EOF
                             backgroundColor: '#10b981'
                         },
                         {
-                            label: 'Fail/Absent',
-                            data: [$TCP_FAIL, $DNSSEC_FAIL + $DNSSEC_ABSENT],
+                            label: 'Fail',
+                            data: [$TCP_FAIL, $DNSSEC_FAIL],
                             backgroundColor: '#ef4444'
+                        },
+                         {
+                            label: 'Absent',
+                            data: [0, $DNSSEC_ABSENT],
+                            backgroundColor: '#94a3b8'
                         }
                     ]
                 },
@@ -1621,7 +1658,7 @@ cat << EOF
                     labels: ['Version Hiding', 'Zone Transfer', 'Recursion Control'],
                     datasets: [
                         {
-                            label: 'Secure',
+                            label: 'Restricted',
                             data: [$SEC_HIDDEN, $SEC_AXFR_OK, $SEC_REC_OK],
                             backgroundColor: '#10b981',
                              stack: 'Stack 0'
@@ -1705,11 +1742,25 @@ assemble_html() {
 EOF
 
     if [[ -s "$TEMP_PING" ]]; then
-        cat >> "$target_file" << EOF
-        <details class="section-details" style="margin-top: 30px; border-left: 4px solid var(--accent-warning);">
-             <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
-             <div class="table-responsive" style="padding:15px;">
-             <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
+         if [[ "$ENABLE_CHARTS" == "true" ]]; then
+              cat >> "$target_file" << EOF
+              <!-- Chart Injection for ICMP Section -->
+              <div class="card" style="margin-bottom: 20px; --card-accent: var(--accent-warning); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
+                   <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Detalhe de Latência por Servidor</h3>
+                   <div style="position: relative; height: 300px; width: 100%;">
+                      <canvas id="chartLatencyDetail"></canvas>
+                   </div>
+                   <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
+              </div>
+EOF
+         fi
+
+         cat >> "$target_file" << EOF
+         <details class="section-details" style="margin-top: 30px; border-left: 4px solid var(--accent-warning);">
+              <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
+              <div class="table-responsive" style="padding:15px;">
+              
+              <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
 EOF
         if [[ "$mode" == "simple" ]]; then
              cat "$TEMP_PING_SIMPLE" >> "$target_file"
@@ -1736,11 +1787,12 @@ EOF
              # BETTER: Place chart ABOVE the details block.
              if [[ "$ENABLE_CHARTS" == "true" ]]; then
                  cat >> "$target_file" << EOF
-                 <div class="card" style="margin-top: 20px; --card-accent: var(--accent-danger);">
+                 <div class="card" style="margin-top: 20px; --card-accent: var(--accent-danger); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
                      <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Gráfico de Conformidade de Segurança</h3>
                      <div style="position: relative; height: 300px; width: 100%;">
                         <canvas id="chartSecurity"></canvas>
                      </div>
+                     <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
                  </div>
 EOF
              fi
@@ -1749,21 +1801,23 @@ EOF
     fi
 
     if [[ -s "$TEMP_TRACE" ]]; then
+         if [[ "$ENABLE_CHARTS" == "true" ]]; then
+             cat >> "$target_file" << EOF
+                 <div class="card" style="margin-top: 20px; --card-accent: var(--accent-divergent); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
+                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Topologia de Rede (Hops)</h3>
+                     <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="chartTrace"></canvas>
+                     </div>
+                     <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
+                 </div>
+EOF
+         fi
+         
          cat >> "$target_file" << EOF
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-divergent);">
              <summary style="font-size: 1.1rem; font-weight: 600;">🛤️ Rota de Rede (Traceroute)</summary>
              <div class="table-responsive" style="padding:15px;">
 EOF
-        if [[ "$ENABLE_CHARTS" == "true" ]]; then
-             cat >> "$target_file" << EOF
-                 <div class="card" style="margin-bottom: 20px; --card-accent: var(--accent-divergent);">
-                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Topologia de Rede (Hops)</h3>
-                     <div style="position: relative; height: 300px; width: 100%;">
-                        <canvas id="chartTrace"></canvas>
-                     </div>
-                 </div>
-EOF
-        fi
         if [[ "$mode" == "simple" ]]; then
              cat "$TEMP_TRACE_SIMPLE" >> "$target_file"
         else
@@ -1775,13 +1829,12 @@ EOF
     # SECTION: SERVICES (TCP, DNSSEC) - Moved to generate_object_summary
     # Content handled by logs/temp_obj_summary_$$.html
     
+    # Mover Resumo da Execução para cá (após os resultados, antes das configs)
+    cat "logs/temp_obj_summary_$$.html" >> "$target_file"
+
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
         generate_charts_script >> "$target_file"
     fi
-
-
-    # Mover Resumo da Execução para cá (após os resultados, antes das configs)
-    cat "logs/temp_obj_summary_$$.html" >> "$target_file"
 
     cat >> "$target_file" << EOF
         <div style="display:none;">
@@ -1993,18 +2046,30 @@ run_security_diagnostics() {
             local axfr_res=""
             local axfr_class=""
             
-            if is_network_error "$axfr_out"; then
+            if echo "$axfr_out" | grep -q "SERVFAIL"; then
+                 axfr_res="SERVFAIL (OK)"
+                 axfr_class="status-ok"
+                 SEC_AXFR_OK+=1
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
+            elif echo "$axfr_out" | grep -q -E "REFUSED|Transfer failed"; then
+                 axfr_res="DENIED (OK)"
+                 axfr_class="status-ok"
+                 SEC_AXFR_OK+=1
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
+            elif is_network_error "$axfr_out"; then
                  axfr_res="TIMEOUT"
                  axfr_class="status-neutral"
                  SEC_AXFR_TIMEOUT+=1
                  if [[ "$VERBOSE" == "true" ]]; then echo -ne "${GRAY}AXFR:TIMEOUT${NC} "; fi
-            elif echo "$axfr_out" | grep -q -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
-                 if echo "$axfr_out" | grep -q -E "REFUSED|Transfer failed"; then
-                     axfr_res="DENIED (OK)"
-                     axfr_class="status-ok"
-                     SEC_AXFR_OK+=1
-                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
-                 else 
+             elif echo "$axfr_out" | grep -q -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
+                 # Fallback for other errors not caught above (weird timeouts?)
+                 if echo "$axfr_out" | grep -q -E "timed out|no servers|communications error"; then
+                     axfr_res="TIMEOUT"
+                     axfr_class="status-neutral"
+                     SEC_AXFR_TIMEOUT+=1
+                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GRAY}AXFR:TIMEOUT${NC} "
+                 else
+                     # Generic denial
                      axfr_res="DENIED (OK)"
                      axfr_class="status-ok"
                      SEC_AXFR_OK+=1
@@ -2073,7 +2138,7 @@ run_security_diagnostics() {
         else
            if [[ ${#risk_summary[@]} -eq 0 ]]; then
                # Check if all were timeouts (no OKs, no Risks)
-               # If v_res=TIMEOUT and axfr_res=TIMEOUT and rec_res=TIMEOUT, then it's not "Secure", it's "Unreachable"
+               # If v_res=TIMEOUT and axfr_res=TIMEOUT and rec_res=TIMEOUT, then it's not "Restricted", it's "Unreachable"
                if [[ "$v_res" == "TIMEOUT" || "$axfr_res" == "TIMEOUT" || "$rec_res" == "TIMEOUT" ]]; then
                     echo -e "${GRAY}⚠️ Timeouts${NC}"
                else
@@ -2149,7 +2214,7 @@ run_ping_diagnostics() {
 
         # Accumulate Latency for General Stats
         if [[ "$rtt_avg" != "N/A" ]]; then
-             TOTAL_LATENCY_SUM=$(awk "BEGIN {print $TOTAL_LATENCY_SUM + $rtt_avg}")
+             TOTAL_LATENCY_SUM=$(awk -v s="$TOTAL_LATENCY_SUM" -v v="$rtt_avg" 'BEGIN {print s + v}')
              TOTAL_LATENCY_COUNT=$((TOTAL_LATENCY_COUNT + 1))
         fi
         
@@ -2246,7 +2311,11 @@ run_trace_diagnostics() {
             fi
         fi
         
-        echo -e "${CYAN}${hops} hops${NC}"
+        if [[ "$hops" == "15" ]]; then
+            echo -e "${RED}${hops} hops Destino inacessível${NC}"
+        else
+            echo -e "${CYAN}${hops} hops${NC}"
+        fi
         
         if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
@@ -2281,6 +2350,7 @@ process_tests() {
     local legend="LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
     [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}=TCP_OK ${RED}T${NC}=TCP_Fail"
     [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC_OK ${RED}D${NC}=SEC_Fail ${GRAY}D${NC}=SEC_Abs"
+    [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && legend+=" ${GREEN}SOA${NC}=Synced ${RED}SOA${NC}=Div"
     echo -e "$legend"
     
     # Temp files for buffering
@@ -2602,11 +2672,11 @@ process_tests() {
                                   soa_divergence_detected="true"
                                   SOA_SYNC_FAIL+=1
                                   local warning_msg="SOA DIV: ${unique_serials[*]}"
-                                  echo -ne " ${RED}[${warning_msg}]${NC}"
+                                  echo -ne " ${RED}SOA${NC}"
                                   log_entry "SOA SERIAL DIVERGENCE: Domain=$target Group=$grp Serials=${unique_serials[*]}"
                              else
                                   SOA_SYNC_OK+=1
-                                  echo -ne " ${GREEN}[SOA: ${unique_serials[0]}]${NC}"
+                                  echo -ne " ${GREEN}SOA${NC}"
                              fi
                         fi
                         
