@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.1.4
-# "Offline HTML Report Support and fix false/positive"
+# Versão: 10.1.6
+# "Fix latency issue"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.1.4"
+SCRIPT_VERSION="10.1.6"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -1075,8 +1075,12 @@ generate_stats_block() {
     local avg_lat="N/A"
     local avg_lat_suffix=""
     if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
-        avg_lat=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
-        avg_lat_suffix="<small style=\"font-size:0.4em;\">ms</small>"
+        local calc_val
+        calc_val=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+        if [[ "$calc_val" =~ ^[0-9]+$ ]]; then
+            avg_lat="$calc_val"
+            avg_lat_suffix="<small style=\"font-size:0.4em;\">ms</small>"
+        fi
     fi
 
 cat > "$TEMP_STATS" << EOF
@@ -2239,7 +2243,7 @@ run_ping_diagnostics() {
         
         [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Pinging $ip ($ping_cmd, Count=$PING_COUNT, Timeout=$PING_TIMEOUT)...${NC}"
         local start_p=$(date +%s%N)
-        local output; output=$($ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
+        local output; output=$(LC_ALL=C $ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
         TOTAL_PING_SENT+=$PING_COUNT
         local end_p=$(date +%s%N); local dur_p=$(( (end_p - start_p) / 1000000 ))
         
@@ -2262,20 +2266,23 @@ run_ping_diagnostics() {
              TOTAL_LATENCY_COUNT=$((TOTAL_LATENCY_COUNT + 1))
         fi
         
+        local rtt_fmt="${rtt_avg}"
+        [[ "$rtt_avg" != "N/A" ]] && rtt_fmt="${rtt_avg}ms"
+
         local status_html=""; local class_html=""; local console_res=""
         if [[ "$ret" -ne 0 ]] || [[ "$loss" == "100" ]]; then status_html="❌ DOWN"; class_html="status-fail"; console_res="${RED}DOWN${NC}"
         elif [[ "$loss" != "0" ]]; then status_html="⚠️ UNSTABLE"; class_html="status-warning"; console_res="${YELLOW}${loss}% Loss${NC}"
-        else status_html="✅ UP"; class_html="status-ok"; console_res="${GREEN}${rtt_avg}ms${NC}"; fi
+        else status_html="✅ UP"; class_html="status-ok"; console_res="${GREEN}${rtt_fmt}${NC}"; fi
         
         echo -e "$console_res"
         if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
-            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING"
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_fmt}</td></tr>" >> "$TEMP_PING"
             local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
             echo "<tr><td colspan=\"5\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
         fi
 
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_avg}ms</td></tr>" >> "$TEMP_PING_SIMPLE"
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_fmt}</td></tr>" >> "$TEMP_PING_SIMPLE"
         fi
         
         if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
@@ -2963,8 +2970,12 @@ print_final_terminal_summary() {
     local avg_lat="N/A"
     local lat_suffix=""
     if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
-        avg_lat=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
-        lat_suffix="ms"
+        local calc_val
+        calc_val=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+        if [[ "$calc_val" =~ ^[0-9]+$ ]]; then
+            avg_lat="$calc_val"
+            lat_suffix="ms"
+        fi
     fi
 
     # Print direct to terminal with colors
