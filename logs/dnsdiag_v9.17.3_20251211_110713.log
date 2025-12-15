@@ -1,9 +1,0 @@
-DNS DIAGNOSTIC TOOL v9.17.3 - FORENSIC LOG
-Date: 11/12/2025 11:07:13
-  Config Dump:
-  Timeout: 2, Sleep: 0.05, IP: ipv4, ConnCheck: true
-  Consistency: 3 attempts
-  Criteria: StrictIP=false, StrictOrder=false, StrictTTL=true
-  Special Tests: TCP=true, DNSSEC=true
-  Dig Opts: +norecurse +tries=1 +nocookie +cd +bufsize=1232 +nsid
-
