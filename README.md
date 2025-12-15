@@ -135,6 +135,7 @@ AD_INTERNO;Active Directory Corp;mixed;1;192.168.10.5,192.168.10.6
  GENERATE_LOG_TEXT="false"    # Gera log .log além do HTML
  TIMEOUT=4                    # Timeout global
  LOG_PREFIX="dnsdiag"         # Prefixo dos arquivos de log
+ PING_PACKET_LOSS_LIMIT=5     # % - Tolerância de perda de pacotes
  
  # Ajustes do DIG
  DEFAULT_DIG_OPTIONS="...flags..."

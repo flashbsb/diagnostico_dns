@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.1.6
-# "Fix latency issue"
+# Versão: 10.2.1
+# "Walkthrough - Deep Analysis Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.1.6"
+SCRIPT_VERSION="10.2.1"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -167,6 +167,7 @@ print_help_text() {
     echo -e "${PURPLE}OPÇÕES DE LINHA DE COMANDO:${NC}"
     echo -e "  ${GREEN}-n <arquivo>${NC}   Define arquivo CSV de domínios (Padrão: ${GRAY}domains_tests.csv${NC})"
     echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
+    echo -e "  ${GREEN}-l${NC}            Habilita geração de log em texto (.log)."
     echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
     echo -e ""
     echo -e "  ${GREEN}-s${NC}            Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)."
@@ -2067,7 +2068,7 @@ run_security_diagnostics() {
         if [[ "$ENABLE_AXFR_CHECK" == "true" ]]; then
             local target_axfr=""
             if [[ -f "$FILE_DOMAINS" ]]; then
-                target_axfr=$(head -1 "$FILE_DOMAINS" | awk -F';' '{print $1}')
+                target_axfr=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | head -1 | awk -F';' '{print $1}')
             fi
             [[ -z "$target_axfr" ]] && target_axfr="example.com"
             
@@ -2369,7 +2370,7 @@ run_trace_diagnostics() {
         fi
         
         if [[ "$hops" == "15" ]]; then
-            echo -e "${RED}${hops} hops Destino inacessível${NC}"
+            echo -e "${RED}${hops} hops (Limite Atingido)${NC}"
         else
             echo -e "${CYAN}${hops} hops${NC}"
         fi
@@ -2487,7 +2488,6 @@ process_tests() {
                              local tcp_id="tcp_${clean_srv}_${clean_tgt}"
                              
                              local opts_tcp; [[ "$mode" == "iterative" ]] && opts_tcp="$DEFAULT_DIG_OPTIONS" || opts_tcp="$RECURSIVE_DIG_OPTIONS"
-                             [[ "$IP_VERSION" == "ipv4" ]] && opts_tcp+=" -4"
                              opts_tcp+=" +tcp +time=$TIMEOUT"
                              local out_tcp=$(dig $opts_tcp @$srv $target A 2>&1)
                              log_cmd_result "TCP CHECK $srv -> $target" "dig $opts_tcp @$srv $target A" "$out_tcp" "0"
@@ -3108,6 +3108,7 @@ main() {
     fi
 
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
+    if ! command -v timeout &> /dev/null; then echo "Erro: 'timeout' nao encontrado (necessario para checks)."; exit 1; fi
     if [[ "$ENABLE_PING" == "true" ]] && ! command -v ping &> /dev/null; then echo "Erro: 'ping' nao encontrado (necessario para -t/Ping)."; exit 1; fi
     if [[ "$ENABLE_TRACE_CHECK" == "true" ]] && ! command -v traceroute &> /dev/null; then echo "Erro: 'traceroute' nao encontrado (necessario para -T)."; exit 1; fi
     init_log_file
