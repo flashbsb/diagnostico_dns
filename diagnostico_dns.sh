@@ -2,13 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.0.12
-# "Fix legenda SOA Sync"
+# Versão: 10.1.4
+# "Offline HTML Report Support and fix false/positive"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.0.12"
-
+SCRIPT_VERSION="10.1.4"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -313,7 +312,7 @@ generate_help_html() {
     cat > "logs/temp_help_$$.html" << EOF
         <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
             <summary style="font-size: 1.1rem; font-weight: 600;">📚 Manual de Referência (Help)</summary>
-            <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: 'Fira Code', monospace; font-size: 0.85rem; overflow-x: auto;">
+            <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; overflow-x: auto;">
                 <pre style="white-space: pre-wrap;">$help_content</pre>
             </div>
         </details>
@@ -589,22 +588,37 @@ validate_connectivity() {
     return $status
 }
 
-check_internet_for_charts() {
+prepare_chart_resources() {
     if [[ "$ENABLE_CHARTS" != "true" ]]; then return 1; fi
     
-    # Check simple connectivity to CDN
+    # Define location for temporary chart.js
+    TEMP_CHART_JS="logs/temp_chart_$$.js"
+    
+    local chart_url="https://cdn.jsdelivr.net/npm/chart.js"
+    
+    echo -ne "  ⏳ Baixando biblioteca gráfica (Chart.js)... "
+    
     if command -v curl &>/dev/null; then
-         if curl -s --head --request GET "https://cdn.jsdelivr.net/npm/chart.js" | grep "200" > /dev/null; then
-             return 0
+         if curl -s -f -o "$TEMP_CHART_JS" "$chart_url"; then
+             # Validate file size AND content (must contain 'Chart')
+             if [[ -s "$TEMP_CHART_JS" ]] && grep -q "Chart" "$TEMP_CHART_JS"; then
+                 echo -e "${GREEN}OK${NC}"
+                 return 0
+             fi
          fi
     elif command -v wget &>/dev/null; then
-         if wget -q --spider "https://cdn.jsdelivr.net/npm/chart.js"; then
-             return 0
+         if wget -q -O "$TEMP_CHART_JS" "$chart_url"; then
+             if [[ -s "$TEMP_CHART_JS" ]] && grep -q "Chart" "$TEMP_CHART_JS"; then
+                 echo -e "${GREEN}OK${NC}"
+                 return 0
+             fi
          fi
     fi
     
-    echo -e "${YELLOW}⚠️  Aviso: Acesso à internet para carregar gráficos FALHOU. Gráficos desabilitados.${NC}"
+    echo -e "${YELLOW}FALHA${NC}"
+    echo -e "${YELLOW}⚠️  Aviso: Não foi possível baixar Chart.js (Arquivo inválido ou erro de rede). Gráficos desabilitados.${NC}"
     ENABLE_CHARTS="false"
+    rm -f "$TEMP_CHART_JS"
     return 1
 }
 
@@ -651,7 +665,6 @@ cat > "$TEMP_HEADER" << EOF
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Relatório DNS v$SCRIPT_VERSION - $TIMESTAMP</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-body: #0f172a;
@@ -669,7 +682,7 @@ cat > "$TEMP_HEADER" << EOF
         }
 
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "lohit-devanagari", sans-serif;
             background-color: var(--bg-body);
             color: var(--text-primary);
             margin: 0;
@@ -866,7 +879,7 @@ cat > "$TEMP_HEADER" << EOF
             letter-spacing: 0.05em;
         }
         td {
-            font-family: 'Fira Code', monospace;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
         }
         tr:hover td {
             background: rgba(255,255,255,0.02);
@@ -880,7 +893,7 @@ cat > "$TEMP_HEADER" << EOF
             border-radius: 4px;
             font-size: 0.75rem;
             font-weight: 600;
-            font-family: 'Inter', sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
             text-transform: uppercase;
             letter-spacing: 0.02em;
         }
@@ -941,7 +954,7 @@ cat > "$TEMP_HEADER" << EOF
             background: #000;
         }
         pre {
-            margin: 0; padding: 20px; color: #e5e5e5; font-family: 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.6;
+            margin: 0; padding: 20px; color: #e5e5e5; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; line-height: 1.6;
         }
         
         /* --- Controls & Utilities --- */
@@ -949,7 +962,7 @@ cat > "$TEMP_HEADER" << EOF
         .btn {
             background: var(--bg-card-hover); border: 1px solid var(--border-color);
             color: var(--text-primary); padding: 8px 16px; border-radius: 6px;
-            cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.9rem;
+            cursor: pointer; font-family: system-ui, -apple-system, sans-serif; font-size: 0.9rem;
             transition: all 0.2s;
         }
         .btn:hover { background: var(--accent-primary); border-color: var(--accent-primary); color: white; }
@@ -1028,9 +1041,19 @@ EOF
 EOF
     fi
 
-    if [[ "$ENABLE_CHARTS" == "true" ]]; then
+    if [[ "$ENABLE_CHARTS" == "true" && -f "$TEMP_CHART_JS" ]]; then
+         # Only embed if logic for empty data permits? 
+         # The JS library is needed even if we show "No Data" message? No, if we show "No Data" we skip canvas code.
+         # But the logic above was inside generate_stats_block.
+         # We can include the library safely, it doesn't hurt.
+         
          cat >> "$TEMP_HEADER" << EOF
-         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+         <script>
+            /* Chart.js Library Embedded */
+EOF
+         cat "$TEMP_CHART_JS" >> "$TEMP_HEADER"
+         cat >> "$TEMP_HEADER" << EOF
+         </script>
 EOF
     fi
 
@@ -1050,8 +1073,10 @@ generate_stats_block() {
     done
     local server_count=${#_uniq_srv_html[@]}
     local avg_lat="N/A"
+    local avg_lat_suffix=""
     if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
         avg_lat=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+        avg_lat_suffix="<small style=\"font-size:0.4em;\">ms</small>"
     fi
 
 cat > "$TEMP_STATS" << EOF
@@ -1071,15 +1096,27 @@ cat > "$TEMP_STATS" << EOF
                 <span class="card-label">Servidores</span>
             </div>
             <div class="card" style="--card-accent: #64748b;">
-                <span class="card-num">${avg_lat}<small style="font-size:0.4em;">ms</small></span>
+                <span class="card-num">${avg_lat}${avg_lat_suffix}</span>
                 <span class="card-label">Latência Média</span>
             </div>
         </div>
         
 EOF
 
+EOF
+
+
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
-        cat >> "$TEMP_STATS" << EOF
+        if [[ $SUCCESS_TESTS -eq 0 && $WARNING_TESTS -eq 0 ]]; then
+             # No valid data to show charts
+             cat >> "$TEMP_STATS" << EOF
+             <div class="disclaimer-box" style="text-align:center;">
+                <span style="font-size:1.2rem;">📉 Sem dados para exibir gráficos</span><br>
+                <span style="font-size:0.9rem; color:var(--text-secondary);">Todos os testes falharam ou nenhum dado foi coletado.</span>
+             </div>
+EOF
+        else
+             cat >> "$TEMP_STATS" << EOF
         <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px;">
              <!-- Overview Chart Container -->
              <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-primary); align-items: center; justify-content: center;">
@@ -1102,6 +1139,7 @@ EOF
              </div>
         </div>
 EOF
+        fi
     fi
 
     cat >> "$TEMP_STATS" << EOF
@@ -1438,7 +1476,7 @@ generate_charts_script() {
         // Chart Configuration
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#334155';
-        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.family = "system-ui, -apple-system, sans-serif";
 
         const ctxOverview = document.getElementById('chartOverview');
         const ctxLatency = document.getElementById('chartLatency');
@@ -1705,7 +1743,7 @@ assemble_html() {
     
     
     # Check internet before generation if charts enabled
-    check_internet_for_charts
+    prepare_chart_resources
     
     generate_stats_block
     generate_object_summary
@@ -1968,7 +2006,7 @@ run_security_diagnostics() {
         
         # Helper to detect network errors
         is_network_error() {
-            echo "$1" | grep -q -E -i "connection timed out|communications error|no servers could be reached|couldn't get address|network is unreachable"
+            echo "$1" | grep -q -E -i "connection timed out|communications error|no servers could be reached|couldn't get address|network is unreachable|failed: timed out|host is unreachable|connection refused|no route to host"
         }
 
         # 1. VERSION CHECK
@@ -2207,8 +2245,14 @@ run_ping_diagnostics() {
         
         log_cmd_result "PING $ip" "$ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
         
+        # Parse packet loss more robustly
         local loss=$(echo "$output" | grep "packet loss" | awk -F'%' '{print $1}' | awk '{print $NF}')
-        [[ -z "$loss" ]] && loss=100
+        if [[ -z "$loss" ]]; then
+             # Fallback: Check for 100% loss string or if 0 received
+             if echo "$output" | grep -q "100% packet loss"; then loss=100;
+             elif echo "$output" | grep -q "0 received"; then loss=100;
+             else loss=100; fi # Default to 100% loss if parsing fails
+        fi
         local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
         [[ -z "$rtt_avg" ]] && rtt_avg="N/A"
 
@@ -2302,6 +2346,12 @@ run_trace_diagnostics() {
         if [[ $ret -eq 0 ]] && echo "$output" | grep -qE "^[ ]*[0-9]+"; then
             hops=$(echo "$output" | grep -E "^[ ]*[0-9]+" | wc -l)
             last_hop=$(echo "$output" | tail -1 | xargs)
+            
+            # Check if last hop is timeout stars only
+            if [[ "$last_hop" =~ ^[\*\ ]+$ ]]; then
+                last_hop="Timeout (* * *)"
+                # If we have hops but last is timeout, it might be incomplete traceroute
+            fi
         else
             # Try to extract error message if short enough, otherwise specific message
             if [[ ${#output} -lt 50 && -n "$output" ]]; then
@@ -2441,7 +2491,7 @@ process_tests() {
                                  echo "<div id=\"${tcp_id}_title\" style=\"display:none\">TCP Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
                              fi
 
-                             if echo "$out_tcp" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
+                             if echo "$out_tcp" | grep -q -i -E "connection timed out|communications error|no servers could be reached|failed: timed out|network is unreachable|host is unreachable|connection refused|no route to host"; then
                                  CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Failed'>T</span></a>"
                                  tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>FAIL</span></a>"
                                  TCP_FAIL+=1
@@ -2573,7 +2623,7 @@ process_tests() {
                                 elif echo "$output" | grep -q "status: SERVFAIL"; then iter_status="SERVFAIL"
                                 elif echo "$output" | grep -q "status: NXDOMAIN"; then iter_status="NXDOMAIN"
                                 elif echo "$output" | grep -q "status: REFUSED"; then iter_status="REFUSED"
-                                elif echo "$output" | grep -q "connection timed out"; then iter_status="TIMEOUT"
+                                elif echo "$output" | grep -q -i -E "connection timed out|failed: timed out|network is unreachable|host is unreachable|connection refused|no route to host"; then iter_status="TIMEOUT"
                                 elif echo "$output" | grep -q "status: NOERROR"; then
                                     [[ "$answer_count" -eq 0 ]] && iter_status="NOANSWER" || iter_status="NOERROR"
                                 fi
@@ -2818,6 +2868,12 @@ process_tests() {
     if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
         rm -f "$TEMP_DOMAIN_BODY_SIMPLE" "$TEMP_GROUP_BODY_SIMPLE"
     fi
+    
+    rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_LOG_MODALS" "$TEMP_CHART_JS"
+    rm -f "logs/temp_obj_summary_"*
+    
+    # Remove empty logic files if they exist
+    [[ ! -s "$TEMP_LOG_MODALS" ]] && rm -f "$TEMP_LOG_MODALS"
 }
 
 assemble_json() {
@@ -2905,8 +2961,10 @@ print_final_terminal_summary() {
 
     # Calculate Avg Latency
     local avg_lat="N/A"
+    local lat_suffix=""
     if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
         avg_lat=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+        lat_suffix="ms"
     fi
 
     # Print direct to terminal with colors
@@ -2917,7 +2975,7 @@ print_final_terminal_summary() {
     echo -e "  👥 Grupos DNS    : ${group_count}"
     echo -e "  🖥️ Servidores    : ${server_count} (Únicos)"
     echo -e "  📡 Total Queries : ${TOTAL_TESTS} (DNS)"
-    echo -e "  ⏱️ Latência Média: ${avg_lat}ms"
+    echo -e "  ⏱️ Latência Média: ${avg_lat}${lat_suffix}"
     echo -e "${BLUE}------------------------------------------------------${NC}"
     echo -e "  ✅ Sucesso         : ${GREEN}${SUCCESS_TESTS}${NC}"
     echo -e "  ⚠️ Alertas         : ${YELLOW}${WARNING_TESTS}${NC}"
@@ -2961,7 +3019,7 @@ print_final_terminal_summary() {
              echo "  Grupos DNS    : ${group_count}"
              echo "  Servidores    : ${server_count} (Únicos)"
              echo "  Total Queries : ${TOTAL_TESTS} (DNS)"
-             echo "  Latência Média: ${avg_lat}ms"
+             echo "  Latência Média: ${avg_lat}${lat_suffix}"
              echo "------------------------------------------------------"
              echo "  Sucesso         : ${SUCCESS_TESTS}"
              echo "  Alertas         : ${WARNING_TESTS}"
@@ -2985,14 +3043,18 @@ print_final_terminal_summary() {
              echo "======================================================"
          } >> "$LOG_FILE_TEXT"
     fi
+    
+    # Warning if Charts were disabled due to offline
+    if [[ "$INITIAL_ENABLE_CHARTS" == "true" && "$ENABLE_CHARTS" == "false" ]]; then
+        echo -e "\n${YELLOW}⚠️  AVISO:${NC} A geração de gráficos foi desabilitada pois não foi possível baixar a biblioteca necessária (Sem Internet)."
+    fi
 }
 
 main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "logs/temp_chart_$$.js" 2>/dev/null' EXIT
 
     # Initialize Flags based on Config
     GENERATE_FULL_REPORT="${ENABLE_FULL_REPORT:-true}"
@@ -3040,6 +3102,10 @@ main() {
     init_log_file
     validate_csv_files
     interactive_configuration
+    
+    # Capture initial preference for charts logic
+    INITIAL_ENABLE_CHARTS="$ENABLE_CHARTS"
+    
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
     init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics; run_security_diagnostics
 
