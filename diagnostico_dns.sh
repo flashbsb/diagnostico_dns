@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.3.0    
-# "Granular Metrics"
+# Versão: 10.3.1    
+# "Granular Metrics: FIX"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.3.0"
+SCRIPT_VERSION="10.3.1"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -86,6 +86,13 @@ declare -i CNT_TIMEOUT=0
 declare -i CNT_NOANSWER=0
 declare -i CNT_NETWORK_ERROR=0
 declare -i CNT_OTHER_ERROR=0
+
+# Per-Group Statistics Accumulators
+declare -A GROUP_TOTAL_TESTS
+declare -A GROUP_FAIL_TESTS
+declare -A IP_RTT_RAW # Store raw RTT for group avg calc
+declare -A GROUP_RTT_SUM
+declare -A GROUP_RTT_COUNT
 
 # Setup Arquivos
 mkdir -p logs
@@ -1750,6 +1757,117 @@ cat << EOF
 EOF
 }
 
+generate_group_stats_html() {
+    # Appends Group Statistics & Detailed Counters to TEMP_STATS
+    # This should be called after generate_stats_block
+    
+    # 1. Detailed Counters Section
+    # Calculate percentages for detailed counters
+    local p_noerror=0; [[ $TOTAL_TESTS -gt 0 ]] && p_noerror=$(( (CNT_NOERROR * 100) / TOTAL_TESTS ))
+    local p_nxdomain=0; [[ $TOTAL_TESTS -gt 0 ]] && p_nxdomain=$(( (CNT_NXDOMAIN * 100) / TOTAL_TESTS ))
+    local p_servfail=0; [[ $TOTAL_TESTS -gt 0 ]] && p_servfail=$(( (CNT_SERVFAIL * 100) / TOTAL_TESTS ))
+    local p_refused=0; [[ $TOTAL_TESTS -gt 0 ]] && p_refused=$(( (CNT_REFUSED * 100) / TOTAL_TESTS ))
+    local p_timeout=0; [[ $TOTAL_TESTS -gt 0 ]] && p_timeout=$(( (CNT_TIMEOUT * 100) / TOTAL_TESTS ))
+
+    cat >> "$TEMP_STATS" << EOF
+    <div style="margin-top: 30px; margin-bottom: 20px;">
+        <h3 style="color:var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 10px; font-size:1.1rem;">📊 Detalhamento de Respostas e Grupos</h3>
+        
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:15px; margin-top:15px;">
+            <div class="card" style="--card-accent: #10b981; padding:15px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_NOERROR}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">NOERROR</div>
+                <div style="font-size:0.7rem; color:#10b981;">${p_noerror}%</div>
+            </div>
+            <div class="card" style="--card-accent: #f59e0b; padding:15px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_NXDOMAIN}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">NXDOMAIN</div>
+                <div style="font-size:0.7rem; color:#f59e0b;">${p_nxdomain}%</div>
+            </div>
+             <div class="card" style="--card-accent: #ef4444; padding:15px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_SERVFAIL}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">SERVFAIL</div>
+                <div style="font-size:0.7rem; color:#ef4444;">${p_servfail}%</div>
+            </div>
+             <div class="card" style="--card-accent: #ef4444; padding:15px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_REFUSED}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">REFUSED</div>
+                 <div style="font-size:0.7rem; color:#ef4444;">${p_refused}%</div>
+            </div>
+             <div class="card" style="--card-accent: #b91c1c; padding:15px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_TIMEOUT}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">TIMEOUT</div>
+                 <div style="font-size:0.7rem; color:#b91c1c;">${p_timeout}%</div>
+            </div>
+             <div class="card" style="--card-accent: #64748b; padding:15px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_NETWORK_ERROR}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">NET ERROR</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Stats Table -->
+    <div class="table-responsive" style="margin-top:20px;">
+        <table style="width:100%; border-collapse: collapse; font-size:0.9rem;">
+            <thead>
+                <tr style="background:var(--bg-secondary); text-align:left;">
+                    <th style="padding:10px;">Grupo DNS</th>
+                    <th style="padding:10px;">Latência Média (Ping)</th>
+                    <th style="padding:10px;">Testes Totais</th>
+                    <th style="padding:10px;">Falhas (DNS)</th>
+                    <th style="padding:10px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+EOF
+
+    for grp in "${!ACTIVE_GROUPS[@]}"; do
+        local g_rtt_sum=0
+        local g_rtt_cnt=0
+        for ip in ${DNS_GROUPS[$grp]}; do
+            if [[ -n "${IP_RTT_RAW[$ip]}" ]]; then
+                g_rtt_sum=$(awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
+                g_rtt_cnt=$((g_rtt_cnt + 1))
+            fi
+        done
+        local g_avg="N/A"
+        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
+        
+        local g_fail_cnt=${GROUP_FAIL_TESTS[$grp]}
+        [[ -z "$g_fail_cnt" ]] && g_fail_cnt=0
+        local g_total_cnt=${GROUP_TOTAL_TESTS[$grp]}
+        [[ -z "$g_total_cnt" ]] && g_total_cnt=0
+        
+        local fail_rate="0"
+        [[ $g_total_cnt -gt 0 ]] && fail_rate="$(( (g_fail_cnt * 100) / g_total_cnt ))"
+        
+        local row_style=""
+        local status_badge="<span class='badge status-ok' style='background:#059669;'>Healthy</span>"
+        
+        if [[ $fail_rate -gt 0 ]]; then
+            row_style="background:rgba(239,68,68,0.05);"
+            status_badge="<span class='badge status-fail' style='background:#dc2626;'>Isues (${fail_rate}%)</span>"
+        fi
+        [[ $g_avg == "N/A" ]] && status_badge="<span class='badge' style='background:#64748b;'>No Data</span>"
+
+        cat >> "$TEMP_STATS" << ROW
+            <tr style="border-bottom:1px solid var(--border-color); $row_style">
+                <td style="padding:10px; font-weight:600;">$grp</td>
+                <td style="padding:10px;">$g_avg</td>
+                <td style="padding:10px;">$g_total_cnt</td>
+                <td style="padding:10px; color:var(--accent-danger); font-weight:bold;">$g_fail_cnt</td>
+                <td style="padding:10px;">$status_badge</td>
+            </tr>
+ROW
+    done
+
+    cat >> "$TEMP_STATS" << EOF
+            </tbody>
+        </table>
+    </div>
+EOF
+}
+
 assemble_html() {
     local mode="$1"
     local target_file="$HTML_FILE"
@@ -1763,6 +1881,7 @@ assemble_html() {
     prepare_chart_resources
     
     generate_stats_block
+    generate_group_stats_html
     generate_object_summary
     generate_timing_html
     generate_disclaimer_html 
@@ -2283,6 +2402,7 @@ run_ping_diagnostics() {
         if [[ "$rtt_avg" != "N/A" ]]; then
              TOTAL_LATENCY_SUM=$(awk -v s="$TOTAL_LATENCY_SUM" -v v="$rtt_avg" 'BEGIN {print s + v}')
              TOTAL_LATENCY_COUNT=$((TOTAL_LATENCY_COUNT + 1))
+             IP_RTT_RAW[$ip]="$rtt_avg"
         fi
         
         local rtt_fmt="${rtt_avg}"
@@ -2309,7 +2429,11 @@ run_ping_diagnostics() {
             # Clean RTT for JSON (remove 'ms' if exists, though awk above likely kept it pure numbers or N/A)
             # JSON format: { "ip": "...", "groups": "...", "status": "...", "loss_percent": ..., "rtt_avg_ms": ... },
             # We handle the trailing comma later or use a list join strategy
-            echo "{ \"ip\": \"$ip\", \"groups\": \"$(echo $groups_str | xargs)\", \"status\": \"$(echo $status_html | sed 's/.* //')\", \"loss_percent\": \"$loss\", \"rtt_avg_ms\": \"$rtt_avg\" }," >> "$TEMP_JSON_Ping"
+            local j_min="null"; [[ -n "$rtt_min" ]] && j_min="$rtt_min"
+            local j_max="null"; [[ -n "$rtt_max" ]] && j_max="$rtt_max"
+            local j_mdev="null"; [[ -n "$rtt_mdev" ]] && j_mdev="$rtt_mdev"
+            
+            echo "{ \"ip\": \"$ip\", \"groups\": \"$(echo $groups_str | xargs)\", \"status\": \"$(echo $status_html | sed 's/.* //')\", \"loss_percent\": \"$loss\", \"rtt_avg_ms\": \"$rtt_avg\", \"rtt_min_ms\": $j_min, \"rtt_max_ms\": $j_max, \"rtt_mdev_ms\": $j_mdev }," >> "$TEMP_JSON_Ping"
         fi
     done
 }
@@ -2596,6 +2720,7 @@ process_tests() {
                         
                         for srv in "${srv_list[@]}"; do
                             test_id=$((test_id + 1)); TOTAL_TESTS+=1; g_total=$((g_total+1))
+                            GROUP_TOTAL_TESTS[$grp]=$((GROUP_TOTAL_TESTS[$grp] + 1))
                             local unique_id="test_${test_id}"
 
                             # Connectivity
@@ -2703,7 +2828,7 @@ process_tests() {
                             else
                                 [[ "$final_class" == "status-ok" ]] && { SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}.${NC}"; }
                                 [[ "$final_class" == "status-warning" ]] && { WARNING_TESTS+=1; g_warn=$((g_warn+1)); echo -ne "${YELLOW}!${NC}"; }
-                                [[ "$final_class" == "status-fail" ]] && { FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}"; }
+                                [[ "$final_class" == "status-fail" ]] && { FAILED_TESTS+=1; g_fail=$((g_fail+1)); GROUP_FAIL_TESTS[$grp]=$((GROUP_FAIL_TESTS[$grp] + 1)); echo -ne "${RED}x${NC}"; }
                                 badge="<span class=\"badge consistent\">${CONSISTENCY_CHECKS}x</span>"
                             fi
 
@@ -2960,7 +3085,16 @@ assemble_json() {
     "tcp_checks": { "ok": $TCP_SUCCESS, "fail": $TCP_FAIL },
     "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "fail": $DNSSEC_FAIL },
     "total_sleep_seconds": $TOTAL_SLEEP_TIME,
-    "total_pings_sent": $TOTAL_PING_SENT
+    "total_pings_sent": $TOTAL_PING_SENT,
+    "counters": {
+      "noerror": $CNT_NOERROR,
+      "nxdomain": $CNT_NXDOMAIN,
+      "servfail": $CNT_SERVFAIL,
+      "refused": $CNT_REFUSED,
+      "timeout": $CNT_TIMEOUT,
+      "noanswer": $CNT_NOANSWER,
+      "network_error": $CNT_NETWORK_ERROR
+    }
   },
   "results": [
     $dns_data
@@ -3055,10 +3189,40 @@ print_final_terminal_summary() {
     echo -e "  ❌ SERVFAIL        : ${CNT_SERVFAIL}"
     echo -e "  ❌ REFUSED         : ${CNT_REFUSED}"
     echo -e "  ❌ TIMEOUT         : ${CNT_TIMEOUT}"
-    [[ $CNT_NOANSWER -gt 0 ]] && echo -e "  ❓ NOANSWER        : ${CNT_NOANSWER}"
     [[ $CNT_NETWORK_ERROR -gt 0 ]] && echo -e "  ❌ NETWORK ERR     : ${CNT_NETWORK_ERROR}"
     echo -e "${BLUE}------------------------------------------------------${NC}"
-    
+
+    echo -e "${BLUE}       ESTATÍSTICAS POR GRUPO    ${NC}"
+    printf "  %-15s | %-13s | %-12s\n" "GRUPO" "LATÊNCIA(AVG)" "FALHAS(DNS)"
+    echo -e "  --------------------------------------------"
+    for grp in "${!ACTIVE_GROUPS[@]}"; do
+        local g_rtt_sum=0
+        local g_rtt_cnt=0
+        for ip in ${DNS_GROUPS[$grp]}; do
+            if [[ -n "${IP_RTT_RAW[$ip]}" ]]; then
+                # IP_RTT_RAW can be float "45.2". awk handles it.
+                g_rtt_sum=$(awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
+                g_rtt_cnt=$((g_rtt_cnt + 1))
+            fi
+        done
+        local g_avg="N/A"
+        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
+        
+        local g_fail_cnt=${GROUP_FAIL_TESTS[$grp]}
+        [[ -z "$g_fail_cnt" ]] && g_fail_cnt=0
+        local g_total_cnt=${GROUP_TOTAL_TESTS[$grp]}
+        [[ -z "$g_total_cnt" ]] && g_total_cnt=0
+        
+        local fail_rate="0%"
+        [[ $g_total_cnt -gt 0 ]] && fail_rate="$(( (g_fail_cnt * 100) / g_total_cnt ))%"
+        
+        local fail_color="${GREEN}"
+        [[ $g_fail_cnt -gt 0 ]] && fail_color="${RED}"
+        
+        printf "  %-15s | %-13s | ${fail_color}%-12s${NC}\n" "$grp" "$g_avg" "${g_fail_cnt} ($fail_rate)"
+    done
+    echo -e "${BLUE}------------------------------------------------------${NC}"
+
     echo -e "  🕒 Início          : ${START_TIME_HUMAN}"
     echo -e "  🕒 Final           : ${END_TIME_HUMAN}"
     echo -e "  🔄 Tentativas      : ${CONSISTENCY_CHECKS}x (Por check)"
