@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.3.5    
-# "Enable Clickable Explanations on All Card"
+# Versão: 10.4.1    
+# "Fix latency"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.3.5"
+SCRIPT_VERSION="10.4.1"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -975,6 +975,57 @@ cat > "$TEMP_HEADER" << EOF
         }
         pre {
             margin: 0; padding: 20px; color: #e5e5e5; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; line-height: 1.6;
+            white-space: pre-wrap; word-break: break-all;
+        }
+
+        /* --- New Modal Styles for Rich Info --- */
+        .modal-info-content {
+            padding: 30px;
+            color: var(--text-primary);
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            font-size: 1rem;
+            background: linear-gradient(to bottom right, var(--bg-card), rgba(0,0,0,0.5));
+        }
+        .modal-info-content strong { color: #fff; font-weight: 600; }
+        .modal-info-content b { color: #fff; font-weight: 600; }
+        
+        .modal-log-content {
+            padding: 0;
+            background: #000;
+            font-family: monospace;
+        }
+        
+        .info-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .info-icon {
+            font-size: 2rem;
+            background: rgba(255,255,255,0.05);
+            width: 50px; height: 50px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 12px;
+        }
+        .info-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #fff;
+        }
+        .info-body p { margin-bottom: 15px; color: #cbd5e1; }
+        .info-meta {
+            margin-top: 25px;
+            padding: 15px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #93c5fd;
         }
         
         /* --- Controls & Utilities --- */
@@ -1018,10 +1069,14 @@ cat > "$TEMP_HEADER" << EOF
             }
             var rawContent = el.innerHTML;
             var titleEl = document.getElementById(id + '_title');
-            var title = titleEl ? titleEl.innerText : 'Detalhes';
+            var title = titleEl ? titleEl.innerText : 'Detalhes Técnicos';
             
             document.getElementById('modalTitle').innerText = title;
-            document.getElementById('modalText').innerHTML = rawContent;
+            
+            var modalText = document.getElementById('modalText');
+            modalText.innerHTML = '<pre>' + rawContent + '</pre>';
+            modalText.className = 'modal-log-content';
+            
             document.getElementById('logModal').style.display = "block";
             document.body.style.overflow = 'hidden'; 
         }
@@ -1487,7 +1542,7 @@ cat > "$TEMP_MODAL" << EOF
                 <span class="close-btn" onclick="closeModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <pre id="modalText" style="white-space: pre-wrap; font-family: monospace;"></pre>
+                <div id="modalText"></div>
             </div>
         </div>
     </div>
@@ -1495,8 +1550,15 @@ cat > "$TEMP_MODAL" << EOF
     <script>
         function showInfoModal(title, description) {
             document.getElementById('modalTitle').innerText = title;
-            // Use HTML for description to allow formatting if needed
-            document.getElementById('modalText').innerHTML = description; 
+            
+            var modalText = document.getElementById('modalText');
+            // Construct a nicer layout
+            var niceHtml = '<div class="info-header"><div class="info-icon">ℹ️</div><div class="info-title">' + title + '</div></div>';
+            niceHtml += '<div class="info-body">' + description + '</div>';
+            
+            modalText.innerHTML = niceHtml;
+            modalText.className = 'modal-info-content';
+            
             document.getElementById('logModal').style.display = 'block';
         }
 
@@ -1840,12 +1902,12 @@ EOF
         local g_rtt_cnt=0
         for ip in ${DNS_GROUPS[$grp]}; do
             if [[ -n "${IP_RTT_RAW[$ip]}" ]]; then
-                g_rtt_sum=$(awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
+                g_rtt_sum=$(LC_ALL=C awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
                 g_rtt_cnt=$((g_rtt_cnt + 1))
             fi
         done
         local g_avg="N/A"
-        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
+        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(LC_ALL=C awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
         
         local g_fail_cnt=${GROUP_FAIL_TESTS[$grp]}
         [[ -z "$g_fail_cnt" ]] && g_fail_cnt=0
