@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.3.4    
-# "CARDs info fix, latency fix"
+# Versão: 10.3.5    
+# "Enable Clickable Explanations on All Card"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.3.4"
+SCRIPT_VERSION="10.3.5"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -1107,19 +1107,19 @@ cat > "$TEMP_STATS" << EOF
         <h2>📊 Estatísticas Gerais</h2>
         <!-- General Inventory Row -->
         <div class="dashboard" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
-            <div class="card" style="--card-accent: #64748b;">
+            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('DOMÍNIOS', 'Total de domínios únicos carregados do arquivo de entrada.<br><br><b>Fonte:</b> $FILE_DOMAINS')">
                 <span class="card-num">${domain_count}</span>
                 <span class="card-label">Domínios</span>
             </div>
-             <div class="card" style="--card-accent: #64748b;">
+             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('GRUPOS DNS', 'Total de grupos de servidores configurados para teste.<br><br><b>Fonte:</b> $FILE_GROUPS')">
                 <span class="card-num">${group_count}</span>
                 <span class="card-label">Grupos DNS</span>
             </div>
-             <div class="card" style="--card-accent: #64748b;">
+             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('SERVIDORES', 'Total de endereços IP únicos testados nesta execução.<br>Inclui todos os servidores listados nos grupos ativos.')">
                 <span class="card-num">${server_count}</span>
                 <span class="card-label">Servidores</span>
             </div>
-            <div class="card" style="--card-accent: #64748b;">
+            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('LATÊNCIA MÉDIA', 'Média de tempo de resposta (RTT) de todos os servidores.<br><br><b>Cálculo:</b> Soma de todos os RTTs / Total de respostas.<br>Valores altos podem indicar congestionamento de rede ou servidores distantes.')">
                 <span class="card-num">${avg_lat}${avg_lat_suffix}</span>
                 <span class="card-label">Latência Média</span>
             </div>
@@ -1197,7 +1197,7 @@ EOF
 
     if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="--card-accent: var(--accent-info);">
+            <div class="card" style="--card-accent: var(--accent-info); cursor:pointer;" onclick="showInfoModal('TCP COMPLIANCE', 'Verifica se o servidor suporta consultas DNS via TCP (Porta 53).<br><br><b>Importância:</b> Obrigatório pela RFC 7766. Essencial para respostas grandes (>512 bytes) e DNSSEC.<br>Falha aqui pode indicar bloqueio de firewall na porta 53/TCP.')">
                 <div style="font-size:1.5rem; margin-bottom:5px;">🔌</div>
                 <span class="card-label">TCP Compliance</span>
                 <div style="margin-top:10px; font-size:1.1rem;">
@@ -1211,7 +1211,7 @@ EOF
 
     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
         cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="--card-accent: #8b5cf6;">
+            <div class="card" style="--card-accent: #8b5cf6; cursor:pointer;" onclick="showInfoModal('DNSSEC STATUS', 'Validação da cadeia de confiança DNSSEC (RRSIG).<br><br><b>Valid:</b> Assinatura correta e validada.<br><b>Absent:</b> Domínio não assinado (inseguro, mas funcional).<br><b>Fail:</b> Assinatura inválida (BOGUS) ou expirada. Risco de segurança!')">
                 <div style="font-size:1.5rem; margin-bottom:5px;">🔐</div>
                 <span class="card-label">DNSSEC Status</span>
                 <div style="margin-top:10px; font-size:1.1rem;">
@@ -1228,7 +1228,7 @@ EOF
     # Security Cards (Unified in same grid)
     # Adding Counts for Timeouts/Errors to ensure totals match
     cat >> "$TEMP_STATS" << EOF
-        <div class="card" style="--card-accent: var(--accent-primary);">
+        <div class="card" style="--card-accent: var(--accent-primary); cursor:pointer;" onclick="showInfoModal('VERSION PRIVACY', 'Verifica se o servidor revela sua versão de software (BIND, etc).<br><br><b>Hide (Ideal):</b> O servidor esconde a versão ou retorna REFUSED.<br><b>Revealed (Risco):</b> O servidor informa a versão exata, facilitando exploração de CVEs.')">
             <div style="font-size:1.5rem; margin-bottom:5px;">🕵️</div>
             <span class="card-label">Version Privacy</span>
             <div style="margin-top:10px; font-size:0.95rem;">
@@ -1237,7 +1237,7 @@ EOF
                  <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_VER_TIMEOUT}</strong>
             </div>
         </div>
-        <div class="card" style="--card-accent: var(--accent-warning);">
+        <div class="card" style="--card-accent: var(--accent-warning); cursor:pointer;" onclick="showInfoModal('ZONE TRANSFER (AXFR)', 'Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.<br><br><b>Deny (Ideal):</b> A transferência foi recusada.<br><b>Allow (Crítico):</b> O servidor permitiu o download de toda a zona (vazamento de topologia).')">
             <div style="font-size:1.5rem; margin-bottom:5px;">📂</div>
             <span class="card-label">Zone Transfer</span>
             <div style="margin-top:10px; font-size:0.95rem;">
@@ -1246,7 +1246,7 @@ EOF
                  <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_AXFR_TIMEOUT}</strong>
             </div>
         </div>
-        <div class="card" style="--card-accent: var(--accent-danger);">
+        <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RECURSION', 'Verifica se o servidor aceita consultas recursivas para domínios externos (ex: google.com).<br><br><b>Close (Ideal para Autoritativo):</b> Recusa recursão.<br><b>Open (Risco):</b> Aceita recursão (pode ser usado para ataques de amplificação DNS).')">
             <div style="font-size:1.5rem; margin-bottom:5px;">🔄</div>
             <span class="card-label">Recursion</span>
             <div style="margin-top:10px; font-size:0.95rem;">
@@ -1260,7 +1260,7 @@ EOF
     # SOA Sync Card
     if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]]; then
     cat >> "$TEMP_STATS" << EOF
-        <div class="card" style="--card-accent: var(--accent-divergent);">
+        <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('SOA SYNC', 'Verifica a sincronização do Serial Number (SOA) entre os servidores.<br><br><b>Synced:</b> Todos os servidores responderam com o mesmo número serial.<br><b>Div:</b> Servidores retornaram seriais diferentes (problema de propagação).')">
             <div style="font-size:1.5rem; margin-bottom:5px;">⚖️</div>
             <span class="card-label">SOA Sync</span>
             <div style="margin-top:10px; font-size:1.1rem;">
