@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.4.1    
-# "Fix latency"
+# Versão: 10.5.0    
+# "Full HTML Interactivity"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.4.1"
+SCRIPT_VERSION="10.5.0"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -1887,10 +1887,10 @@ generate_group_stats_html() {
         <table style="width:100%; border-collapse: collapse; font-size:0.9rem;">
             <thead>
                 <tr style="background:var(--bg-secondary); text-align:left;">
-                    <th style="padding:10px;">Grupo DNS</th>
-                    <th style="padding:10px;">Latência Média (Ping)</th>
-                    <th style="padding:10px;">Testes Totais</th>
-                    <th style="padding:10px;">Falhas (DNS)</th>
+                    <th style="padding:10px; cursor:pointer;" onclick="showInfoModal('Grupo DNS', 'Agrupamento lógico dos servidores (ex: Google, Cloudflare).')">Grupo DNS ℹ️</th>
+                    <th style="padding:10px; cursor:pointer;" onclick="showInfoModal('Latência Média', 'Média do tempo de resposta (Ping RTT) de todos os servidores deste grupo.<br><br><b>Alta Latência:</b> Indica lentidão na rede ou sobrecarga no servidor.')">Latência Média (Ping) ℹ️</th>
+                    <th style="padding:10px; cursor:pointer;" onclick="showInfoModal('Testes Totais', 'Número total de consultas DNS realizadas neste grupo.')">Testes Totais ℹ️</th>
+                    <th style="padding:10px; cursor:pointer; color:var(--accent-danger);" onclick="showInfoModal('Falhas (DNS)', 'Contagem de erros não-tratados como SERVFAIL, REFUSED ou TIMEOUT.<br><br><b>Atenção:</b> NXDOMAIN não é falha, é resposta válida.')">Falhas (DNS) ℹ️</th>
                     <th style="padding:10px;">Status</th>
                 </tr>
             </thead>
@@ -1931,7 +1931,7 @@ EOF
                 <td style="padding:10px; font-weight:600;">$grp</td>
                 <td style="padding:10px;">$g_avg</td>
                 <td style="padding:10px;">$g_total_cnt</td>
-                <td style="padding:10px; color:var(--accent-danger); font-weight:bold;">$g_fail_cnt</td>
+                <td style="padding:10px; color:var(--accent-danger); font-weight:bold; cursor:pointer;" onclick="showInfoModal('Falhas no Grupo $grp', 'Este grupo apresentou <b>$g_fail_cnt</b> falhas durante os testes.<br>Verifique se os IPs estão acessíveis e se o serviço DNS está rodando.')">$g_fail_cnt</td>
                 <td style="padding:10px;">$status_badge</td>
             </tr>
 ROW
@@ -2155,9 +2155,9 @@ EOF
                 <thead>
                     <tr>
                         <th>Servidor</th>
-                        <th>Versão (Privacy)</th>
-                        <th>AXFR (Zone Transfer)</th>
-                        <th>Recursão (Open Relay)</th>
+                        <th style="cursor:pointer;" onclick="showInfoModal('BIND Version', '<b>Version Hiding:</b><br>Servidores DNS seguros não devem revelar sua versão de software (BIND, etc) para evitar exploits específicos.<br><br><b>Hidden:</b> Seguro (OK)<br><b>Revealed:</b> Inseguro')">Versão (Privacy) ℹ️</th>
+                        <th style="cursor:pointer;" onclick="showInfoModal('AXFR (Zone Transfer)', '<b>Transferência de Zona:</b><br>Permite baixar TODOS os registros do domínio.<br><br><b>Negado/Refused:</b> Seguro (OK)<br><b>Allowed/SOA:</b> Crítico! Vazamento de dados.')">AXFR (Zone Transfer) ℹ️</th>
+                        <th style="cursor:pointer;" onclick="showInfoModal('Recursão Aberta', '<b>Open Resolver:</b><br>Servidores autoritativos NÃO devem responder consultas recursivas (ex: google.com) para estranhos.<br><br><b>Closed/Refused:</b> Seguro (OK)<br><b>Open:</b> Risco de ataque DDoS (Amplificação).')">Recursão (Open Relay) ℹ️</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2613,9 +2613,18 @@ run_trace_diagnostics() {
         fi
         
         if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
-            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
+            local clean_ip=${ip//./_}
+            local trace_id="trace_${clean_ip}"
             local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-            echo "<tr><td colspan=\"4\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver rota completa #$trace_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_TRACE"
+            
+            # Store in Modal Details Area
+            echo "<div id=\"${trace_id}_content\" style=\"display:none\"><pre>$safe_output</pre></div>" >> "$TEMP_DETAILS"
+            echo "<div id=\"${trace_id}_title\" style=\"display:none\">Traceroute | $ip</div>" >> "$TEMP_DETAILS"
+            
+            # Clickable Row
+            local click_handler="onclick=\"showLog('${trace_id}'); return false;\""
+            
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td><a href='#' $click_handler style='color:inherit; text-decoration:underline;'>${hops}</a></td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
         fi
 
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
