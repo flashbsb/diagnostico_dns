@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.2.3    
-# "Deep Analysis Fixes"
+# Versão: 10.3.0    
+# "Granular Metrics"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.2.3"
+SCRIPT_VERSION="10.3.0"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -74,6 +74,18 @@ TOTAL_SLEEP_TIME=0
 # Latency Tracking
 TOTAL_LATENCY_SUM="0"
 declare -i TOTAL_LATENCY_COUNT=0
+TOTAL_DNS_DURATION_SUM="0"
+declare -i TOTAL_DNS_QUERY_COUNT=0
+
+# Granular Status Counters
+declare -i CNT_NOERROR=0
+declare -i CNT_NXDOMAIN=0
+declare -i CNT_SERVFAIL=0
+declare -i CNT_REFUSED=0
+declare -i CNT_TIMEOUT=0
+declare -i CNT_NOANSWER=0
+declare -i CNT_NETWORK_ERROR=0
+declare -i CNT_OTHER_ERROR=0
 
 # Setup Arquivos
 mkdir -p logs
@@ -2260,6 +2272,12 @@ run_ping_diagnostics() {
         fi
         local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
         [[ -z "$rtt_avg" ]] && rtt_avg="N/A"
+        
+        # New: Parse Min/Max/Mdev
+        # Line format: rtt min/avg/max/mdev = 1.2/3.4/5.6/0.1 ms
+        local rtt_min=$(echo "$output" | awk -F '/' '/rtt/ {print $4}' | awk '{print $NF}') # Last field of "rtt min" part usually
+        local rtt_max=$(echo "$output" | awk -F '/' '/rtt/ {print $6}')
+        local rtt_mdev=$(echo "$output" | awk -F '/' '/rtt/ {print $7}' | awk '{print $1}')
 
         # Accumulate Latency for General Stats
         if [[ "$rtt_avg" != "N/A" ]]; then
@@ -2269,6 +2287,7 @@ run_ping_diagnostics() {
         
         local rtt_fmt="${rtt_avg}"
         [[ "$rtt_avg" != "N/A" ]] && rtt_fmt="${rtt_avg}ms"
+        # Optional: Detailed format for tooltips or logs could be: "$rtt_min/$rtt_avg/$rtt_max ms"
 
         local status_html=""; local class_html=""; local console_res=""
         if [[ "$ret" -ne 0 ]] || [[ "$loss" == "100" ]]; then status_html="❌ DOWN"; class_html="status-fail"; console_res="${RED}DOWN${NC}"
@@ -2606,6 +2625,7 @@ process_tests() {
                             local attempts_log=""; local last_normalized=""
                             local is_divergent="false"; local consistent_count=0
                             local final_status="OK"; local final_dur=0; local final_class=""
+                            local sum_dur_iter=0
 
                             for (( iter=1; iter<=CONSISTENCY_CHECKS; iter++ )); do
                                 local opts_str; [[ "$mode" == "iterative" ]] && opts_str="$DEFAULT_DIG_OPTIONS" || opts_str="$RECURSIVE_DIG_OPTIONS"
@@ -2617,7 +2637,13 @@ process_tests() {
                                 [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] #${iter} Running: ${cmd_arr[*]}${NC}"
                                 
                                 local start_ts=$(date +%s%N); local output; output=$("${cmd_arr[@]}" 2>&1); local ret=$?
-                                local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 )); final_dur=$dur
+                                local end_ts=$(date +%s%N); local dur=$(( (end_ts - start_ts) / 1000000 ))
+                                
+                                # Accumulate for local average and global stats
+                                sum_dur_iter=$((sum_dur_iter + dur))
+                                TOTAL_DNS_DURATION_SUM=$(awk -v s="$TOTAL_DNS_DURATION_SUM" -v v="$dur" 'BEGIN {print s + v}')
+                                TOTAL_DNS_QUERY_COUNT+=1
+                                
                                 log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
 
                                 local normalized=$(normalize_dig_output "$output")
@@ -2627,13 +2653,15 @@ process_tests() {
 
                                 local iter_status="OK"; local answer_count=$(echo "$output" | grep -oE ", ANSWER: [0-9]+" | sed 's/[^0-9]*//g')
                                 [[ -z "$answer_count" ]] && answer_count=0
-                                if [[ $ret -ne 0 ]]; then iter_status="ERR:$ret"
-                                elif echo "$output" | grep -q "status: SERVFAIL"; then iter_status="SERVFAIL"
-                                elif echo "$output" | grep -q "status: NXDOMAIN"; then iter_status="NXDOMAIN"
-                                elif echo "$output" | grep -q "status: REFUSED"; then iter_status="REFUSED"
-                                elif echo "$output" | grep -q -i -E "connection timed out|failed: timed out|network is unreachable|host is unreachable|connection refused|no route to host"; then iter_status="TIMEOUT"
+                                if [[ $ret -ne 0 ]]; then iter_status="ERR:$ret"; CNT_NETWORK_ERROR+=1
+                                elif echo "$output" | grep -q "status: SERVFAIL"; then iter_status="SERVFAIL"; CNT_SERVFAIL+=1
+                                elif echo "$output" | grep -q "status: NXDOMAIN"; then iter_status="NXDOMAIN"; CNT_NXDOMAIN+=1
+                                elif echo "$output" | grep -q "status: REFUSED"; then iter_status="REFUSED"; CNT_REFUSED+=1
+                                elif echo "$output" | grep -q -i -E "connection timed out|failed: timed out|network is unreachable|host is unreachable|connection refused|no route to host"; then iter_status="TIMEOUT"; CNT_TIMEOUT+=1
                                 elif echo "$output" | grep -q "status: NOERROR"; then
-                                    [[ "$answer_count" -eq 0 ]] && iter_status="NOANSWER" || iter_status="NOERROR"
+                                    [[ "$answer_count" -eq 0 ]] && { iter_status="NOANSWER"; CNT_NOANSWER+=1; } || { iter_status="NOERROR"; CNT_NOERROR+=1; }
+                                else
+                                    CNT_OTHER_ERROR+=1
                                 fi
 
                                 attempts_log="${attempts_log}"$'\n\n'"=== TENTATIVA #$iter ($iter_status) === "$'\n'"[Normalized Check: $(echo "$normalized" | tr '\n' ' ')]"$'\n'"$output"
@@ -2642,6 +2670,11 @@ process_tests() {
 
                                 [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && { sleep "$SLEEP"; TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {print $TOTAL_SLEEP_TIME + $SLEEP}"); }
                             done
+                            
+                            # Calculate Average Duration for this set
+                            if [[ $CONSISTENCY_CHECKS -gt 0 ]]; then
+                                final_dur=$((sum_dur_iter / CONSISTENCY_CHECKS))
+                            fi
                             
                             # Collect SOA Serial if applicable
                             local current_serial=""
@@ -3004,6 +3037,27 @@ print_final_terminal_summary() {
     local p_succ=0
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
     echo -e "  📊 Taxa de Sucesso : ${p_succ}%"
+
+    # Calculate Avg DNS Duration
+    local avg_dns="N/A"
+    if [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]]; then
+        avg_dns=$(awk "BEGIN {printf \"%.0f\", $TOTAL_DNS_DURATION_SUM / $TOTAL_DNS_QUERY_COUNT}")
+        avg_dns="${avg_dns}ms"
+    fi
+    
+    echo -e "${BLUE}------------------------------------------------------${NC}"
+    echo -e "${BLUE}       PERFORMANCE & DETALHES    ${NC}"
+    echo -e "  📡 Latência Rede   : ${avg_lat}${lat_suffix} (ICMP Ping)"
+    echo -e "  🐢 Resolução DNS   : ${avg_dns} (Dig Total)"
+    echo -e "  -------------------------------------"
+    echo -e "  ✅ NOERROR         : ${CNT_NOERROR}"
+    echo -e "  ⚠️ NXDOMAIN        : ${CNT_NXDOMAIN}"
+    echo -e "  ❌ SERVFAIL        : ${CNT_SERVFAIL}"
+    echo -e "  ❌ REFUSED         : ${CNT_REFUSED}"
+    echo -e "  ❌ TIMEOUT         : ${CNT_TIMEOUT}"
+    [[ $CNT_NOANSWER -gt 0 ]] && echo -e "  ❓ NOANSWER        : ${CNT_NOANSWER}"
+    [[ $CNT_NETWORK_ERROR -gt 0 ]] && echo -e "  ❌ NETWORK ERR     : ${CNT_NETWORK_ERROR}"
+    echo -e "${BLUE}------------------------------------------------------${NC}"
     
     echo -e "  🕒 Início          : ${START_TIME_HUMAN}"
     echo -e "  🕒 Final           : ${END_TIME_HUMAN}"
