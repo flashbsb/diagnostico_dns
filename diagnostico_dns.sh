@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.3.1    
-# "Granular Metrics: FIX"
+# Versão: 10.3.4    
+# "CARDs info fix, latency fix"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.3.1"
+SCRIPT_VERSION="10.3.4"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -1127,7 +1127,7 @@ cat > "$TEMP_STATS" << EOF
         
 EOF
 
-EOF
+
 
 
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
@@ -1167,29 +1167,31 @@ EOF
     fi
 
     cat >> "$TEMP_STATS" << EOF
-        <div class="dashboard">
-            <div class="card st-total" style="--card-accent: var(--accent-primary);">
-                <span class="card-num">$TOTAL_TESTS</span>
-                <span class="card-label">Total Queries</span>
-            </div>
-            <div class="card st-ok" style="--card-accent: var(--accent-success);">
-                <span class="card-num">$SUCCESS_TESTS</span>
-                <span class="card-label">Sucesso ($p_succ%)</span>
-            </div>
-            <div class="card st-warn" style="--card-accent: var(--accent-warning);">
-                <span class="card-num">$WARNING_TESTS</span>
-                <span class="card-label">Alertas</span>
-            </div>
-            <div class="card st-fail" style="--card-accent: var(--accent-danger);">
-                <span class="card-num">$FAILED_TESTS</span>
-                <span class="card-label">Falhas Críticas</span>
-            </div>
-            <div class="card st-div" style="--card-accent: var(--accent-divergent);">
-                <span class="card-num">$DIVERGENT_TESTS</span>
-                <span class="card-label">Divergências</span>
-            </div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; margin-bottom:30px;">
+        <div class="card" style="--card-accent: var(--accent-success); cursor:pointer;" onclick="showInfoModal('SUCESSO', 'Testes concluídos sem erros.<br><br><b>Critério:</b> Resposta NOERROR, latência abaixo do limite (<${LATENCY_WARNING_THRESHOLD}ms) e consistência entre as tentativas.')">
+            <div style="font-size:1.5rem; margin-bottom:5px;">✅</div>
+            <span class="card-label">Sucesso</span>
+            <span class="card-value" style="color:var(--accent-success);">${SUCCESS_TESTS}</span>
         </div>
-    
+        
+        <div class="card" style="--card-accent: var(--accent-warning); cursor:pointer;" onclick="showInfoModal('ALERTAS', 'Testes com avisos ou performance degradada.<br><br><b>Critério:</b> Resposta válida mas lenta (> ${LATENCY_WARNING_THRESHOLD}ms), ou status não-crítico como NXDOMAIN (domínio não existe).')">
+            <div style="font-size:1.5rem; margin-bottom:5px;">⚠️</div>
+            <span class="card-label">Alertas</span>
+            <span class="card-value" style="color:var(--accent-warning);">${WARNING_TESTS}</span>
+        </div>
+
+        <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('FALHAS CRÍTICAS', 'O servidor falhou em responder corretamente.<br><br><b>Critério:</b> Timeout (sem resposta), Erro de Rede, SERVFAIL (erro interno) ou REFUSED (bloqueio).')">
+            <div style="font-size:1.5rem; margin-bottom:5px;">❌</div>
+            <span class="card-label">Falhas</span>
+            <span class="card-value" style="color:var(--accent-danger);">${FAILED_TESTS}</span>
+        </div>
+
+        <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('DIVERGÊNCIAS', 'Inconsistência nas respostas do mesmo servidor.<br><br><b>Critério:</b> O servidor retornou IPs ou dados diferentes entre as ${CONSISTENCY_CHECKS} tentativas consecutivas.<br>Pode indicar balanceamento de carga instável ou problemas de sincronização.')">
+            <div style="font-size:1.5rem; margin-bottom:5px;">🔀</div>
+            <span class="card-label">Divergências</span>
+            <span class="card-value" style="color:var(--accent-divergent);">${DIVERGENT_TESTS}</span>
+        </div>
+    </div>
         <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
 EOF
 
@@ -1485,10 +1487,22 @@ cat > "$TEMP_MODAL" << EOF
                 <span class="close-btn" onclick="closeModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <pre id="modalText"></pre>
+                <pre id="modalText" style="white-space: pre-wrap; font-family: monospace;"></pre>
             </div>
         </div>
     </div>
+    
+    <script>
+        function showInfoModal(title, description) {
+            document.getElementById('modalTitle').innerText = title;
+            // Use HTML for description to allow formatting if needed
+            document.getElementById('modalText').innerHTML = description; 
+            document.getElementById('logModal').style.display = 'block';
+        }
+
+        // Reuse existing closeModal function or ensure it exists in main JS
+        // (Assuming main structure has closeModal logic, but we should ensure compatibility)
+    </script>
 EOF
 }
 
@@ -1774,32 +1788,32 @@ generate_group_stats_html() {
         <h3 style="color:var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 10px; font-size:1.1rem;">📊 Detalhamento de Respostas e Grupos</h3>
         
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:15px; margin-top:15px;">
-            <div class="card" style="--card-accent: #10b981; padding:15px; text-align:center;">
+            <div class="card" style="--card-accent: #10b981; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('NOERROR', 'O servidor processou a consulta com sucesso e retornou uma resposta válida (com ou sem dados).<br><br><b>Significado:</b> Operação normal.<br>Se a contagem for alta, indica saúde do sistema.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_NOERROR}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">NOERROR</div>
                 <div style="font-size:0.7rem; color:#10b981;">${p_noerror}%</div>
             </div>
-            <div class="card" style="--card-accent: #f59e0b; padding:15px; text-align:center;">
+            <div class="card" style="--card-accent: #f59e0b; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('NXDOMAIN', 'O domínio consultado NÃO EXISTE no servidor.<br><br><b>Significado:</b> Resposta autoritativa de que o nome é inválido.<br>Comum se houver erros de digitação ou domínios expirados.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_NXDOMAIN}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">NXDOMAIN</div>
                 <div style="font-size:0.7rem; color:#f59e0b;">${p_nxdomain}%</div>
             </div>
-             <div class="card" style="--card-accent: #ef4444; padding:15px; text-align:center;">
+             <div class="card" style="--card-accent: #ef4444; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('SERVFAIL', 'Falha interna no servidor DNS.<br><br><b>Significado:</b> O servidor não conseguiu completar a requisição devido a erros internos (DNSSEC falho, backend down, etc).<br>Isso indica um problema grave no provedor.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_SERVFAIL}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">SERVFAIL</div>
                 <div style="font-size:0.7rem; color:#ef4444;">${p_servfail}%</div>
             </div>
-             <div class="card" style="--card-accent: #ef4444; padding:15px; text-align:center;">
+             <div class="card" style="--card-accent: #ef4444; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('REFUSED', 'O servidor RECUSOU a conexão por política (ACL).<br><br><b>Significado:</b> Você não tem permissão para consultar este servidor (ex: servidor interno exposto, ou rate-limit atingido).')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_REFUSED}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">REFUSED</div>
                  <div style="font-size:0.7rem; color:#ef4444;">${p_refused}%</div>
             </div>
-             <div class="card" style="--card-accent: #b91c1c; padding:15px; text-align:center;">
+             <div class="card" style="--card-accent: #b91c1c; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('TIMEOUT', 'O servidor não respondeu dentro do tempo limite (${TIMEOUT}s).<br><br><b>Significado:</b> Perda de pacote ou servidor sobrecarregado/offline.<br>Diferente de REFUSED, aqui não houve resposta alguma.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_TIMEOUT}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">TIMEOUT</div>
                  <div style="font-size:0.7rem; color:#b91c1c;">${p_timeout}%</div>
             </div>
-             <div class="card" style="--card-accent: #64748b; padding:15px; text-align:center;">
+             <div class="card" style="--card-accent: #64748b; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('NET ERROR', 'Erros de rede de baixo nível (Socket, Unreachable).<br><br><b>Significado:</b> Falha na camada de transporte antes mesmo do protocolo DNS.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_NETWORK_ERROR}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">NET ERROR</div>
             </div>
@@ -2374,33 +2388,51 @@ run_ping_diagnostics() {
         fi
         
         [[ "$VERBOSE" == "true" ]] && echo -e "\n     ${GRAY}[VERBOSE] Pinging $ip ($ping_cmd, Count=$PING_COUNT, Timeout=$PING_TIMEOUT)...${NC}"
-        local start_p=$(date +%s%N)
-        local output; output=$(LC_ALL=C $ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1); local ret=$?
+        # Run Ping with LC_ALL=C to ensure dot decimals and standard format
+        local start_ts=$(date +%s%N)
+        local output
+        output=$(LC_ALL=C $ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip 2>&1)
+        local ret=$?
+        local end_ts=$(date +%s%N)
+        local dur_p=$(( (end_ts - start_ts) / 1000000 ))
+        
         TOTAL_PING_SENT+=$PING_COUNT
-        local end_p=$(date +%s%N); local dur_p=$(( (end_p - start_p) / 1000000 ))
         
         log_cmd_result "PING $ip" "$ping_cmd -c $PING_COUNT -W $PING_TIMEOUT $ip" "$output" "$dur_p"
         
         # Parse packet loss more robustly
-        local loss=$(echo "$output" | grep "packet loss" | awk -F'%' '{print $1}' | awk '{print $NF}')
-        if [[ -z "$loss" ]]; then
-             # Fallback: Check for 100% loss string or if 0 received
-             if echo "$output" | grep -q "100% packet loss"; then loss=100;
-             elif echo "$output" | grep -q "0 received"; then loss=100;
-             else loss=100; fi # Default to 100% loss if parsing fails
-        fi
-        local rtt_avg=$(echo "$output" | awk -F '/' '/rtt/ {print $5}')
-        [[ -z "$rtt_avg" ]] && rtt_avg="N/A"
-        
-        # New: Parse Min/Max/Mdev
-        # Line format: rtt min/avg/max/mdev = 1.2/3.4/5.6/0.1 ms
-        local rtt_min=$(echo "$output" | awk -F '/' '/rtt/ {print $4}' | awk '{print $NF}') # Last field of "rtt min" part usually
-        local rtt_max=$(echo "$output" | awk -F '/' '/rtt/ {print $6}')
-        local rtt_mdev=$(echo "$output" | awk -F '/' '/rtt/ {print $7}' | awk '{print $1}')
+        local loss=$(echo "$output" | awk -F', ' '/packet loss/ {print $3}' | sed 's/% packet loss//g' | tr -d '\n')
+        # If output format is different (some pings say "0% packet loss"), handle it:
+        [[ -z "$loss" ]] && loss=$(echo "$output" | grep -oE '[0-9]+% packet loss' | awk '{print $1}' | tr -d '%')
+        [[ -z "$loss" ]] && loss=100  # Safe fallback if parsing fails
 
+        # Format: rtt min/avg/max/mdev = 1.2/3.4/5.6/0.1 ms
+        local rtt_avg="N/A"
+        local rtt_min="N/A"
+        local rtt_max="N/A"
+        local rtt_mdev="N/A"
+
+        # Check if we have RTT line
+        if [[ "$loss" != "100" ]] && echo "$output" | grep -q "rtt"; then
+            # Extract the part after "="
+            local rtt_vals=$(echo "$output" | grep "rtt" | sed 's/.* = //')
+            # rtt_vals should be "val1/val2/val3/val4 ms"
+            
+            # Ensure commas are dots (redundant with LC_ALL=C but safe)
+            rtt_vals=$(echo "$rtt_vals" | tr ',' '.')
+
+            # Use awk with C locale to split by /
+            rtt_min=$(echo "$rtt_vals" | LC_ALL=C awk -F '/' '{print $1}' | sed 's/[^0-9.]//g')
+            rtt_avg=$(echo "$rtt_vals" | LC_ALL=C awk -F '/' '{print $2}' | sed 's/[^0-9.]//g')
+            rtt_max=$(echo "$rtt_vals" | LC_ALL=C awk -F '/' '{print $3}' | sed 's/[^0-9.]//g')
+            # mdev often has " ms" attached
+            rtt_mdev=$(echo "$rtt_vals" | LC_ALL=C awk -F '/' '{print $4}' | awk '{print $1}' | sed 's/[^0-9.]//g')
+        fi
+        
         # Accumulate Latency for General Stats
-        if [[ "$rtt_avg" != "N/A" ]]; then
-             TOTAL_LATENCY_SUM=$(awk -v s="$TOTAL_LATENCY_SUM" -v v="$rtt_avg" 'BEGIN {print s + v}')
+        if [[ "$rtt_avg" != "N/A" && -n "$rtt_avg" ]]; then
+             # Use LC_NUMERIC=C for awk addition to handle dots correctly
+             TOTAL_LATENCY_SUM=$(LC_NUMERIC=C awk -v s="$TOTAL_LATENCY_SUM" -v v="$rtt_avg" 'BEGIN {print s + v}')
              TOTAL_LATENCY_COUNT=$((TOTAL_LATENCY_COUNT + 1))
              IP_RTT_RAW[$ip]="$rtt_avg"
         fi
@@ -2766,8 +2798,8 @@ process_tests() {
                                 
                                 # Accumulate for local average and global stats
                                 sum_dur_iter=$((sum_dur_iter + dur))
-                                TOTAL_DNS_DURATION_SUM=$(awk -v s="$TOTAL_DNS_DURATION_SUM" -v v="$dur" 'BEGIN {print s + v}')
-                                TOTAL_DNS_QUERY_COUNT+=1
+                                TOTAL_DNS_DURATION_SUM=$((TOTAL_DNS_DURATION_SUM + dur))
+                                TOTAL_DNS_QUERY_COUNT=$((TOTAL_DNS_QUERY_COUNT + 1))
                                 
                                 log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
 
@@ -3171,13 +3203,6 @@ print_final_terminal_summary() {
     local p_succ=0
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
     echo -e "  📊 Taxa de Sucesso : ${p_succ}%"
-
-    # Calculate Avg DNS Duration
-    local avg_dns="N/A"
-    if [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]]; then
-        avg_dns=$(awk "BEGIN {printf \"%.0f\", $TOTAL_DNS_DURATION_SUM / $TOTAL_DNS_QUERY_COUNT}")
-        avg_dns="${avg_dns}ms"
-    fi
     
     echo -e "${BLUE}------------------------------------------------------${NC}"
     echo -e "${BLUE}       PERFORMANCE & DETALHES    ${NC}"
@@ -3201,12 +3226,12 @@ print_final_terminal_summary() {
         for ip in ${DNS_GROUPS[$grp]}; do
             if [[ -n "${IP_RTT_RAW[$ip]}" ]]; then
                 # IP_RTT_RAW can be float "45.2". awk handles it.
-                g_rtt_sum=$(awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
+                g_rtt_sum=$(LC_NUMERIC=C awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
                 g_rtt_cnt=$((g_rtt_cnt + 1))
             fi
         done
         local g_avg="N/A"
-        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
+        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(LC_NUMERIC=C awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
         
         local g_fail_cnt=${GROUP_FAIL_TESTS[$grp]}
         [[ -z "$g_fail_cnt" ]] && g_fail_cnt=0
