@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.2.1
-# "Walkthrough - Deep Analysis Fixes"
+# Versão: 10.2.3    
+# "Deep Analysis Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.2.1"
+SCRIPT_VERSION="10.2.3"
 
 # Carrega configurações externas
 CONFIG_FILE="diagnostico.conf"
@@ -2395,7 +2395,7 @@ run_trace_diagnostics() {
         fi
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
-    echo "</tbody></table>" >> "$TEMP_TRACE"
+
     if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
         echo "</tbody></table>" >> "$TEMP_TRACE_SIMPLE"
     fi
@@ -2450,6 +2450,7 @@ process_tests() {
             # Reset Group Stats
             local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                > "$TEMP_GROUP_BODY"
                 echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
             fi
             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
