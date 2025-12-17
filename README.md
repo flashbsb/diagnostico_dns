@@ -71,10 +71,13 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-y`: Modo Silencioso (Não interativo / Aceita defaults do .conf)
   * `-s`: Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)
   * `-j`: Gera saída em JSON estruturado (.json) para integrações.
-  * `-t`: Habilita testes de conectividade TCP
-  * `-d`: Habilita validação DNSSEC
-  * `-x`: Habilita teste de transferência de zona (AXFR)
-  * `-r`: Habilita teste de recursão aberta
+  * `-t`: Habilita testes de conectividade TCP (Sobrescreve conf)
+  * `-d`: Habilita validação DNSSEC (Sobrescreve conf)
+  * `-x`: Habilita teste de transferência de zona (AXFR) (Sobrescreve conf)
+  * `-r`: Habilita teste de recursão aberta (Sobrescreve conf)
+  * `-T`: Habilita traceroute (Rota)
+  * `-V`: Habilita verificação de versão BIND
+  * `-Z`: Habilita verificação de sincronismo SOA
   * `-h`: Exibe este menu de ajuda
 
 ## 🕵️‍♂️ Critérios de Divergência (Strict Mode)

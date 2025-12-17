@@ -2,27 +2,30 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.5.0    
-# "Full HTML Interactivity"
+# Versão: 10.6.1    
+# "Structural Refactoring and Stability Improvements"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.5.0"
+SCRIPT_VERSION="10.6.1"
 
 # Carrega configurações externas
-CONFIG_FILE="diagnostico.conf"
-SCRIPT_DIR="$(dirname "$0")"
+# Carrega configurações externas
+CONFIG_FILE_NAME="diagnostico.conf"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
-# Tenta carregar do diretório atual ou do diretório do script
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-elif [[ -f "$SCRIPT_DIR/$CONFIG_FILE" ]]; then
-    source "$SCRIPT_DIR/$CONFIG_FILE"
+# Resolução de Path do Config
+if [[ -f "$PWD/$CONFIG_FILE_NAME" ]]; then
+    CONFIG_FILE="$PWD/$CONFIG_FILE_NAME" 
+elif [[ -f "$SCRIPT_DIR/$CONFIG_FILE_NAME" ]]; then
+    CONFIG_FILE="$SCRIPT_DIR/$CONFIG_FILE_NAME"
 else
-    echo "ERRO CRÍTICO: Arquivo de configuração '$CONFIG_FILE' não encontrado!"
-    echo "Por favor, certifique-se de que o arquivo 'diagnostico.conf' esteja no mesmo diretório."
+    echo "ERRO CRÍTICO: Arquivo de configuração '$CONFIG_FILE_NAME' não encontrado!"
+    echo "Por favor, certifique-se de que o arquivo esteja no diretório atual ou do script."
     exit 1
 fi
+source "$CONFIG_FILE"
+
 
 
 # Variáveis de Tempo
@@ -193,10 +196,10 @@ print_help_text() {
     echo -e "  ${GREEN}-j${NC}            Gera saída em JSON estruturado (.json)."
     echo -e "  ${GRAY}Nota: O uso de -s ou -j desabilita o Relatório Completo padrão, a menos que configurado o contrário.${NC}"
     echo -e ""
-    echo -e "  ${GREEN}-t${NC}            Habilita testes de conectividade TCP."
-    echo -e "  ${GREEN}-d${NC}            Habilita validação DNSSEC."
-    echo -e "  ${GREEN}-x${NC}            Habilita teste de transferência de zona (AXFR)."
-    echo -e "  ${GREEN}-r${NC}            Habilita teste de recursão aberta."
+    echo -e "  ${GREEN}-t${NC}            Habilita testes de conectividade TCP (Sobrescreve conf)."
+    echo -e "  ${GREEN}-d${NC}            Habilita validação DNSSEC (Sobrescreve conf)."
+    echo -e "  ${GREEN}-x${NC}            Habilita teste de transferência de zona (AXFR) (Sobrescreve conf)."
+    echo -e "  ${GREEN}-r${NC}            Habilita teste de recursão aberta (Sobrescreve conf)."
     echo -e "  ${GREEN}-T${NC}            Habilita traceroute (Rota)."
     echo -e "  ${GREEN}-V${NC}            Habilita verificação de versão BIND (Chaos)."
     echo -e "  ${GREEN}-Z${NC}            Habilita verificação de sincronismo SOA."
@@ -382,7 +385,10 @@ print_execution_summary() {
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
     [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
-    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
+    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
+        echo -e "     ${GRAY}ℹ️  Nota: Relatório otimizado para tamanho reduzido (sem logs técnicos/raw data).${NC}"
+    fi
     [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]] && echo -e "  ⚠️  ${YELLOW}Nenhum relatório selecionado? (Configurar e rodar)${NC}"
     [[ "$GENERATE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
     [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
@@ -536,7 +542,10 @@ interactive_configuration() {
         # Apply Logic for Interactive Changes
         GENERATE_FULL_REPORT="${ENABLE_FULL_REPORT}"
         GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT}"
-        # JSON is already direct
+        GENERATE_JSON_REPORT="${GENERATE_JSON_REPORT}" # Ensure this is also synced if variable names differed, but they share name in ask_boolean logic in some versions, checking... 
+        # actually ask_boolean uses the variable name passed as 2nd arg.
+        # In interactive_configuration, we utilize GENERATE_JSON_REPORT directly in ask_boolean? 
+        # Line 506: ask_boolean ... "GENERATE_JSON_REPORT" -> So that one is direct.
         
         # Fallback Logic (Prevent user from disabling everything without realizing)
         if [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]]; then
@@ -545,8 +554,94 @@ interactive_configuration() {
              ENABLE_FULL_REPORT="true"
         fi
 
+        # --- SAVE CONFIGURATION ---
+        echo -e "\n${BLUE}--- PERSISTÊNCIA ---${NC}"
+        SAVE_CONFIG="false"
+        ask_boolean "Deseja salvar estas definições no arquivo '$CONFIG_FILE'?" "SAVE_CONFIG"
+        if [[ "$SAVE_CONFIG" == "true" ]]; then
+            echo -e "\n${RED}${BOLD}⚠️  ATENÇÃO: ISSO IRÁ SOBRESCREVER O ARQUIVO $CONFIG_FILE!${NC}"
+            CONFIRM_SAVE="false"
+            ask_boolean "TEM CERTEZA QUE DESEJA CONTINUAR?" "CONFIRM_SAVE"
+            if [[ "$CONFIRM_SAVE" == "true" ]]; then
+                save_config_to_file
+            else
+                 echo -e "     ${YELLOW}>> Cancelado. As alterações valem apenas para esta execução.${NC}"
+            fi
+        fi
+
         print_execution_summary
     fi
+}
+
+save_config_to_file() {
+    [[ ! -f "$CONFIG_FILE" ]] && { echo "Erro: $CONFIG_FILE não encontrado para escrita."; return; }
+    
+    # Helper to update key="val" or key=val in conf file
+    # Handles quoted and unquoted values, preserves comments
+    update_conf_key() {
+        local key="$1"
+        local val="$2"
+        # Escape slashes in value just in case (though mostly simple strings here)
+        val="${val//\//\\/}"
+        
+        # Determine if original was quoted. Actually, we enforce our standard format: KEY="val" or KEY=val
+        # Let's try to detect if we should quote it.
+        # String values usually quoted, numbers/booleans maybe not.
+        # The script uses quotes for most things in defaults.
+        
+        sed -i "s|^$key=.*|$key=\"$val\"|" "$CONFIG_FILE"
+    }
+    
+    # Batch Update
+    update_conf_key "FILE_DOMAINS" "$FILE_DOMAINS"
+    update_conf_key "FILE_GROUPS" "$FILE_GROUPS"
+    update_conf_key "LOG_PREFIX" "$LOG_PREFIX"
+    sed -i "s|^CONSISTENCY_CHECKS=.*|CONSISTENCY_CHECKS=$CONSISTENCY_CHECKS|" "$CONFIG_FILE" # Numeric
+    sed -i "s|^TIMEOUT=.*|TIMEOUT=$TIMEOUT|" "$CONFIG_FILE" # Numeric
+    sed -i "s|^SLEEP=.*|SLEEP=$SLEEP|" "$CONFIG_FILE" # Numeric
+    
+    update_conf_key "VALIDATE_CONNECTIVITY" "$VALIDATE_CONNECTIVITY"
+    update_conf_key "VERBOSE" "$VERBOSE"
+    update_conf_key "GENERATE_LOG_TEXT" "$GENERATE_LOG_TEXT"
+    
+    # Report Flags
+    update_conf_key "ENABLE_FULL_REPORT" "$GENERATE_FULL_REPORT" # Map back internal to config var
+    update_conf_key "ENABLE_SIMPLE_REPORT" "$GENERATE_SIMPLE_REPORT"
+    update_conf_key "ENABLE_CHARTS" "$ENABLE_CHARTS"
+    update_conf_key "GENERATE_JSON_REPORT" "$GENERATE_JSON_REPORT"
+    
+    # Tests
+    sed -i "s|^ENABLE_PING=.*|ENABLE_PING=$ENABLE_PING|" "$CONFIG_FILE"
+    if [[ "$ENABLE_PING" == "true" ]]; then
+        sed -i "s|^PING_COUNT=.*|PING_COUNT=$PING_COUNT|" "$CONFIG_FILE"
+        sed -i "s|^PING_TIMEOUT=.*|PING_TIMEOUT=$PING_TIMEOUT|" "$CONFIG_FILE"
+    fi
+    update_conf_key "ENABLE_TCP_CHECK" "$ENABLE_TCP_CHECK"
+    update_conf_key "ENABLE_DNSSEC_CHECK" "$ENABLE_DNSSEC_CHECK"
+    update_conf_key "ENABLE_TRACE_CHECK" "$ENABLE_TRACE_CHECK"
+    update_conf_key "ONLY_TEST_ACTIVE_GROUPS" "$ONLY_TEST_ACTIVE_GROUPS"
+    
+    # Security
+    update_conf_key "CHECK_BIND_VERSION" "$CHECK_BIND_VERSION"
+    update_conf_key "ENABLE_AXFR_CHECK" "$ENABLE_AXFR_CHECK"
+    update_conf_key "ENABLE_RECURSION_CHECK" "$ENABLE_RECURSION_CHECK"
+    update_conf_key "ENABLE_SOA_SERIAL_CHECK" "$ENABLE_SOA_SERIAL_CHECK"
+    
+    # Dig
+    update_conf_key "DEFAULT_DIG_OPTIONS" "$DEFAULT_DIG_OPTIONS"
+    update_conf_key "RECURSIVE_DIG_OPTIONS" "$RECURSIVE_DIG_OPTIONS"
+    
+    # Analysis
+    sed -i "s|^LATENCY_WARNING_THRESHOLD=.*|LATENCY_WARNING_THRESHOLD=$LATENCY_WARNING_THRESHOLD|" "$CONFIG_FILE"
+    sed -i "s|^PING_PACKET_LOSS_LIMIT=.*|PING_PACKET_LOSS_LIMIT=$PING_PACKET_LOSS_LIMIT|" "$CONFIG_FILE"
+    update_conf_key "COLOR_OUTPUT" "$COLOR_OUTPUT"
+
+    # Strict Criteria
+    update_conf_key "STRICT_IP_CHECK" "$STRICT_IP_CHECK"
+    update_conf_key "STRICT_ORDER_CHECK" "$STRICT_ORDER_CHECK"
+    update_conf_key "STRICT_TTL_CHECK" "$STRICT_TTL_CHECK"
+    
+    echo -e "     ${GREEN}✅ Configurações salvas em '$CONFIG_FILE'!${NC}"
 }
 
 # ==============================================
@@ -571,6 +666,14 @@ validate_csv_files() {
              echo -e "${YELLOW}Linhas: $(echo "$invalid_lines" | tr '\n' ',' | sed 's/,$//')${NC}"
              error_count=$((error_count+1))
          fi
+
+         # Validate TEST type (Col 3: iterative|recursive|both)
+         local invalid_types=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | awk -F';' '$3 !~ /^(iterative|recursive|both)$/ {print NR " (" $3 ")"}')
+         if [[ -n "$invalid_types" ]]; then
+             echo -e "${RED}ERRO SEMÂNTICO EM '$FILE_DOMAINS':${NC} Campo TEST inválido (Use: iterative, recursive ou both):"
+             echo -e "${YELLOW}Linhas: $invalid_types${NC}"
+             error_count=$((error_count+1))
+         fi
     fi
 
     # 2. Check Groups File
@@ -582,6 +685,14 @@ validate_csv_files() {
          if [[ -n "$invalid_lines" ]]; then
              echo -e "${RED}ERRO EM '$FILE_GROUPS':${NC} Linhas com número incorreto de colunas (Esperado 5):"
              echo -e "${YELLOW}Linhas: $(echo "$invalid_lines" | tr '\n' ',' | sed 's/,$//')${NC}"
+             error_count=$((error_count+1))
+         fi
+         
+         # Validate TYPE (Col 3: authoritative|recursive|mixed)
+         local invalid_types=$(grep -vE '^\s*#|^\s*$' "$FILE_GROUPS" | awk -F';' '$3 !~ /^(authoritative|recursive|mixed)$/ {print NR " (" $3 ")"}')
+         if [[ -n "$invalid_types" ]]; then
+             echo -e "${RED}ERRO SEMÂNTICO EM '$FILE_GROUPS':${NC} Campo TYPE inválido (Use: authoritative, recursive ou mixed):"
+             echo -e "${YELLOW}Linhas: $invalid_types${NC}"
              error_count=$((error_count+1))
          fi
     fi
@@ -660,7 +771,10 @@ normalize_dig_output() {
 
     # 3. Tratamento de IPs/Dados
     if [[ "$STRICT_IP_CHECK" == "false" ]]; then
-        clean=$(echo "$clean" | awk '/IN/ {$NF="DATA_IGN"; print $0} !/IN/ {print $0}')
+        # Only mask IP addresses (A/AAAA) to allow Round Robin.
+        # Preserve content for TXT, MX, NS, SOA, CNAME, etc.
+        # Check column 4 (Type) in standard dig output (Name TTL IN Type Data)
+        clean=$(echo "$clean" | awk '$3=="IN" && ($4=="A" || $4=="AAAA") {$NF="DATA_IGN"} {print $0}')
     fi
 
     # 4. Tratamento de Ordem
@@ -2557,7 +2671,9 @@ run_trace_diagnostics() {
         done
     done
 
-    echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
+    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
+    fi
     if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
         echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE_SIMPLE"
     fi
@@ -2662,6 +2778,7 @@ process_tests() {
     local TEMP_GROUP_BODY="logs/temp_group_body_$$.html"
     local TEMP_DOMAIN_BODY_SIMPLE="logs/temp_domain_body_simple_$$.html"
     local TEMP_GROUP_BODY_SIMPLE="logs/temp_group_body_simple_$$.html"
+    local TEMP_JSON_DOMAINS="logs/temp_domains_json_$$.json"
     
     local test_id=0
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
@@ -2895,6 +3012,11 @@ process_tests() {
                                 attempts_log="${attempts_log}"$'\n\n'"=== TENTATIVA #$iter ($iter_status) === "$'\n'"[Normalized Check: $(echo "$normalized" | tr '\n' ' ')]"$'\n'"$output"
                                 final_status="$iter_status"
                                 [[ "$iter_status" == "NOERROR" ]] && final_class="status-ok" || { [[ "$iter_status" == "SERVFAIL" || "$iter_status" == "NXDOMAIN" || "$iter_status" == "NOANSWER" ]] && final_class="status-warning" || final_class="status-fail"; }
+                                
+                                # Decision Logging
+                                if [[ "$final_class" != "status-ok" || "$VERBOSE" == "true" ]]; then
+                                    log_entry "DECISION: Domain=$target Server=$srv Record=$rec Iteration=$iter Result=$iter_status Class=$final_class"
+                                fi
 
                                 [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && { sleep "$SLEEP"; TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {print $TOTAL_SLEEP_TIME + $SLEEP}"); }
                             done
@@ -3130,6 +3252,11 @@ process_tests() {
             echo "</details>" >> "$TEMP_MATRIX_SIMPLE"
         fi
         
+        # JSON Domain Summary
+        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+             echo "{ \"domain\": \"$domain\", \"tests_total\": $d_total, \"tests_ok\": $d_ok, \"tests_warn\": $d_warn, \"tests_fail\": $d_fail, \"tests_div\": $d_div, \"final_state\": \"$( [[ $d_fail -gt 0 ]] && echo 'FAIL' || { [[ $d_warn -gt 0 || $d_div -gt 0 ]] && echo 'WARN' || echo 'OK'; } )\" }," >> "$TEMP_JSON_DOMAINS"
+        fi
+        
         echo ""
     done < "$FILE_DOMAINS"
     
@@ -3153,6 +3280,7 @@ assemble_json() {
     # Helper to clean trailing comma from file content for valid JSON array
     # If file is empty, this results in empty string, which is fine for empty array
     local dns_data=""; [[ -f "$TEMP_JSON_DNS" ]] && dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
+    local domain_data=""; [[ -f "$TEMP_JSON_DOMAINS" ]] && domain_data=$(sed '$ s/,$//' "$TEMP_JSON_DOMAINS")
     local ping_data=""; [[ -f "$TEMP_JSON_Ping" ]] && ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
     local sec_data=""; [[ -f "$TEMP_JSON_Sec" ]] && sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
     local trace_data=""; [[ -f "$TEMP_JSON_Trace" ]] && trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
@@ -3199,6 +3327,9 @@ assemble_json() {
       "network_error": $CNT_NETWORK_ERROR
     }
   },
+  "domain_status": [
+    $domain_data
+  ],
   "results": [
     $dns_data
   ],
