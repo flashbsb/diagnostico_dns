@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.6.1    
-# "Structural Refactoring and Stability Improvements"
+# Versão: 10.6.5    
+# "Structural Refactoring and Stability Improvements: fix"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.6.1"
+SCRIPT_VERSION="10.6.5"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -1325,7 +1325,7 @@ EOF
              </div>
              <!-- Latency Chart Container (Placeholder) -->
              <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-warning); align-items: center; justify-content: center;">
-                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Top Latência (Médias por Grupo)</h3>
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Top Latência (Médias)</h3>
                  <div style="position: relative; height: 300px; width: 100%;">
                     <canvas id="chartLatency"></canvas>
                  </div>
@@ -1774,9 +1774,9 @@ EOF
     if [[ -f "$TEMP_TRACE" ]]; then
          sed "s/<\/td><td[^>]*>/|/g" "$TEMP_TRACE" | awk -F'|' '/<tr><td>/ {
              server=$2; gsub(/<[^>]*>/, "", server);
-             hops=$3; gsub(/[^0-9]/, "", hops);
+             hops=$3; gsub(/<[^>]*>/, "", hops); gsub(/[^0-9]/, "", hops);
              if (hops ~ /^[0-9]+$/) print server " " hops
-         }' | head -n 15 | while read -r srv hops; do
+         }' | head -n 20 | while read -r srv hops; do
              echo "        traceLabels.push('$srv');"
              echo "        traceData.push($hops);"
          done
@@ -2652,8 +2652,8 @@ run_trace_diagnostics() {
     log_section "TRACEROUTE NETWORK PATH"
     
     local cmd_trace=""
-    if command -v traceroute &> /dev/null; then cmd_trace="traceroute -n -w $TIMEOUT -q 1 -m 15"
-    elif command -v tracepath &> /dev/null; then cmd_trace="tracepath -n"
+    if command -v traceroute &> /dev/null; then cmd_trace="traceroute -n -w $TIMEOUT -q 1 -m 30"
+    elif command -v tracepath &> /dev/null; then cmd_trace="tracepath -n -m 30"
     else 
         echo -e "${YELLOW}⚠️ Traceroute/Tracepath não encontrados. Pulando.${NC}"
         echo "<p class=\"status-warning\" style=\"padding:15px;\">Ferramentas de trace não encontradas (instale traceroute ou iputils-tracepath).</p>" > "$TEMP_TRACE"
@@ -2702,16 +2702,35 @@ run_trace_diagnostics() {
         # Validation of output
         local hops="-"
         local last_hop="Error/Timeout"
+        local reached_dest="false"
         
         # Check if output looks valid (contains hops)
         if [[ $ret -eq 0 ]] && echo "$output" | grep -qE "^[ ]*[0-9]+"; then
-            hops=$(echo "$output" | grep -E "^[ ]*[0-9]+" | wc -l)
             last_hop=$(echo "$output" | tail -1 | xargs)
             
-            # Check if last hop is timeout stars only
-            if [[ "$last_hop" =~ ^[\*\ ]+$ ]]; then
-                last_hop="Timeout (* * *)"
-                # If we have hops but last is timeout, it might be incomplete traceroute
+            # Extract IP from last hop (usually 2nd field after hop num)
+            local last_ip_extracted=$(echo "$last_hop" | awk '{print $2}')
+            if [[ "$last_ip_extracted" == "$ip" ]]; then
+                reached_dest="true"
+            fi
+            
+            if [[ "$reached_dest" == "true" ]]; then
+                 # If reached, the hop count is the last line's number
+                 hops=$(echo "$last_hop" | awk '{print $1}')
+            else
+                 # If NOT reached, find the last RESPONSIVE hop (containing an IP)
+                 # This avoids showing "30" just because it timed out at 30
+                 local last_resp=$(echo "$output" | grep -E "^[ ]*[0-9]+.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | tail -1)
+                 if [[ -n "$last_resp" ]]; then
+                      hops=$(echo "$last_resp" | awk '{print $1}')
+                 else
+                      hops="0" # No hops responded
+                 fi
+                 
+                 # Check if last hop is timeout stars only
+                 if [[ "$last_hop" =~ ^[0-9]+\ +[\*\ ]+$ ]]; then
+                    last_hop="Timeout (* * *)"
+                 fi
             fi
         else
             # Try to extract error message if short enough, otherwise specific message
@@ -2722,10 +2741,26 @@ run_trace_diagnostics() {
             fi
         fi
         
-        if [[ "$hops" == "15" ]]; then
-            echo -e "${RED}${hops} hops (Limite Atingido)${NC}"
-        else
+        local last_hop_clean="$last_hop"
+        local last_hop_html=""
+        local last_hop_plain=""
+
+        if [[ "$reached_dest" == "true" ]]; then
             echo -e "${CYAN}${hops} hops${NC}"
+            # last_hop variable for any legacy use? No, used locally.
+            # But let's keep the terminal output correct if we used last_hop there? 
+            # Oh, the echo -e above is the terminal output. we don't print LAST HOP to terminal.
+            # Wait, line 2726/2728 in previous code did NOT print last hop to terminal, just hops.
+            # My logic added last_hop="${GREEN}Reached...".
+            # BUT i don't see it being ECHOED to terminal after that assignment.
+            # It's only used in HTML generation below.
+            
+            last_hop_html="<span class='st-ok'>Reached:</span> $last_hop_clean"
+            last_hop_plain="Reached: $last_hop_clean"
+        else
+            echo -e "${RED}${hops} hops (Incompleto)${NC}"
+            last_hop_html="<span class='st-fail'>Stopped:</span> $last_hop_clean"
+            last_hop_plain="Stopped: $last_hop_clean"
         fi
         
         if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
@@ -2740,11 +2775,11 @@ run_trace_diagnostics() {
             # Clickable Row
             local click_handler="onclick=\"showLog('${trace_id}'); return false;\""
             
-            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td><a href='#' $click_handler style='color:inherit; text-decoration:underline;'>${hops}</a></td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE"
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td><a href='#' $click_handler style='color:inherit; text-decoration:underline;'>${hops}</a></td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop_html</span></td></tr>" >> "$TEMP_TRACE"
         fi
 
         if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop</span></td></tr>" >> "$TEMP_TRACE_SIMPLE"
+            echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop_html</span></td></tr>" >> "$TEMP_TRACE_SIMPLE"
         fi
         
         if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
@@ -2752,7 +2787,7 @@ run_trace_diagnostics() {
             local j_out=$(echo "$output" | tr '"' "'" | tr '\n' ' ' | sed 's/\\/\\\\/g')
             local j_hops="$hops" # string or number
             if [[ "$hops" == "-" ]]; then j_hops=0; fi
-            local clean_last_hop=$(echo "$last_hop" | tr '"' "'")
+            local clean_last_hop=$(echo "$last_hop_plain" | tr '"' "'")
             echo "{ \"ip\": \"$ip\", \"groups\": \"$groups_str\", \"hops\": $j_hops, \"last_hop\": \"$clean_last_hop\" }," >> "$TEMP_JSON_Trace"
         fi
     done
