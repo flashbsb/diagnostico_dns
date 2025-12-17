@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.6.5    
-# "Structural Refactoring and Stability Improvements: fix"
+# Versão: 10.9.0    
+# "Remove Redundant Mode Display in DNS Table"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.6.5"
+SCRIPT_VERSION="10.9.0"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -2216,7 +2216,7 @@ EOF
 
     cat >> "$target_file" << EOF
         <footer>
-            Gerado automaticamente por <strong>DNS Diagnostic Tool (v$SCRIPT_VERSION)</strong><br>
+            Gerado automaticamente por <a href="https://github.com/flashbsb/diagnostico_dns" target="_blank" style="color:inherit; text-decoration:underline;">DNS Diagnostic Tool (v$SCRIPT_VERSION)</a><br>
         </footer>
     </div>
     <a href="#top" style="position:fixed; bottom:20px; right:20px; background:var(--accent-primary); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; box-shadow:0 4px 10px rgba(0,0,0,0.3); font-size:1.2rem;">⬆️</a>
@@ -2849,11 +2849,11 @@ process_tests() {
             local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
                 > "$TEMP_GROUP_BODY"
-                echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY"
+                echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:20%\">Alvo</th><th style=\"width:10%\">Tipo</th>" >> "$TEMP_GROUP_BODY"
             fi
             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
                 > "$TEMP_GROUP_BODY_SIMPLE"
-                echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:30%\">Target (Record)</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:20%\">Alvo</th><th style=\"width:10%\">Tipo</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
             for srv in "${srv_list[@]}"; do 
                 [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
@@ -2955,11 +2955,22 @@ process_tests() {
                         fi
                     done
 
+                    local rec_idx=0
+                    local rec_count=${#rec_list[@]}
+                    
                     for rec in "${rec_list[@]}"; do
-                        [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY"
-                        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-                            echo "<tr><td><span class=\"badge badge-type\">$mode</span> <strong>$target</strong> <span style=\"color:var(--text-secondary)\">($rec)</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        local row_start=""
+                        # Logic for Rowspan
+                        if [[ $rec_idx -eq 0 ]]; then
+                             row_start="<td rowspan=\"$rec_count\" style=\"vertical-align:middle; background:var(--bg-secondary); border-right:1px solid var(--border-color);\"><strong>$target</strong></td>"
                         fi
+                        
+                        [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr>$row_start<td><span style=\"color:var(--text-secondary); font-weight:bold;\">$rec</span></td>" >> "$TEMP_GROUP_BODY"
+                        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                            echo "<tr>$row_start<td><span style=\"color:var(--text-secondary); font-weight:bold;\">$rec</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                        fi
+                        
+                        rec_idx=$((rec_idx + 1))
                         
                         # SOA Serial Collection
                         local collected_soa_serials=()
@@ -3216,9 +3227,9 @@ process_tests() {
                         done
                         
                         if [[ "$soa_divergence_detected" == "true" ]]; then
-                                  [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
+                                  [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td colspan='$(( ${#srv_list[@]} + 2 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
                                   if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
-                                      echo "<tr><td colspan='$(( ${#srv_list[@]} + 1 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
+                                      echo "<tr><td colspan='$(( ${#srv_list[@]} + 2 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                                   fi
                         fi
 
