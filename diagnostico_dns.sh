@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.9.0    
-# "Remove Redundant Mode Display in DNS Table"
+# Versão: 10.9.2   
+# "Fix % Response Coverage in Stats"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.9.0"
+SCRIPT_VERSION="10.9.2"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -52,6 +52,7 @@ fi
 declare -A CONNECTIVITY_CACHE
 declare -A HTML_CONN_ERR_LOGGED 
 declare -i TOTAL_TESTS=0
+declare -i TOTAL_DNS_QUERY_COUNT=0
 declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
 declare -i WARNING_TESTS=0
@@ -1953,11 +1954,14 @@ generate_group_stats_html() {
     
     # 1. Detailed Counters Section
     # Calculate percentages for detailed counters
-    local p_noerror=0; [[ $TOTAL_TESTS -gt 0 ]] && p_noerror=$(( (CNT_NOERROR * 100) / TOTAL_TESTS ))
-    local p_nxdomain=0; [[ $TOTAL_TESTS -gt 0 ]] && p_nxdomain=$(( (CNT_NXDOMAIN * 100) / TOTAL_TESTS ))
-    local p_servfail=0; [[ $TOTAL_TESTS -gt 0 ]] && p_servfail=$(( (CNT_SERVFAIL * 100) / TOTAL_TESTS ))
-    local p_refused=0; [[ $TOTAL_TESTS -gt 0 ]] && p_refused=$(( (CNT_REFUSED * 100) / TOTAL_TESTS ))
-    local p_timeout=0; [[ $TOTAL_TESTS -gt 0 ]] && p_timeout=$(( (CNT_TIMEOUT * 100) / TOTAL_TESTS ))
+    local p_noerror=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_noerror=$(( (CNT_NOERROR * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_noanswer=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_noanswer=$(( (CNT_NOANSWER * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_nxdomain=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_nxdomain=$(( (CNT_NXDOMAIN * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_servfail=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_servfail=$(( (CNT_SERVFAIL * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_refused=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_refused=$(( (CNT_REFUSED * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_timeout=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_timeout=$(( (CNT_TIMEOUT * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_neterror=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_neterror=$(( (CNT_NETWORK_ERROR * 100) / TOTAL_DNS_QUERY_COUNT ))
+    local p_other=0; [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]] && p_other=$(( (CNT_OTHER_ERROR * 100) / TOTAL_DNS_QUERY_COUNT ))
 
     cat >> "$TEMP_STATS" << EOF
     <div style="margin-top: 30px; margin-bottom: 20px;">
@@ -1968,6 +1972,11 @@ generate_group_stats_html() {
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_NOERROR}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">NOERROR</div>
                 <div style="font-size:0.7rem; color:#10b981;">${p_noerror}%</div>
+            </div>
+             <div class="card" style="--card-accent: #64748b; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('NOANSWER', 'O servidor respondeu com status NOERROR, mas não retornou a seção ANSWER.<br><br><b>Significado:</b> O nome existe, mas não há registro do tipo solicitado (ex: pediu AAAA mas só tem A).')">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_NOANSWER}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">NOANSWER</div>
+                <div style="font-size:0.7rem; color:var(--text-secondary);">${p_noanswer}%</div>
             </div>
             <div class="card" style="--card-accent: #f59e0b; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('NXDOMAIN', 'O domínio consultado NÃO EXISTE no servidor.<br><br><b>Significado:</b> Resposta autoritativa de que o nome é inválido.<br>Comum se houver erros de digitação ou domínios expirados.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_NXDOMAIN}</div>
@@ -1992,6 +2001,12 @@ generate_group_stats_html() {
              <div class="card" style="--card-accent: #64748b; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('NET ERROR', 'Erros de rede de baixo nível (Socket, Unreachable).<br><br><b>Significado:</b> Falha na camada de transporte antes mesmo do protocolo DNS.')">
                 <div style="font-size:1.5rem; font-weight:bold;">${CNT_NETWORK_ERROR}</div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">NET ERROR</div>
+                <div style="font-size:0.7rem; color:var(--text-secondary);">${p_neterror}%</div>
+            </div>
+             <div class="card" style="--card-accent: #64748b; padding:15px; text-align:center; cursor:pointer;" onclick="showInfoModal('OTHER', 'Outros erros não classificados.<br><br><b>Significado:</b> Códigos de retorno raros ou erros de parsing.')">
+                <div style="font-size:1.5rem; font-weight:bold;">${CNT_OTHER_ERROR}</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">OTHER</div>
+                 <div style="font-size:0.7rem; color:var(--text-secondary);">${p_other}%</div>
             </div>
         </div>
     </div>
@@ -3433,7 +3448,8 @@ print_final_terminal_summary() {
     echo -e "  📂 Domínios      : ${domain_count}"
     echo -e "  👥 Grupos DNS    : ${group_count}"
     echo -e "  🖥️ Servidores    : ${server_count} (Únicos)"
-    echo -e "  📡 Total Queries : ${TOTAL_TESTS} (DNS)"
+    echo -e "  🔢 Total Tests   : ${TOTAL_TESTS} (Targets)"
+    echo -e "  📡 Total Queries : ${TOTAL_DNS_QUERY_COUNT} (Iterations)"
     echo -e "  ⏱️ Latência Média: ${avg_lat}${lat_suffix}"
     echo -e "${BLUE}------------------------------------------------------${NC}"
     echo -e "  ✅ Sucesso         : ${GREEN}${SUCCESS_TESTS}${NC}"
