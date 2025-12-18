@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.8
-# "Artifact Polish"
+# Versão: 11.2.0
+# "Observability Pack"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.8"
+SCRIPT_VERSION="11.2.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -96,12 +96,22 @@ declare -A GROUP_FAIL_TESTS
 declare -A IP_RTT_RAW # Store raw RTT for group avg calc
 declare -A GROUP_RTT_SUM
 declare -A GROUP_RTT_COUNT
+# Record Stats (Global)
+declare -gA STATS_REC_TOTAL
+declare -gA STATS_REC_OK
+declare -gA STATS_REC_FAIL
 
+# Setup Arquivos
 # Setup Arquivos
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
-LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
+LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}.log" # No timestamp to allow rotation
+LOG_FILE_JSON="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}.json.log"
+
+# Default Configuration
+VERBOSE_LEVEL=1  # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
+ENABLE_JSON_LOG="false"
 
 init_html_parts() {
     # Generate unique session ID for temp files (PID + Random + Timestamp)
@@ -263,6 +273,7 @@ print_help_text() {
     echo -e ""
     echo -e "  ${CYAN}ENABLE_LOG_TEXT / VERBOSE${NC}"
     echo -e "      Controle de verbosidade e geração de log forense em texto plano (.log)."
+    echo -e "      Níveis: 0 (Quiet), 1 (Summary), 2 (Verbose), 3 (Debug)."
     echo -e ""
     echo -e "  ${CYAN}COLOR_OUTPUT${NC} (true/false)"
     echo -e "      Habilita ou desabilita cores no terminal ANSI."
@@ -406,13 +417,28 @@ log_cmd_result() {
         echo "--------------------------------------------------------------------------------"
         echo "CTX: $context | CMD: $cmd | TIME: ${time}ms"
         echo "OUTPUT:"
-        echo "$output"
+    echo "$output"
         echo "--------------------------------------------------------------------------------"
     } >> "$LOG_FILE_TEXT"
 }
 
+log_rotation() {
+    local file="$1"
+    local max_size=$((5 * 1024 * 1024)) # 5MB
+    if [[ -f "$file" ]]; then
+        local size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null)
+        if [[ $size -gt $max_size ]]; then
+            mv "$file" "${file}.old"
+            echo -e "Log rotation: ${file} -> ${file}.old"
+        fi
+    fi
+}
+
 init_log_file() {
     [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
+    
+    log_rotation "$LOG_FILE_TEXT"
+    
     {
         echo "DNS DIAGNOSTIC TOOL v$SCRIPT_VERSION - FORENSIC LOG"
         echo "Date: $START_TIME_HUMAN"
@@ -429,8 +455,40 @@ init_log_file() {
         echo "  Reports: Full=$ENABLE_FULL_REPORT, Simple=$ENABLE_SIMPLE_REPORT"
         echo "  Dig Opts: $DEFAULT_DIG_OPTIONS"
         echo "  Rec Dig Opts: $RECURSIVE_DIG_OPTIONS"
+        echo "  Verbose Level: $VERBOSE_LEVEL"
         echo ""
-    } > "$LOG_FILE_TEXT"
+    } >> "$LOG_FILE_TEXT" # Append mode due to shared file
+    
+    if [[ "$ENABLE_JSON_LOG" == "true" ]]; then
+        log_rotation "$LOG_FILE_JSON"
+        # Init or append JSON log array start? 
+        # For simplicity, line-delimited JSON (NDJSON) is better for streaming logs
+    fi
+}
+
+log_json() {
+    [[ "$ENABLE_JSON_LOG" != "true" ]] && return
+    local level="$1"
+    local msg="$2"
+    # Basic JSON construction using string interpolation
+    # Escape quotes in msg
+    local safe_msg="${msg//\"/\\\"}"
+    local ts=$(date -Iseconds)
+    echo "{\"timestamp\": \"$ts\", \"level\": \"$level\", \"message\": \"$safe_msg\"}" >> "$LOG_FILE_JSON"
+}
+
+log_cmd_result() {
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
+    local context="$1"; local cmd="$2"; local output="$3"; local time="$4"
+    {
+        echo "--------------------------------------------------------------------------------"
+        echo "CTX: $context | CMD: $cmd | TIME: ${time}ms"
+        echo "OUTPUT:"
+        echo "$output"
+        echo "--------------------------------------------------------------------------------"
+    } >> "$LOG_FILE_TEXT"
+    
+    log_json "INFO" "CTX: $context | TIME: ${time}ms"
 }
 
 # ==============================================
@@ -2060,6 +2118,15 @@ assemble_html() {
      
     prepare_chart_resources
     
+    # Offline Warning
+    if [[ "$ENABLE_CHARTS" != "true" ]]; then
+       cat >> "$target_file" << EOF
+       <div style="background:rgba(255,255,0,0.1); border:1px solid #f59e0b; color:#f59e0b; padding:15px; margin:20px; border-radius:8px; text-align:center;">
+           ⚠️ <strong>Aviso:</strong> Gráficos desabilitados (Biblioteca Chart.js não disponível offline ou falha no download).
+       </div>
+EOF
+    fi
+    
     generate_executive_summary
     generate_health_map
     generate_group_stats_html 
@@ -2777,8 +2844,10 @@ process_tests() {
         echo -e "${CYAN}>> ${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
         
         # Reset Counters for this run (if needed, though already global)
-    # Global TCP Cache for this execution context to avoid redundant checks
+    # Global TCP Cache and Stats Arrays
     declare -A GLOBAL_TCP_CHECKED; local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
+    # Declare Global Stats for JSON (if not already global)
+    declare -gA STATS_REC_TOTAL; declare -gA STATS_REC_OK; declare -gA STATS_REC_FAIL
         > "$TEMP_DOMAIN_BODY"
 
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
@@ -2833,12 +2902,16 @@ process_tests() {
                                      CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP Connection OK'>T</span></a>"
                                      tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
                                      TCP_SUCCESS+=1
-                                     echo -ne "${GREEN}T${NC}"
+                                     TCP_SUCCESS+=1
+                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}T${NC}"
+                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                  else
                                      CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Connection Failed'>T</span></a>"
                                      tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
                                      TCP_FAIL+=1
-                                     echo -ne "${RED}T${NC}"
+                                     TCP_FAIL+=1
+                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}T${NC}"
+                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
                                  fi
                                  GLOBAL_TCP_CHECKED[$srv]="true"
                              fi
@@ -2863,19 +2936,25 @@ process_tests() {
                                  CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail' title='DNSSEC Error'>D</span></a>"
                                  sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
                                  DNSSEC_FAIL+=1
-                                 echo -ne "${RED}D${NC}"
+                                 DNSSEC_FAIL+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}D${NC}"
+                                 [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
                              else
                                  if echo "$out_sec" | grep -q ";; flags:.* ad" || echo "$out_sec" | grep -q "RRSIG"; then
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a>"
                                      sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
                                      DNSSEC_SUCCESS+=1
-                                     echo -ne "${GREEN}D${NC}"
+                                     DNSSEC_SUCCESS+=1
+                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}D${NC}"
+                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                  else
                                      # Unsigned zone is Neutral
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a>"
                                      sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral'>ABS</span></a>"
                                      DNSSEC_ABSENT+=1
-                                     echo -ne "${GRAY}D${NC}"
+                                     DNSSEC_ABSENT+=1
+                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}D${NC}"
+                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                  fi
                              fi
                         fi
@@ -2919,7 +2998,9 @@ process_tests() {
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
                                     FAILED_TESTS+=1; g_fail=$((g_fail+1)); 
                                     GROUP_FAIL_TESTS[$grp]=$((GROUP_FAIL_TESTS[$grp] + 1))
-                                    echo -ne "${RED}x${NC}";
+                                    GROUP_FAIL_TESTS[$grp]=$((GROUP_FAIL_TESTS[$grp] + 1))
+                                    [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}x${NC}"
+                                    [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
                                     
                                     # Store results for DOWN state instead of writing HTML immediately
                                     RES_FINAL_CLASS[$srv]="status-fail"
@@ -2960,15 +3041,33 @@ process_tests() {
                                 # Accumulate for local average and global stats
                                 sum_dur_iter=$((sum_dur_iter + dur))
                                 TOTAL_DNS_DURATION_SUM=$((TOTAL_DNS_DURATION_SUM + dur))
-                                TOTAL_DNS_QUERY_COUNT=$((TOTAL_DNS_QUERY_COUNT + 1))
+                                [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "$final_icon_term"
+                                [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                 
-                                TOTAL_DNS_QUERY_COUNT=$((TOTAL_DNS_QUERY_COUNT + 1))
-                                
-                                if [[ "$VERBOSE" == "true" || -n "${iter_status##*NOERROR*}" ]]; then
-                                    log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
+                                # Record Stats Collection
+                                STATS_REC_TOTAL[$rec]=$((STATS_REC_TOTAL[$rec] + 1))
+                                if [[ "$final_status" == "FAIL" || "$final_status" == "DOWN" ]]; then
+                                     STATS_REC_FAIL[$rec]=$((STATS_REC_FAIL[$rec] + 1))
+                                else
+                                     STATS_REC_OK[$rec]=$((STATS_REC_OK[$rec] + 1))
                                 fi
-
-                                local normalized=$(normalize_dig_output "$output")
+                            fi
+                            # Log Logic Refactored for Levels
+                            # Level 2+: Log everything. Level 1: Log only errors.
+                            if [[ $VERBOSE_LEVEL -ge 2 || -n "${iter_status##*NOERROR*}" ]]; then
+                                 # If Level 3 (Debug), print to console too? User asked for output complete in level 3
+                                 if [[ $VERBOSE_LEVEL -ge 3 ]]; then
+                                      echo -e "\n${GRAY}CMD: ${cmd_arr[*]}${NC}"
+                                      echo -e "${GRAY}${output}${NC}"
+                                 elif [[ $VERBOSE_LEVEL -ge 2 ]]; then
+                                      echo -e "\n${GRAY}CMD: ${cmd_arr[*]}${NC}" 
+                                 fi
+                                 log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
+                            fi
+                        done
+                    done
+                done
+            doneormalized=$(normalize_dig_output "$output")
                                 if [[ $iter -gt 1 ]]; then
                                     if [[ "$normalized" != "$last_normalized" ]]; then is_divergent="true"; else consistent_count=$((consistent_count + 1)); fi
                                 else last_normalized="$normalized"; consistent_count=1; fi
@@ -3245,16 +3344,24 @@ assemble_json() {
       "ttl": $STRICT_TTL_CHECK
     }
   },
-  "summary": {
+  "statistics": {
+    "general": {
+    "domains": $domain_count,
+    "groups": $group_count,
+    "unique_servers": $server_count,
+    "total_queries": $TOTAL_DNS_QUERY_COUNT,
     "total_tests": $TOTAL_TESTS,
+    "success_rate": $p_succ,
+    "latency_avg_ms": "$avg_lat",
     "success": $SUCCESS_TESTS,
     "warnings": $WARNING_TESTS,
     "failures": $FAILED_TESTS,
     "divergences": $DIVERGENT_TESTS,
     "tcp_checks": { "ok": $TCP_SUCCESS, "fail": $TCP_FAIL },
-    "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "fail": $DNSSEC_FAIL },
+    "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "absent": $DNSSEC_ABSENT, "fail": $DNSSEC_FAIL },
     "total_sleep_seconds": $TOTAL_SLEEP_TIME,
     "total_pings_sent": $TOTAL_PING_SENT,
+    "soa_sync": { "ok": $SOA_SYNC_OK, "fail": $SOA_SYNC_FAIL },
     "counters": {
       "noerror": $CNT_NOERROR,
       "nxdomain": $CNT_NXDOMAIN,
@@ -3264,6 +3371,9 @@ assemble_json() {
       "noanswer": $CNT_NOANSWER,
       "network_error": $CNT_NETWORK_ERROR
     }
+    },
+    "per_record_type": { $json_rec_stats },
+    "per_group": { $json_grp_stats }
   },
   "domain_status": [
     $domain_data
@@ -3464,7 +3574,7 @@ main() {
     # Define cleanup trap
     trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_${SESSION_ID}.html" "logs/temp_obj_summary_${SESSION_ID}.html" "logs/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_${SESSION_ID}.html" "logs/temp_group_body_simple_${SESSION_ID}.html" "logs/temp_security_${SESSION_ID}.html" "logs/temp_security_simple_${SESSION_ID}.html" "logs/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "logs/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
 
-    while getopts ":n:g:lhyjstdxrTVZ" opt; do case ${opt} in 
+    while getopts ":n:g:lhyjstdxrTVZvq" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
         l) ENABLE_LOG_TEXT="true" ;; 
@@ -3477,6 +3587,8 @@ main() {
         T) ENABLE_TRACE_CHECK="true" ;;
         V) CHECK_BIND_VERSION="true" ;;
         Z) ENABLE_SOA_SERIAL_CHECK="true" ;;
+        v) VERBOSE_LEVEL=$((VERBOSE_LEVEL + 1)) ;; # Increment verbose
+        q) VERBOSE_LEVEL=0 ;; # Quiet
         h) show_help; exit 0 ;; 
         *) echo "Opção inválida"; exit 1 ;; 
     esac; done
