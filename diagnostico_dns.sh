@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.1
-# "Detailed Reporting Refinements"
+# Versão: 11.1.2
+# "Fix default values"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.1"
+SCRIPT_VERSION="11.1.2"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -197,7 +197,7 @@ print_help_text() {
     echo -e "      Se o servidor responder IPs diferentes nessas N tentativas, ele é marcado como"
     echo -e "      ${PURPLE}DIVERGENTE (~)${NC}. Isso pega balanceamentos Round-Robin mal configurados."
     echo -e ""
-    echo -e "  ${CYAN}SLEEP${NC} (Padrão: 0.05s)"
+    echo -e "  ${CYAN}SLEEP${NC} (Padrão: 0.01s)"
     echo -e "      Pausa entre cada tentativa do loop de consistência. Aumente se o firewall"
     echo -e "      do alvo estiver bloqueando as requisições por rate-limit."
     echo -e ""
@@ -233,7 +233,7 @@ print_help_text() {
     echo -e "  ${CYAN}ENABLE_SOA_SERIAL_CHECK${NC}"
     echo -e "      Verifica se os números de série SOA são idênticos entre todos os servidores do grupo."
     echo -e ""
-    echo -e "  ${CYAN}LATENCY_WARNING_THRESHOLD${NC} (Default: 100ms)"
+    echo -e "  ${CYAN}LATENCY_WARNING_THRESHOLD${NC} (Default: 300ms)"
     echo -e "      Define o limiar para alertas amarelos de lentidão."
     echo -e ""
     echo -e "  ${CYAN}PING_PACKET_LOSS_LIMIT${NC} (Default: 10%)"
