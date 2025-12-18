@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.7
-# "Log & JSON Hygiene"
+# Versão: 11.1.8
+# "Artifact Polish"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.7"
+SCRIPT_VERSION="11.1.8"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -318,7 +318,7 @@ generate_help_html() {
         sed "s/${ESC}\[0;90m/<span style='color:#94a3b8'>/g" | \
         sed "s/${ESC}\[0m/<\/span>/g")
     
-    cat > "logs/temp_help_$$.html" << EOF
+    cat > "logs/temp_help_${SESSION_ID}.html" << EOF
         <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
             <summary style="font-size: 1.1rem; font-weight: 600;">📚 Manual de Referência (Help)</summary>
             <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; overflow-x: auto;">
@@ -1287,7 +1287,7 @@ cat > "$TEMP_STATS" << EOF
                 <span class="card-num">${server_count}</span>
                 <span class="card-label">Servidores</span>
             </div>
-            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('LATÊNCIA MÉDIA', 'Média de tempo de resposta (RTT) de todos os servidores.<br><br><b>Cálculo:</b> Soma de todos os RTTs / Total de respostas.<br>Valores altos podem indicar congestionamento de rede ou servidores distantes.')">
+            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('LATÊNCIA MÉDIA', 'Média de tempo de resposta (RTT) de todos os servidores.<br><br><b>Cálculo:</b> Soma de todos os RTTs / Total de respostas / Total de servidores.<br>Valores altos podem indicar congestionamento de rede ou servidores distantes.')">
                 <span class="card-num">${avg_lat}${avg_lat_suffix}</span>
                 <span class="card-label">Latência Média</span>
             </div>
@@ -2179,7 +2179,7 @@ EOF
     cat "$TEMP_CONFIG" >> "$target_file"
     
     # 8. Help (Reference)
-    cat "logs/temp_help_$$.html" >> "$target_file"
+    cat "logs/temp_help_${SESSION_ID}.html" >> "$target_file"
     
     # 9. Disclaimer
     cat "$TEMP_DISCLAIMER" >> "$target_file"
@@ -2286,8 +2286,9 @@ run_security_diagnostics() {
     echo -e "\n${BLUE}=== INICIANDO SECURITY SCAN (Version/AXFR/Recurse) ===${NC}"
     log_section "SECURITY SCAN"
 
-    # Temp file for rows
-    local TEMP_SEC_ROWS="logs/temp_sec_rows_$$.html"
+    # Temp file for rows (Global var initialized in init_html_parts if needed, but safe to overwrite here)
+    # Using SESSION_ID to ensure cleanup traps works
+    TEMP_SEC_ROWS="logs/temp_sec_rows_${SESSION_ID}.html"
     > "$TEMP_SEC_ROWS"
 
     declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
@@ -2388,7 +2389,7 @@ run_security_diagnostics() {
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
-            if is_network_error "$axfr_out"; then
+            elif is_network_error "$axfr_out"; then
                  axfr_res="TIMEOUT"
                  axfr_class="status-neutral"
                  SEC_AXFR_TIMEOUT+=1
@@ -2822,7 +2823,8 @@ process_tests() {
                              else
                                  # For logging, we still need a unique ID for the TCP check
                                  local clean_srv=${srv//./_}
-                                 local tcp_id="tcp_${clean_srv}_session" # Unique per server for session
+                                 local tcp_id="tcp_${clean_srv}_${clean_tgt}"
+                                 tcp_id=$(echo "$tcp_id" | tr -s '_')
                                  
                                  # check_tcp_dns is a helper function that performs the actual check
                                  # and logs its output to TEMP_DETAILS for later display.
@@ -3214,12 +3216,12 @@ assemble_json() {
     local JSON_FILE="${HTML_FILE%.html}.json"
     
     # Helper to clean trailing comma from file content for valid JSON array
-    # If file is empty, this results in empty string, which is fine for empty array
-    local dns_data=""; [[ -f "$TEMP_JSON_DNS" ]] && dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
-    local domain_data=""; [[ -f "$TEMP_JSON_DOMAINS" ]] && domain_data=$(sed '$ s/,$//' "$TEMP_JSON_DOMAINS")
-    local ping_data=""; [[ -f "$TEMP_JSON_Ping" ]] && ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
-    local sec_data=""; [[ -f "$TEMP_JSON_Sec" ]] && sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
-    local trace_data=""; [[ -f "$TEMP_JSON_Trace" ]] && trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
+    # Check if files are non-empty before sed to avoid errors or malformed output
+    local dns_data=""; [[ -s "$TEMP_JSON_DNS" ]] && dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
+    local domain_data=""; [[ -s "$TEMP_JSON_DOMAINS" ]] && domain_data=$(sed '$ s/,$//' "$TEMP_JSON_DOMAINS")
+    local ping_data=""; [[ -s "$TEMP_JSON_Ping" ]] && ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
+    local sec_data=""; [[ -s "$TEMP_JSON_Sec" ]] && sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
+    local trace_data=""; [[ -s "$TEMP_JSON_Trace" ]] && trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
     
     # Build complete JSON
     cat > "$JSON_FILE" << EOF
