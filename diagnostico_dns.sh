@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.0.0
-# "Executive Summary, Health Maps & Clean Code"
+# Versão: 11.1.0
+# "Unified Detailed Reporting"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.0.0"
+SCRIPT_VERSION="11.1.0"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -113,42 +113,17 @@ init_html_parts() {
     TEMP_MODAL="logs/temp_modal_$$.html"
     TEMP_DISCLAIMER="logs/temp_disclaimer_$$.html"
 
-    # Full Report Temp Files - Conditional Initialization
-    if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
-        TEMP_MATRIX="logs/temp_matrix_$$.html"
-        TEMP_DETAILS="logs/temp_details_$$.html"
-        TEMP_PING="logs/temp_ping_$$.html"
-        TEMP_TRACE="logs/temp_trace_$$.html"
-    else
-        TEMP_MATRIX=""
-        TEMP_DETAILS=""
-        TEMP_PING=""
-        TEMP_TRACE=""
-    fi
+    # Detailed Report Temp Files
+    TEMP_MATRIX="logs/temp_matrix_$$.html"
+    TEMP_DETAILS="logs/temp_details_$$.html"
+    TEMP_PING="logs/temp_ping_$$.html"
+    TEMP_TRACE="logs/temp_trace_$$.html"
+    
+    > "$TEMP_MATRIX"
+    > "$TEMP_DETAILS"
+    > "$TEMP_PING"
+    > "$TEMP_TRACE"
 
-    # Simple Mode Temp Files - Conditional Creation
-    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
-        TEMP_MATRIX_SIMPLE="logs/temp_matrix_simple_$$.html"
-        TEMP_PING_SIMPLE="logs/temp_ping_simple_$$.html"
-        TEMP_TRACE_SIMPLE="logs/temp_trace_simple_$$.html"
-        TEMP_SERVICES_SIMPLE="logs/temp_services_simple_$$.html"
-        TEMP_SECURITY_SIMPLE="logs/temp_security_simple_$$.html"
-        
-        > "$TEMP_MATRIX_SIMPLE"
-        > "$TEMP_PING_SIMPLE"
-        > "$TEMP_TRACE_SIMPLE"
-        > "$TEMP_SERVICES_SIMPLE"
-        > "$TEMP_SECURITY_SIMPLE"
-    else
-        # Define empty vars to avoid unbound variable errors if referenced
-        TEMP_MATRIX_SIMPLE=""
-        TEMP_PING_SIMPLE=""
-        TEMP_TRACE_SIMPLE=""
-        TEMP_SERVICES_SIMPLE=""
-        TEMP_SECURITY_SIMPLE=""
-    fi
-    
-    
     # Security Temp Files
     TEMP_SECURITY="logs/temp_security_$$.html"
     > "$TEMP_SECURITY"
@@ -247,8 +222,8 @@ print_help_text() {
     echo -e "      Tenta extrair a versão do software DNS usando consultas CHAOS TXT."
     echo -e "      (Geralmente bloqueado por segurança em servidores de produção)."
     echo -e ""
-    echo -e "  ${CYAN}ENABLE_FULL_REPORT / ENABLE_SIMPLE_REPORT / ENABLE_JSON_REPORT${NC}
-      Controlam o formato de saída. Padrão: FULL=true.
+    echo -e "  ${CYAN}ENABLE_JSON_REPORT${NC}
+      Controla a geração do JSON. Padrão: false.
       
   ${CYAN}ENABLE_TCP_CHECK / ENABLE_DNSSEC_CHECK${NC}"
     echo -e "      Ativa verificações de conformidade RFC 7766 (TCP) e suporte a DNSSEC."
@@ -514,8 +489,6 @@ interactive_configuration() {
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
         ask_boolean "Verbose Debug?" "VERBOSE"
         ask_boolean "Gerar log texto?" "ENABLE_LOG_TEXT"
-        ask_boolean "Gerar relatório HTML Detalhado?" "ENABLE_FULL_REPORT"
-        ask_boolean "Gerar relatório HTML Simplificado?" "ENABLE_SIMPLE_REPORT"
         ask_boolean "Habilitar Gráficos no HTML?" "ENABLE_CHARTS"
         ask_boolean "Gerar relatório JSON?" "ENABLE_JSON_REPORT"
         
@@ -546,12 +519,6 @@ interactive_configuration() {
         ask_boolean "Habilitar Cores no Terminal?" "COLOR_OUTPUT"
         
         echo -e "\n${GREEN}Configurações atualizadas!${NC}"
-        
-        # Fallback Logic (Prevent user from disabling everything without realizing)
-        if [[ "$ENABLE_FULL_REPORT" == "false" && "$ENABLE_SIMPLE_REPORT" == "false" && "$ENABLE_JSON_REPORT" == "false" ]]; then
-             echo -e "\n${YELLOW}⚠️  Aviso: Nenhum relatório foi selecionado. Reativando Relatório Completo por padrão.${NC}"
-             ENABLE_FULL_REPORT="true"
-        fi
 
         # --- SAVE CONFIGURATION ---
         echo -e "\n${BLUE}--- PERSISTÊNCIA ---${NC}"
@@ -603,8 +570,6 @@ save_config_to_file() {
     update_conf_key "ENABLE_LOG_TEXT" "$ENABLE_LOG_TEXT"
     
     # Report Flags
-    update_conf_key "ENABLE_FULL_REPORT" "$ENABLE_FULL_REPORT"
-    update_conf_key "ENABLE_SIMPLE_REPORT" "$ENABLE_SIMPLE_REPORT"
     update_conf_key "ENABLE_CHARTS" "$ENABLE_CHARTS"
     update_conf_key "ENABLE_JSON_REPORT" "$ENABLE_JSON_REPORT"
     
@@ -3542,13 +3507,7 @@ print_final_terminal_summary() {
 }
 
 resolve_configuration() {
-    # 1. Resolve Strict Report Logic
-    if [[ "$ENABLE_FULL_REPORT" == "false" && "$ENABLE_SIMPLE_REPORT" == "false" && "$ENABLE_JSON_REPORT" == "false" ]]; then
-        [[ "$INTERACTIVE_MODE" == "false" && "$VERBOSE" == "true" ]] && echo "Info: Nenhum formato selecionado. Gerando HTML Detalhado (Padrão)."
-        ENABLE_FULL_REPORT="true"
-    fi
-
-    # 2. Validation
+    # 1. Validation
     [[ ! "$TIMEOUT" =~ ^[0-9]+$ ]] && TIMEOUT=4
     [[ ! "$CONSISTENCY_CHECKS" =~ ^[0-9]+$ ]] && CONSISTENCY_CHECKS=3
 }
@@ -3564,14 +3523,7 @@ main() {
         g) FILE_GROUPS=$OPTARG ;; 
         l) ENABLE_LOG_TEXT="true" ;; 
         y) INTERACTIVE_MODE="false" ;; 
-        s) 
-            ENABLE_SIMPLE_REPORT="true" 
-            ENABLE_FULL_REPORT="false"
-            ;; 
-        j) 
-            ENABLE_JSON_REPORT="true" 
-            ENABLE_FULL_REPORT="false"
-            ;;
+        j) ENABLE_JSON_REPORT="true" ;;
         t) ENABLE_TCP_CHECK="true" ;;
         d) ENABLE_DNSSEC_CHECK="true" ;;
         x) ENABLE_AXFR_CHECK="true" ;;
@@ -3607,13 +3559,8 @@ main() {
     if [[ -z "$TOTAL_SLEEP_TIME" ]]; then TOTAL_SLEEP_TIME=0; fi
     TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {printf \"%.2f\", $TOTAL_SLEEP_TIME}")
 
-    if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
-        assemble_html "full"
-    fi
-    
-    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
-        assemble_html "simple"
-    fi
+    # Always generate standard HTML report
+    assemble_html
     
     if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
         assemble_json
@@ -3622,8 +3569,7 @@ main() {
     [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
     print_final_terminal_summary
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
-    [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo "Relatório Completo: $HTML_FILE"
-    [[ "$ENABLE_SIMPLE_REPORT" == "true" ]] && echo "Relatório Simplificado: ${HTML_FILE%.html}_simple.html"
+    echo "Relatório: $HTML_FILE"
 }
 
 main "$@"

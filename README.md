@@ -70,7 +70,6 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-g <arquivo>`: Caminho do CSV de grupos DNS (Default: dns_groups.csv)
   * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
   * `-y`: Modo Silencioso (Não interativo / Aceita defaults do .conf)
-  * `-s`: Modo Simplificado (Gera HTML sem logs técnicos para redução de tamanho)
   * `-j`: Gera saída em JSON estruturado (.json) para integrações.
   * `-t`: Habilita testes de conectividade TCP (Sobrescreve conf)
   * `-d`: Habilita validação DNSSEC (Sobrescreve conf)
@@ -128,8 +127,6 @@ AD_INTERNO;Active Directory Corp;mixed;1;192.168.10.5,192.168.10.6
  ENABLE_TRACE_CHECK="true"    # Executa traceroute (pode ser lento)
  
  # Relatórios
- ENABLE_FULL_REPORT="true"    # Gera relatório HTML Detalhado (Padrão: true)
- ENABLE_SIMPLE_REPORT="false" # Gera relatório HTML Simplificado (Padrão: false)
  ENABLE_JSON_REPORT="false"   # Gera relatório JSON (Padrão: false)
  
  # Comportamento
