@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.2
-# "Fix default values"
+# Versão: 11.1.3
+# "Fix latency and dns duration thresholds"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.2"
+SCRIPT_VERSION="11.1.3"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -76,9 +76,9 @@ declare -i SOA_SYNC_OK=0
 declare -i TOTAL_PING_SENT=0
 TOTAL_SLEEP_TIME=0
 # Latency Tracking
-TOTAL_LATENCY_SUM="0"
+TOTAL_LATENCY_SUM=0
 declare -i TOTAL_LATENCY_COUNT=0
-TOTAL_DNS_DURATION_SUM="0"
+TOTAL_DNS_DURATION_SUM=0
 declare -i TOTAL_DNS_QUERY_COUNT=0
 
 # Granular Status Counters
