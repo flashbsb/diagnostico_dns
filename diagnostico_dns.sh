@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.2.4
-# "Final Output Polish"
+# Versão: 11.2.6
+# "JSON Fix & Polish"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.2.4"
+SCRIPT_VERSION="11.2.6"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -1534,7 +1534,7 @@ EOF
                         <tbody>
 EOF
     
-    if [[ -f "logs/temp_svc_table_${SESSION_ID}.html" ]]; then
+    if [[ -s "logs/temp_svc_table_${SESSION_ID}.html" ]]; then
         cat "logs/temp_svc_table_${SESSION_ID}.html" >> "logs/temp_obj_summary_${SESSION_ID}.html"
     else
         echo "<tr><td colspan='4' style='text-align:center; color:#888;'>Nenhum dado de serviço coletado.</td></tr>" >> "logs/temp_obj_summary_${SESSION_ID}.html"
@@ -2144,6 +2144,7 @@ EOF
     
     generate_executive_summary
     generate_health_map
+    generate_group_stats_html 
     generate_group_stats_html 
     generate_object_summary
     generate_timing_html
@@ -3006,6 +3007,8 @@ process_tests() {
                         fi
                         
                         if [[ "$ENABLE_TCP_CHECK" == "true" || "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                             # DEBUG: Verify we are writing
+                             # echo "DEBUG: Writing stats for $target ($srv)"
                              echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_${SESSION_ID}.html"
                         fi
                     done
@@ -3359,7 +3362,7 @@ process_tests() {
 assemble_json() {
     [[ "$ENABLE_JSON_REPORT" != "true" ]] && return
     
-    local JSON_FILE="${HTML_FILE%.html}.json"
+    JSON_FILE="${HTML_FILE%.html}.json"
     
     # Helper to clean trailing comma from file content for valid JSON array
     # Check if files are non-empty before sed to avoid errors or malformed output
