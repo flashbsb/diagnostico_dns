@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.2.3
-# "Log Consistency"
+# Versão: 11.2.4
+# "Final Output Polish"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.2.3"
+SCRIPT_VERSION="11.2.4"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -3674,7 +3674,10 @@ main() {
     [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
     print_final_terminal_summary
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
-    echo "Relatório: $HTML_FILE"
+    echo "Relatório HTML: $HTML_FILE"
+    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo "Relatório JSON: $JSON_FILE"
+    [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Log Texto     : $LOG_FILE_TEXT"
+    [[ "$ENABLE_JSON_LOG" == "true" ]] && echo "Log JSON      : $LOG_FILE_JSON"
 }
 
 main "$@"
