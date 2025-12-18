@@ -14,6 +14,7 @@ Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar tecnicam
 * **Security & Risk Scan:** Verifica vulnerabilidades comuns como **Transferência de Zona (AXFR)** permitida, **Recursão Aberta**, **Sincronismo SOA** (Serial) e vazamento de versão do BIND.
 * **Health Map:** Tabela de calor que identifica rapidamente grupos ou servidores com problemas de performance ou falhas.
 * **Testes de Serviço (Features):** Valida se o servidor suporta **TCP** (RFC 7766) e se responde com validação **DNSSEC** (RRSIG/AD), com contadores de sucesso/falha no terminal e HTML.
+* **Modern Standards:** Verifica suporte a **EDNS0** (RFC 6891), **DNS Cookies** (RFC 7873), **QNAME Minimization**, **TLS** (Porta 853), **DoT** (DNS over TLS) e **DoH** (DNS over HTTPS).
 * **Validação de Conectividade:** Testa a porta 53 (TCP/UDP) antes de tentar o DNS. Se a porta estiver fechada, ele nem perde tempo tentando resolver (Smart Error Logging).
 * **Latência (ICMP):** Roda testes de ping contra os servidores DNS para saber se o problema é resolução ou se o link caiu mesmo.
 * **Modo Interativo:** Pergunta se você quer mudar os timeouts, número de tentativas de consistência e critérios rigorosos (Strict IP/TTL/Order).
@@ -83,6 +84,7 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-T`: Habilita traceroute (Rota)
   * `-V`: Habilita verificação de versão BIND
   * `-Z`: Habilita verificação de sincronismo SOA
+  * `-M`: Habilita todos os testes Modernos (EDNS, Cookie, TLS, DoT, DoH).
   * `-h`: Exibe este menu de ajuda
 
 ## 🕵️‍♂️ Critérios de Divergência (Strict Mode)

@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.2.7
-# "Ajuste diretório de logs"
+# Versão: 11.3.0
+# "Adição de testes DNS Modernos (DoT, DoH, DNSSEC Chain, etc)"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.2.7"
+SCRIPT_VERSION="11.3.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -71,7 +71,23 @@ declare -i SEC_VER_TIMEOUT=0
 declare -i SEC_AXFR_TIMEOUT=0
 declare -i SEC_REC_TIMEOUT=0
 declare -i SOA_SYNC_FAIL=0
+declare -i SOA_SYNC_FAIL=0
 declare -i SOA_SYNC_OK=0
+
+# Modern Features Counters
+declare -i EDNS_SUCCESS=0
+declare -i EDNS_FAIL=0
+declare -i COOKIE_SUCCESS=0
+declare -i COOKIE_FAIL=0
+declare -i QNAME_SUCCESS=0
+declare -i QNAME_FAIL=0
+declare -i QNAME_SKIP=0
+declare -i TLS_SUCCESS=0
+declare -i TLS_FAIL=0
+declare -i DOT_SUCCESS=0
+declare -i DOT_FAIL=0
+declare -i DOH_SUCCESS=0
+declare -i DOH_FAIL=0
 declare -i TOTAL_PING_SENT=0
 TOTAL_SLEEP_TIME=0
 # Latency Tracking
@@ -115,6 +131,14 @@ LOG_FILE_JSON="$SCRIPT_DIR/logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.js
 # Default Configuration
 VERBOSE_LEVEL=1  # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
 ENABLE_JSON_LOG="false"
+
+# Extra Features Defaults
+ENABLE_EDNS_CHECK="true"
+ENABLE_COOKIE_CHECK="true"
+ENABLE_QNAME_CHECK="true"
+ENABLE_TLS_CHECK="true"
+ENABLE_DOT_CHECK="true"
+ENABLE_DOH_CHECK="true"
 
 init_html_parts() {
     # Generate unique session ID for temp files (PID + Random + Timestamp)
@@ -201,6 +225,7 @@ print_help_text() {
     echo -e "  ${GREEN}-T${NC}            Habilita traceroute (Rota)."
     echo -e "  ${GREEN}-V${NC}            Habilita verificação de versão BIND (Chaos)."
     echo -e "  ${GREEN}-Z${NC}            Habilita verificação de sincronismo SOA."
+    echo -e "  ${GREEN}-M${NC}            Habilita todos os testes Modernos (EDNS, Cookie, TLS, DoT, DoH)."
     echo -e "  ${GREEN}-h${NC}            Exibe este manual detalhado."
     echo -e ""
     echo -e "${PURPLE}DICIONÁRIO DE VARIÁVEIS (Configuração Fina):${NC}"
@@ -249,8 +274,15 @@ print_help_text() {
     echo -e "  ${CYAN}ENABLE_AXFR_CHECK / ENABLE_RECURSION_CHECK${NC}"
     echo -e "      Testes de segurança para permissividade de transferência de zona e recursão."
     echo -e "      "
-    echo -e "  ${CYAN}ENABLE_SOA_SERIAL_CHECK${NC}"
-    echo -e "      Verifica se os números de série SOA são idênticos entre todos os servidores do grupo."
+    echo -e "  ${CYAN}ENABLE_SOA_SERIAL_CHECK${NC}
+      Verifica se os números de série SOA são idênticos entre todos os servidores do grupo.
+
+  ${CYAN}ENABLE_EDNS_CHECK / ENABLE_COOKIE_CHECK${NC}
+      Verificam suporte a EDNS0 (RFC 6891) e DNS Cookies (RFC 7873).
+
+  ${CYAN}ENABLE_TLS_CHECK / ENABLE_DOT_CHECK / ENABLE_DOH_CHECK${NC}
+      Verificam suporte a transporte criptografado (TLS/853 e HTTPS/443).
+"
     echo -e ""
     echo -e "  ${CYAN}LATENCY_WARNING_THRESHOLD${NC} (Default: 300ms)"
     echo -e "      Define o limiar para alertas amarelos de lentidão."
@@ -367,6 +399,14 @@ print_execution_summary() {
     echo -e "  🛡️ Recurse Check : ${CYAN}${ENABLE_RECURSION_CHECK}${NC}"
     echo -e "  🛡️ SOA Sync Check: ${CYAN}${ENABLE_SOA_SERIAL_CHECK}${NC}"
     echo -e "  🛡️ Active Groups : ${CYAN}${ONLY_TEST_ACTIVE_GROUPS}${NC}"
+    echo ""
+    echo -e "${PURPLE}[MODERN & SECURITY]${NC}"
+    echo -e "  🛡️ EDNS0 Check   : ${CYAN}${ENABLE_EDNS_CHECK}${NC}"
+    echo -e "  🍪 Cookie Check  : ${CYAN}${ENABLE_COOKIE_CHECK}${NC}"
+    echo -e "  📉 QNAME Min     : ${CYAN}${ENABLE_QNAME_CHECK}${NC}"
+    echo -e "  🔐 TLS Connect   : ${CYAN}${ENABLE_TLS_CHECK}${NC}"
+    echo -e "  🔒 DoT (Tls)     : ${CYAN}${ENABLE_DOT_CHECK}${NC}"
+    echo -e "  🌐 DoH (Https)   : ${CYAN}${ENABLE_DOH_CHECK}${NC}"
     echo ""
     echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
     echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
@@ -569,6 +609,14 @@ interactive_configuration() {
         ask_boolean "Verificar Zone Transfer (AXFR)?" "ENABLE_AXFR_CHECK"
         ask_boolean "Verificar Recursão Aberta?" "ENABLE_RECURSION_CHECK"
         ask_boolean "Verificar Sincronismo SOA?" "ENABLE_SOA_SERIAL_CHECK"
+
+        echo -e "\n${BLUE}--- MODERN STANDARDS ---${NC}"
+        ask_boolean "Verificar EDNS0?" "ENABLE_EDNS_CHECK"
+        ask_boolean "Verificar DNS Cookies?" "ENABLE_COOKIE_CHECK"
+        ask_boolean "Verificar QNAME Minimization?" "ENABLE_QNAME_CHECK"
+        ask_boolean "Verificar TLS Connection?" "ENABLE_TLS_CHECK"
+        ask_boolean "Verificar DoT (DNS over TLS)?" "ENABLE_DOT_CHECK"
+        ask_boolean "Verificar DoH (DNS over HTTPS)?" "ENABLE_DOH_CHECK"
         
         echo -e "\n${BLUE}--- OPÇÕES AVANÇADAS (DIG) ---${NC}"
         ask_variable "Dig Options (Padrão/Iterativo)" "DEFAULT_DIG_OPTIONS"
@@ -650,6 +698,14 @@ save_config_to_file() {
     update_conf_key "ENABLE_AXFR_CHECK" "$ENABLE_AXFR_CHECK"
     update_conf_key "ENABLE_RECURSION_CHECK" "$ENABLE_RECURSION_CHECK"
     update_conf_key "ENABLE_SOA_SERIAL_CHECK" "$ENABLE_SOA_SERIAL_CHECK"
+    
+    # Modern
+    update_conf_key "ENABLE_EDNS_CHECK" "$ENABLE_EDNS_CHECK"
+    update_conf_key "ENABLE_COOKIE_CHECK" "$ENABLE_COOKIE_CHECK"
+    update_conf_key "ENABLE_QNAME_CHECK" "$ENABLE_QNAME_CHECK"
+    update_conf_key "ENABLE_TLS_CHECK" "$ENABLE_TLS_CHECK"
+    update_conf_key "ENABLE_DOT_CHECK" "$ENABLE_DOT_CHECK"
+    update_conf_key "ENABLE_DOH_CHECK" "$ENABLE_DOH_CHECK"
     
     # Dig
     update_conf_key "DEFAULT_DIG_OPTIONS" "$DEFAULT_DIG_OPTIONS"
@@ -1498,6 +1554,16 @@ generate_security_cards() {
                  <span style="color:var(--accent-danger);">Fail:</span> <strong>${DNSSEC_FAIL}</strong>
             </div>
         </div>
+        <div class="card" style="--card-accent: var(--accent-primary); cursor:pointer;" onclick="showInfoModal('MODERN STANDARDS', 'Suporte a EDNS0, Cookies, QNAME Minimization e Criptografia.')">
+            <div style="font-size:1.5rem; margin-bottom:5px;">🛡️</div>
+            <span class="card-label">Modern Features</span>
+            <div style="margin-top:10px; font-size:0.85rem; display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+                 <div>EDNS: <strong style="color:var(--accent-success)">${EDNS_SUCCESS}</strong></div>
+                 <div>DoT: <strong style="color:var(--accent-success)">${DOT_SUCCESS}</strong></div>
+                 <div>QNAME: <strong style="color:var(--accent-success)">${QNAME_SUCCESS}</strong></div>
+                 <div>DoH: <strong style="color:var(--accent-success)">${DOH_SUCCESS}</strong></div>
+            </div>
+        </div>
     </div>
 EOF
 }
@@ -1524,10 +1590,10 @@ generate_object_summary() {
                     <table>
                         <thead>
                             <tr>
-                                <th>Serviço (Record Type)</th>
-                                <th>Check Type</th>
-                                <th>OK</th>
-                                <th>Falhas</th>
+                                <th>Grupo</th>
+                                <th>Alvo</th>
+                                <th>Servidor</th>
+                                <th>Funcionalidades (Badges)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1638,7 +1704,10 @@ cat > "$TEMP_CONFIG" << EOF
                         <tr><td>Timeout Global</td><td>${TIMEOUT}s</td><td>Tempo máximo de espera por resposta do DNS.</td></tr>
                         <tr><td>Sleep (Intervalo)</td><td>${SLEEP}s</td><td>Pausa entre tentativas consecutivas (consistency check).</td></tr>
                         <tr><td>Valida Conectividade</td><td>${VALIDATE_CONNECTIVITY}</td><td>Testa porta 53 antes do envio da query.</td></tr>
+                        <tr><td>Valida Conectividade</td><td>${VALIDATE_CONNECTIVITY}</td><td>Testa porta 53 antes do envio da query.</td></tr>
                         <tr><td>Check BIND Version</td><td>${CHECK_BIND_VERSION}</td><td>Consulta caos class para versão do BIND.</td></tr>
+                        <tr><td>Modern Features</td><td>E=${ENABLE_EDNS_CHECK} C=${ENABLE_COOKIE_CHECK} Q=${ENABLE_QNAME_CHECK}</td><td>EDNS0, Cookie e QNAME Minimization.</td></tr>
+                        <tr><td>Encrypted DNS</td><td>TLS=${ENABLE_TLS_CHECK} DoT=${ENABLE_DOT_CHECK} DoH=${ENABLE_DOH_CHECK}</td><td>Suporte a transporte criptografado.</td></tr>
                         <tr><td>Ping Enabled</td><td>${ENABLE_PING}</td><td>Verificação de latência ICMP (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s).</td></tr>
                         <tr><td>TCP Check (+tcp)</td><td>${ENABLE_TCP_CHECK}</td><td>Obrigatoriedade de suporte a DNS via TCP.</td></tr>
                         <tr><td>DNSSEC Check (+dnssec)</td><td>${ENABLE_DNSSEC_CHECK}</td><td>Validação da cadeia de confiança DNSSEC.</td></tr>
@@ -2930,41 +2999,38 @@ process_tests() {
             for mode in "${calc_modes[@]}"; do
                 for target in "${targets[@]}"; do
                     
-                    # --- PRE-CHECK SERVICE CAPABILITIES FOR THIS TARGET (TCP/DNSSEC) ---
-                    # Cache para badges TCP/DNSSEC (Uma vez por servidor/target)
+                    # --- PRE-CHECK SERVICE CAPABILITIES FOR THIS TARGET (TCP/DNSSEC + MODERN) ---
+                    # Cache para badges (Uma vez por servidor)
                     declare -A CACHE_TCP_BADGE
                     declare -A CACHE_SEC_BADGE
-                    
-                    for srv in "${srv_list[@]}"; do
-                        local tcp_res="-"
-                        local sec_res="-"
+                    declare -A CACHE_EDNS_BADGE
+                    declare -A CACHE_COOKIE_BADGE
+                    declare -A CACHE_QNAME_BADGE
+                    declare -A CACHE_TLS_BADGE
+                    declare -A CACHE_DOT_BADGE
+                    declare -A CACHE_DOH_BADGE
 
-                        # TCP Check (Once per server per session)
+                    for srv in "${srv_list[@]}"; do
+                        local tcp_res="-"; local sec_res="-"; local edns_res="-"; local cookie_res="-"
+                        local qname_res="-"; local tls_res="-"; local dot_res="-"; local doh_res="-"
+
+                        # 1. TCP Check (Once per server per session)
                         if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
                              if [[ "${GLOBAL_TCP_CHECKED[$srv]}" == "true" ]]; then
-                                 # Use cached status (assuming it didn't change in milliseconds)
-                                 # We don't increment counters again to avoid inflation
                                  tcp_res="<span class='badge-mini neutral' title='Cached'>T</span>"
                              else
-                                 # For logging, we still need a unique ID for the TCP check
                                  local clean_srv=${srv//./_}
                                  local tcp_id="tcp_${clean_srv}_${clean_tgt}"
                                  tcp_id=$(echo "$tcp_id" | tr -s '_')
-                                 
-                                 # check_tcp_dns is a helper function that performs the actual check
-                                 # and logs its output to TEMP_DETAILS for later display.
-                                 # It returns 0 for success, non-zero for failure.
                                  if check_tcp_dns "$srv" 53 "$tcp_id"; then
                                      CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP Connection OK'>T</span></a>"
                                      tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
-                                     TCP_SUCCESS+=1
                                      TCP_SUCCESS+=1
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}T${NC}"
                                      [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                  else
                                      CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Connection Failed'>T</span></a>"
                                      tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
-                                     TCP_FAIL+=1
                                      TCP_FAIL+=1
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}T${NC}"
                                      [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
@@ -2973,7 +3039,49 @@ process_tests() {
                              fi
                         fi
 
-                        # DNSSEC Check
+                        # 2. EDNS0 Check
+                        if [[ "$ENABLE_EDNS_CHECK" == "true" ]]; then
+                             local clean_srv=${srv//./_}; local edns_id="edns_${clean_srv}"
+                             local edns_cmd="dig +edns=0 +noall +opts @$srv $target"
+                             local out_edns=$(dig +edns=0 +noall +opts +time=$TIMEOUT @$srv $target 2>&1)
+                             log_cmd_result "EDNS CHECK $srv" "$edns_cmd" "$out_edns" "0"
+                             local safe_edns=$(echo "$out_edns" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                             echo "<div id=\"${edns_id}_content\" style=\"display:none\"><pre>$safe_edns</pre></div>" >> "$TEMP_DETAILS"
+                             echo "<div id=\"${edns_id}_title\" style=\"display:none\">EDNS0 Check | $srv</div>" >> "$TEMP_DETAILS"
+
+                             if echo "$out_edns" | grep -q "; EDNS: version: 0"; then
+                                 CACHE_EDNS_BADGE[$srv]="<a href='#' onclick=\"showLog('${edns_id}'); return false;\"><span class='badge-mini success' title='EDNS0 Supported'>E</span></a>"
+                                 EDNS_SUCCESS+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}E${NC}"
+                             else
+                                 CACHE_EDNS_BADGE[$srv]="<a href='#' onclick=\"showLog('${edns_id}'); return false;\"><span class='badge-mini fail' title='EDNS0 Fail/Absent'>E</span></a>"
+                                 EDNS_FAIL+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}E${NC}"
+                             fi
+                        fi
+
+                        # 3. Cookie Check
+                        if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
+                             local clean_srv=${srv//./_}; local cook_id="cook_${clean_srv}"
+                             local cook_cmd="dig +cookie +noall +opts @$srv $target"
+                             local out_cook=$(dig +cookie +noall +opts +time=$TIMEOUT @$srv $target 2>&1)
+                             log_cmd_result "COOKIE CHECK $srv" "$cook_cmd" "$out_cook" "0"
+                             local safe_cook=$(echo "$out_cook" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                             echo "<div id=\"${cook_id}_content\" style=\"display:none\"><pre>$safe_cook</pre></div>" >> "$TEMP_DETAILS"
+                             echo "<div id=\"${cook_id}_title\" style=\"display:none\">DNS Cookie Check | $srv</div>" >> "$TEMP_DETAILS"
+
+                             if echo "$out_cook" | grep -q "COOKIE:" || echo "$out_cook" | grep -q "BADCOOKIE"; then
+                                 CACHE_COOKIE_BADGE[$srv]="<a href='#' onclick=\"showLog('${cook_id}'); return false;\"><span class='badge-mini success' title='Cookie Supported'>C</span></a>"
+                                 COOKIE_SUCCESS+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}C${NC}"
+                             else
+                                 CACHE_COOKIE_BADGE[$srv]="<a href='#' onclick=\"showLog('${cook_id}'); return false;\"><span class='badge-mini neutral' title='Cookie Alert/Absent'>C</span></a>"
+                                 COOKIE_FAIL+=1 
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}C${NC}"
+                             fi
+                        fi
+
+                        # 4. DNSSEC Check (Enhanced)
                         if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
                              local clean_srv=${srv//./_}
                              local clean_tgt=${target//./_}
@@ -2984,48 +3092,135 @@ process_tests() {
                              local out_sec=$(dig $opts_sec @$srv $target A 2>&1)
                              log_cmd_result "DNSSEC CHECK $srv -> $target" "dig $opts_sec @$srv $target A" "$out_sec" "0"
                              
-                                 local safe_sec=$(echo "$out_sec" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                                 echo "<div id=\"${sec_id}_content\" style=\"display:none\"><pre>$safe_sec</pre></div>" >> "$TEMP_DETAILS"
-                                 echo "<div id=\"${sec_id}_title\" style=\"display:none\">DNSSEC Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
+                             local safe_sec=$(echo "$out_sec" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                             echo "<div id=\"${sec_id}_content\" style=\"display:none\"><pre>$safe_sec</pre></div>" >> "$TEMP_DETAILS"
+                             echo "<div id=\"${sec_id}_title\" style=\"display:none\">DNSSEC Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
 
                              if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                  CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail' title='DNSSEC Error'>D</span></a>"
-                                 sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
-                                 DNSSEC_FAIL+=1
                                  DNSSEC_FAIL+=1
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}D${NC}"
-                                 [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
                              else
+                                 # Enhanced check: RRSIG (Auth) or AD flag (Rec)
                                  if echo "$out_sec" | grep -q ";; flags:.* ad" || echo "$out_sec" | grep -q "RRSIG"; then
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a>"
-                                     sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
-                                     DNSSEC_SUCCESS+=1
                                      DNSSEC_SUCCESS+=1
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}D${NC}"
-                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                  else
-                                     # Unsigned zone is Neutral
+                                     # Check for chain errors?
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a>"
-                                     sec_res="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral'>ABS</span></a>"
-                                     DNSSEC_ABSENT+=1
                                      DNSSEC_ABSENT+=1
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}D${NC}"
-                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
                                  fi
                              fi
                         fi
                         
-                        if [[ "$ENABLE_TCP_CHECK" == "true" || "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                             # DEBUG: Verify we are writing
-                             # echo "DEBUG: Writing stats for $target ($srv)"
-                                 local svc_row="<tr><td>$groups_str</td><td><strong>$srv</strong></td><td class='$cls'>$txt</td><td>$dnssec_status</td></tr>"
-                                 echo "$svc_row" >> "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html"
-                                 
-                                 # Clean up temp file
-                                 rm -f "$temp_details_file"
+                        # 5. TLS Connect (Basic DoT Port Check)
+                        if [[ "$ENABLE_TLS_CHECK" == "true" ]]; then
+                             if check_tcp_dns "$srv" 853 "tls_${clean_srv}"; then
+                                 CACHE_TLS_BADGE[$srv]="<span class='badge-mini success' title='TLS/853 Port Open'>T853</span>"
+                                 TLS_SUCCESS+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}L${NC}"
+                             else
+                                 CACHE_TLS_BADGE[$srv]="<span class='badge-mini neutral' title='TLS/853 Port Closed'>T853</span>"
+                                 TLS_FAIL+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}L${NC}"
+                             fi
                         fi
-                    done
+                        
+                        # 6. DoT (Full Handshake)
+                        if [[ "$ENABLE_DOT_CHECK" == "true" ]]; then
+                             local dot_id="dot_${clean_srv}"
+                             local dot_cmd="dig +tls +time=$TIMEOUT @$srv $target"
+                             # Requires kdigit or updated dig? Standard dig supports +tls
+                             local out_dot=$(dig +tls +time=$TIMEOUT +tries=1 @$srv $target 2>&1)
+                             log_cmd_result "DOT CHECK $srv" "$dot_cmd" "$out_dot" "0"
+                             local safe_dot=$(echo "$out_dot" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                             echo "<div id=\"${dot_id}_content\" style=\"display:none\"><pre>$safe_dot</pre></div>" >> "$TEMP_DETAILS"
+                             echo "<div id=\"${dot_id}_title\" style=\"display:none\">DoT Check | $srv</div>" >> "$TEMP_DETAILS"
+                             
+                             if echo "$out_dot" | grep -q "status: NOERROR" || echo "$out_dot" | grep -q "status: NXDOMAIN"; then
+                                 CACHE_DOT_BADGE[$srv]="<a href='#' onclick=\"showLog('${dot_id}'); return false;\"><span class='badge-mini success' title='DoT Active'>DoT</span></a>"
+                                 DOT_SUCCESS+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}S${NC}"
+                             else
+                                 CACHE_DOT_BADGE[$srv]="<a href='#' onclick=\"showLog('${dot_id}'); return false;\"><span class='badge-mini neutral' title='DoT Failed'>DoT</span></a>"
+                                 DOT_FAIL+=1
+                                 [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}S${NC}"
+                             fi
+                        fi
+                        
+                        # 7. DoH
+                        # Note: Dig support for DoH is recent. If not available, shows warning.
+                        if [[ "$ENABLE_DOH_CHECK" == "true" ]]; then
+                             local doh_id="doh_${clean_srv}"
+                             # Try HTTPS GET standard path /dns-query
+                             local doh_cmd="dig +https +time=$TIMEOUT @$srv $target"
+                             local out_doh=$(dig +https +time=$TIMEOUT +tries=1 @$srv $target 2>&1)
+                             
+                             # If dig complains about option not found, fallback or skip
+                             if echo "$out_doh" | grep -q "unknown option"; then
+                                  # Try using curl as fallback? No, simpler to mark as Unavailable tool
+                                  CACHE_DOH_BADGE[$srv]="<span class='badge-mini neutral' title='DoH: Tool mismatch'>DoH?</span>"
+                                  # Dont increment counters if tool missing?
+                             else
+                                  log_cmd_result "DOH CHECK $srv" "$doh_cmd" "$out_doh" "0"
+                                  local safe_doh=$(echo "$out_doh" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                                  echo "<div id=\"${doh_id}_content\" style=\"display:none\"><pre>$safe_doh</pre></div>" >> "$TEMP_DETAILS"
+                                  echo "<div id=\"${doh_id}_title\" style=\"display:none\">DoH Check | $srv</div>" >> "$TEMP_DETAILS"
+                                  
+                                  if echo "$out_doh" | grep -q "status: NOERROR" || echo "$out_doh" | grep -q "status: NXDOMAIN"; then
+                                     CACHE_DOH_BADGE[$srv]="<a href='#' onclick=\"showLog('${doh_id}'); return false;\"><span class='badge-mini success' title='DoH Active'>DoH</span></a>"
+                                     DOH_SUCCESS+=1
+                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}H${NC}"
+                                  else
+                                     CACHE_DOH_BADGE[$srv]="<a href='#' onclick=\"showLog('${doh_id}'); return false;\"><span class='badge-mini neutral' title='DoH Failed'>DoH</span></a>"
+                                     DOH_FAIL+=1
+                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}H${NC}"
+                                  fi
+                             fi
+                        fi
+                        
+                        # 8. QNAME Minimization (Recursive only)
+                        if [[ "$ENABLE_QNAME_CHECK" == "true" ]]; then
+                             if [[ "$DNS_GROUP_TYPE[$grp]" == "recursive" || "$test_types" == *"recursive"* ]]; then
+                                  local qname_id="qname_${clean_srv}"
+                                  # Use internet.nl test domain
+                                  local q_target="txt qnamemintest.internet.nl"
+                                  local out_q=$(dig +short +time=$TIMEOUT @$srv $q_target 2>&1)
+                                  log_cmd_result "QNAME MIN $srv" "dig @$srv $q_target" "$out_q" "0"
+                                  
+                                  # Expected answer "HOORAY - QNAME minimization is enabled on your resolver!"
+                                  if echo "$out_q" | grep -q "HOORAY"; then
+                                       CACHE_QNAME_BADGE[$srv]="<span class='badge-mini success' title='QNAME Min Enabled'>Q</span>"
+                                       QNAME_SUCCESS+=1
+                                       [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}Q${NC}"
+                                  else
+                                       CACHE_QNAME_BADGE[$srv]="<span class='badge-mini fail' title='QNAME Min Disabled'>Q</span>"
+                                       QNAME_FAIL+=1
+                                       [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}Q${NC}"
+                                  fi
+                             else
+                                  # N/A for Authoritative
+                                  QNAME_SKIP+=1
+                             fi
+                        fi
 
+                        # --- WRITE TO SERVICE TABLE ---
+                        local combined_badges=""
+                        [[ -n "${CACHE_TCP_BADGE[$srv]}" ]] && combined_badges+="${CACHE_TCP_BADGE[$srv]} "
+                        [[ -n "${CACHE_SEC_BADGE[$srv]}" ]] && combined_badges+="${CACHE_SEC_BADGE[$srv]} "
+                        [[ -n "${CACHE_EDNS_BADGE[$srv]}" ]] && combined_badges+="${CACHE_EDNS_BADGE[$srv]} "
+                        [[ -n "${CACHE_COOKIE_BADGE[$srv]}" ]] && combined_badges+="${CACHE_COOKIE_BADGE[$srv]} "
+                        [[ -n "${CACHE_QNAME_BADGE[$srv]}" ]] && combined_badges+="${CACHE_QNAME_BADGE[$srv]} "
+                        [[ -n "${CACHE_TLS_BADGE[$srv]}" ]] && combined_badges+="${CACHE_TLS_BADGE[$srv]} "
+                        [[ -n "${CACHE_DOT_BADGE[$srv]}" ]] && combined_badges+="${CACHE_DOT_BADGE[$srv]} "
+                        [[ -n "${CACHE_DOH_BADGE[$srv]}" ]] && combined_badges+="${CACHE_DOH_BADGE[$srv]} "
+                        
+                        # Format: Group | Target | Server | Badges
+                        local svc_row="<tr><td><span class='badge-group'>$grp</span></td><td>$target</td><td><strong>$srv</strong></td><td>$combined_badges</td></tr>"
+                        echo "$svc_row" >> "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html"
+                    done
                     local rec_idx=0
                     local rec_count=${#rec_list[@]}
                     
@@ -3432,7 +3627,16 @@ assemble_json() {
       "refused": $CNT_REFUSED,
       "timeout": $CNT_TIMEOUT,
       "noanswer": $CNT_NOANSWER,
+      "noanswer": $CNT_NOANSWER,
       "network_error": $CNT_NETWORK_ERROR
+    },
+    "modern_features": {
+       "edns": {"ok": $EDNS_SUCCESS, "fail": $EDNS_FAIL},
+       "cookie": {"ok": $COOKIE_SUCCESS, "fail": $COOKIE_FAIL},
+       "qname": {"ok": $QNAME_SUCCESS, "fail": $QNAME_FAIL, "skip": $QNAME_SKIP},
+       "tls": {"ok": $TLS_SUCCESS, "fail": $TLS_FAIL},
+       "dot": {"ok": $DOT_SUCCESS, "fail": $DOT_FAIL},
+       "doh": {"ok": $DOH_SUCCESS, "fail": $DOH_FAIL}
     }
     },
     "per_record_type": { $json_rec_stats },
@@ -3513,6 +3717,13 @@ print_final_terminal_summary() {
     if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
         echo -e "  🔐 DNSSEC Checks   : ${GREEN}${DNSSEC_SUCCESS}${NC} OK / ${GRAY}${DNSSEC_ABSENT}${NC} Absent / ${RED}${DNSSEC_FAIL}${NC} Fail"
     fi
+    
+    [[ "$ENABLE_EDNS_CHECK" == "true" ]] && echo -e "  🛡️ EDNS0 Checks    : ${GREEN}${EDNS_SUCCESS}${NC} OK / ${RED}${EDNS_FAIL}${NC} Fail"
+    [[ "$ENABLE_COOKIE_CHECK" == "true" ]] && echo -e "  🍪 Cookie Checks   : ${GREEN}${COOKIE_SUCCESS}${NC} OK / ${GRAY}${COOKIE_FAIL}${NC} Fail/Absent"
+    [[ "$ENABLE_QNAME_CHECK" == "true" ]] && echo -e "  📉 QNAME Minimize  : ${GREEN}${QNAME_SUCCESS}${NC} OK / ${RED}${QNAME_FAIL}${NC} Fail / ${GRAY}${QNAME_SKIP}${NC} Skip"
+    [[ "$ENABLE_TLS_CHECK" == "true" ]] && echo -e "  🔐 TLS Connect     : ${GREEN}${TLS_SUCCESS}${NC} OK / ${RED}${TLS_FAIL}${NC} Fail"
+    [[ "$ENABLE_DOT_CHECK" == "true" ]] && echo -e "  🔒 DoT (TLS)       : ${GREEN}${DOT_SUCCESS}${NC} OK / ${RED}${DOT_FAIL}${NC} Fail"
+    [[ "$ENABLE_DOH_CHECK" == "true" ]] && echo -e "  🌐 DoH (HTTPS)     : ${GREEN}${DOH_SUCCESS}${NC} OK / ${RED}${DOH_FAIL}${NC} Fail"
     
     local p_succ=0
     [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
@@ -3602,6 +3813,12 @@ print_final_terminal_summary() {
              echo "  Divergências    : ${DIVERGENT_TESTS}"
              [[ "$ENABLE_TCP_CHECK" == "true" ]] && echo "  TCP Checks      : ${TCP_SUCCESS} OK / ${TCP_FAIL} Fail"
              [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && echo "  DNSSEC Checks   : ${DNSSEC_SUCCESS} OK / ${DNSSEC_ABSENT} Absent / ${DNSSEC_FAIL} Fail"
+             [[ "$ENABLE_EDNS_CHECK" == "true" ]] && echo "  EDNS0 Checks    : ${EDNS_SUCCESS} OK / ${EDNS_FAIL} Fail"
+             [[ "$ENABLE_COOKIE_CHECK" == "true" ]] && echo "  Cookie Checks   : ${COOKIE_SUCCESS} OK / ${COOKIE_FAIL} Fail"
+             [[ "$ENABLE_QNAME_CHECK" == "true" ]] && echo "  QNAME Minimize  : ${QNAME_SUCCESS} OK / ${QNAME_FAIL} Fail / ${QNAME_SKIP} Skip"
+             [[ "$ENABLE_TLS_CHECK" == "true" ]] && echo "  TLS Connect     : ${TLS_SUCCESS} OK / ${TLS_FAIL} Fail"
+             [[ "$ENABLE_DOT_CHECK" == "true" ]] && echo "  DoT (TLS)       : ${DOT_SUCCESS} OK / ${DOT_FAIL} Fail"
+             [[ "$ENABLE_DOH_CHECK" == "true" ]] && echo "  DoH (HTTPS)     : ${DOH_SUCCESS} OK / ${DOH_FAIL} Fail"
              echo "  Taxa de Sucesso : ${p_succ}%"
              echo "  Início          : ${START_TIME_HUMAN}"
              echo "  Final           : ${END_TIME_HUMAN}"
@@ -3637,7 +3854,7 @@ main() {
     # Define cleanup trap
     trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$SCRIPT_DIR/logs/temp_help_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$SCRIPT_DIR/logs/temp_domain_body_simple_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_group_body_simple_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_security_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_security_simple_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$SCRIPT_DIR/logs/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
 
-    while getopts ":n:g:lhyjstdxrTVZvq" opt; do case ${opt} in 
+    while getopts ":n:g:lhyjstdxrTVZMvq" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
         l) ENABLE_LOG_TEXT="true" ;; 
@@ -3650,6 +3867,14 @@ main() {
         T) ENABLE_TRACE_CHECK="true" ;;
         V) CHECK_BIND_VERSION="true" ;;
         Z) ENABLE_SOA_SERIAL_CHECK="true" ;;
+        M) # Enable All Modern
+           ENABLE_EDNS_CHECK="true"
+           ENABLE_COOKIE_CHECK="true"
+           ENABLE_QNAME_CHECK="true"
+           ENABLE_TLS_CHECK="true"
+           ENABLE_DOT_CHECK="true"
+           ENABLE_DOH_CHECK="true"
+           ;;
         v) VERBOSE_LEVEL=$((VERBOSE_LEVEL + 1)) ;; # Increment verbose
         q) VERBOSE_LEVEL=0 ;; # Quiet
         h) show_help; exit 0 ;; 
