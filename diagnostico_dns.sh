@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.4
-# "Enhanced Input Validation"
+# Versão: 11.1.5
+# "Secure Temp Files"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.4"
+SCRIPT_VERSION="11.1.5"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -105,19 +105,22 @@ HTML_FILE="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
 LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
 
 init_html_parts() {
-    TEMP_HEADER="logs/temp_header_$$.html"
-    TEMP_STATS="logs/temp_stats_$$.html"
-    TEMP_SERVICES="logs/temp_services_$$.html"
-    TEMP_CONFIG="logs/temp_config_$$.html"
-    TEMP_TIMING="logs/temp_timing_$$.html"
-    TEMP_MODAL="logs/temp_modal_$$.html"
-    TEMP_DISCLAIMER="logs/temp_disclaimer_$$.html"
+    # Generate unique session ID for temp files (PID + Random + Timestamp)
+    SESSION_ID="${$}_${RANDOM}_$(date +%s%N)"
+
+    TEMP_HEADER="logs/temp_header_${SESSION_ID}.html"
+    TEMP_STATS="logs/temp_stats_${SESSION_ID}.html"
+    TEMP_SERVICES="logs/temp_services_${SESSION_ID}.html"
+    TEMP_CONFIG="logs/temp_config_${SESSION_ID}.html"
+    TEMP_TIMING="logs/temp_timing_${SESSION_ID}.html"
+    TEMP_MODAL="logs/temp_modal_${SESSION_ID}.html"
+    TEMP_DISCLAIMER="logs/temp_disclaimer_${SESSION_ID}.html"
 
     # Detailed Report Temp Files
-    TEMP_MATRIX="logs/temp_matrix_$$.html"
-    TEMP_DETAILS="logs/temp_details_$$.html"
-    TEMP_PING="logs/temp_ping_$$.html"
-    TEMP_TRACE="logs/temp_trace_$$.html"
+    TEMP_MATRIX="logs/temp_matrix_${SESSION_ID}.html"
+    TEMP_DETAILS="logs/temp_details_${SESSION_ID}.html"
+    TEMP_PING="logs/temp_ping_${SESSION_ID}.html"
+    TEMP_TRACE="logs/temp_trace_${SESSION_ID}.html"
     
     > "$TEMP_MATRIX"
     > "$TEMP_DETAILS"
@@ -125,19 +128,19 @@ init_html_parts() {
     > "$TEMP_TRACE"
 
     # Security Temp Files
-    TEMP_SECURITY="logs/temp_security_$$.html"
+    TEMP_SECURITY="logs/temp_security_${SESSION_ID}.html"
     > "$TEMP_SECURITY"
     
     # New Sections Temp Files
-    TEMP_HEALTH_MAP="logs/temp_health_$$.html"
+    TEMP_HEALTH_MAP="logs/temp_health_${SESSION_ID}.html"
     > "$TEMP_HEALTH_MAP"
     
     # JSON Temp Files - Conditional Creation
     if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
-        TEMP_JSON_Ping="logs/temp_json_ping_$$.json"
-        TEMP_JSON_DNS="logs/temp_json_dns_$$.json"
-        TEMP_JSON_Sec="logs/temp_json_sec_$$.json"
-        TEMP_JSON_Trace="logs/temp_json_trace_$$.json"
+        TEMP_JSON_Ping="logs/temp_json_ping_${SESSION_ID}.json"
+        TEMP_JSON_DNS="logs/temp_json_dns_${SESSION_ID}.json"
+        TEMP_JSON_Sec="logs/temp_json_sec_${SESSION_ID}.json"
+        TEMP_JSON_Trace="logs/temp_json_trace_${SESSION_ID}.json"
         > "$TEMP_JSON_Ping"
         > "$TEMP_JSON_DNS"
         > "$TEMP_JSON_Sec"
@@ -719,7 +722,7 @@ prepare_chart_resources() {
     if [[ "$ENABLE_CHARTS" != "true" ]]; then return 1; fi
     
     # Define location for temporary chart.js
-    TEMP_CHART_JS="logs/temp_chart_$$.js"
+    TEMP_CHART_JS="logs/temp_chart_${SESSION_ID}.js"
     
     local chart_url="https://cdn.jsdelivr.net/npm/chart.js"
     
@@ -1424,7 +1427,7 @@ EOF
 
 generate_object_summary() {
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
-        cat >> "logs/temp_obj_summary_$$.html" << EOF
+        cat >> "logs/temp_obj_summary_${SESSION_ID}.html" << EOF
                 <div class="card" style="margin-bottom: 20px; --card-accent: #8b5cf6; cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
                      <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Estatísticas de Serviços</h3>
                      <div style="position: relative; height: 300px; width: 100%;">
@@ -1435,12 +1438,12 @@ generate_object_summary() {
 EOF
     fi
 
-    cat >> "logs/temp_obj_summary_$$.html" << EOF
+    cat >> "logs/temp_obj_summary_${SESSION_ID}.html" << EOF
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-primary);">
             <summary style="font-size: 1.1rem; font-weight: 600;">📋 Testes DNS TCP e DNS SEC</summary>
             <div style="padding: 20px;">
 EOF
-    cat >> "logs/temp_obj_summary_$$.html" << EOF
+    cat >> "logs/temp_obj_summary_${SESSION_ID}.html" << EOF
                 <p style="color:var(--text-secondary); margin-bottom:15px; font-size:0.9rem;">
                     Validação de recursos avançados (Transporte TCP e Assinatura DNSSEC) para cada servidor consultado.
                 </p>
@@ -1457,13 +1460,13 @@ EOF
                         <tbody>
 EOF
     
-    if [[ -f "logs/temp_svc_table_$$.html" ]]; then
-        cat "logs/temp_svc_table_$$.html" >> "logs/temp_obj_summary_$$.html"
+    if [[ -f "logs/temp_svc_table_${SESSION_ID}.html" ]]; then
+        cat "logs/temp_svc_table_${SESSION_ID}.html" >> "logs/temp_obj_summary_${SESSION_ID}.html"
     else
-        echo "<tr><td colspan='4' style='text-align:center; color:#888;'>Nenhum dado de serviço coletado.</td></tr>" >> "logs/temp_obj_summary_$$.html"
+        echo "<tr><td colspan='4' style='text-align:center; color:#888;'>Nenhum dado de serviço coletado.</td></tr>" >> "logs/temp_obj_summary_${SESSION_ID}.html"
     fi
 
-    cat >> "logs/temp_obj_summary_$$.html" << EOF
+    cat >> "logs/temp_obj_summary_${SESSION_ID}.html" << EOF
                         </tbody>
                     </table>
                 </div>
@@ -2088,7 +2091,7 @@ assemble_html() {
     fi
     
     # 5. Services (TCP/DNSSEC) - Generated by generate_object_summary
-    cat "logs/temp_obj_summary_$$.html" >> "$target_file"
+    cat "logs/temp_obj_summary_${SESSION_ID}.html" >> "$target_file"
     
     # Controls
     cat >> "$target_file" << EOF
@@ -2783,7 +2786,7 @@ process_tests() {
         local targets=("$domain"); for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
 
         # Init Service Table Temp File one time if not exists (checked outside to avoid truncate on every domain)
-        [[ ! -f "logs/temp_svc_table_$$.html" ]] && touch "logs/temp_svc_table_$$.html"
+        [[ ! -f "logs/temp_svc_table_${SESSION_ID}.html" ]] && touch "logs/temp_svc_table_${SESSION_ID}.html"
 
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
@@ -2877,7 +2880,7 @@ process_tests() {
                         fi
                         
                         if [[ "$ENABLE_TCP_CHECK" == "true" || "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                             echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_$$.html"
+                             echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_${SESSION_ID}.html"
                         fi
                     done
 
@@ -3446,7 +3449,7 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "logs/temp_chart_$$.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_${SESSION_ID}.html" "logs/temp_obj_summary_${SESSION_ID}.html" "logs/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_${SESSION_ID}.html" "logs/temp_group_body_simple_${SESSION_ID}.html" "logs/temp_security_${SESSION_ID}.html" "logs/temp_security_simple_${SESSION_ID}.html" "logs/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "logs/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhyjstdxrTVZ" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
