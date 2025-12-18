@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.3
-# "Fix latency and dns duration thresholds"
+# Versão: 11.1.4
+# "Enhanced Input Validation"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.3"
+SCRIPT_VERSION="11.1.4"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -624,6 +624,15 @@ validate_csv_files() {
              error_count=$((error_count+1))
          fi
 
+         # 1.1 Validate Domain Format (Col 1)
+         # Basic FQDN Regex: alphanumeric, dots, hyphens
+         local invalid_domains=$(awk -F';' '!/^#/ && !/^$/ && $1 !~ /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/ {print NR " (" $1 ")"}' "$FILE_DOMAINS")
+         if [[ -n "$invalid_domains" ]]; then
+             echo -e "${RED}ERRO EM '$FILE_DOMAINS':${NC} Domínios com formato inválido:"
+             echo -e "${YELLOW}Linhas: $(echo "$invalid_domains" | tr '\n' ', ' | sed 's/, $//')${NC}"
+             error_count=$((error_count+1))
+         fi
+
          # Validate TEST type (Col 3: iterative|recursive|both)
          local invalid_types=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | awk -F';' '$3 !~ /^(iterative|recursive|both)$/ {print NR " (" $3 ")"}')
          if [[ -n "$invalid_types" ]]; then
@@ -644,6 +653,36 @@ validate_csv_files() {
              echo -e "${YELLOW}Linhas: $(echo "$invalid_lines" | tr '\n' ',' | sed 's/,$//')${NC}"
              error_count=$((error_count+1))
          fi
+
+         # 2.1 Check for Duplicate Groups
+         local duplicates=$(awk -F';' '!/^#/ && !/^$/ {print $1}' "$FILE_GROUPS" | sort | uniq -d)
+         if [[ -n "$duplicates" ]]; then
+             echo -e "${RED}ERRO EM '$FILE_GROUPS':${NC}  IDs de Grupo DUPLICADOS encontrados:"
+             echo -e "${YELLOW}$(echo "$duplicates" | tr '\n' ',' | sed 's/,$//')${NC}"
+             error_count=$((error_count+1))
+         fi
+
+         # 2.2 Validate IP Addresses (IPv4/IPv6) in Column 5
+         # Extract line number and servers column using awk
+         while IFS= read -r line_info; do
+             local ln=$(echo "$line_info" | awk '{print $1}')
+             local servers=$(echo "$line_info" | cut -d' ' -f2-)
+             
+             # Split servers by comma
+             IFS=',' read -ra ADDR <<< "$servers"
+             for ip in "${ADDR[@]}"; do
+                 # Trim whitespace
+                 ip=$(echo "$ip" | xargs)
+                 if [[ -z "$ip" ]]; then continue; fi
+
+                 # Simple IPv4 Regex
+                 if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] && [[ ! "$ip" =~ : ]]; then
+                      echo -e "${RED}ERRO EM '$FILE_GROUPS' (Linha $ln):${NC} IP Inválido detectado: '$ip'"
+                      error_count=$((error_count+1))
+                 fi
+                 # (IPv6 detection is loose here [contains :], but better than nothing for now)
+             done
+         done < <(awk -F';' '!/^#/ && !/^$/ {print NR, $5}' "$FILE_GROUPS")
          
          # Validate TYPE (Col 3: authoritative|recursive|mixed)
          local invalid_types=$(grep -vE '^\s*#|^\s*$' "$FILE_GROUPS" | awk -F';' '$3 !~ /^(authoritative|recursive|mixed)$/ {print NR " (" $3 ")"}')
