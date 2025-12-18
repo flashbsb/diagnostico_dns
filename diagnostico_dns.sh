@@ -2,14 +2,13 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.5
-# "Secure Temp Files"
+# Versão: 11.1.6
+# "Metrology Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.5"
+SCRIPT_VERSION="11.1.6"
 
-# Carrega configurações externas
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
@@ -2773,13 +2772,15 @@ process_tests() {
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
         domain=$(echo "$domain" | xargs); groups=$(echo "$groups" | tr -d '[:space:]')
+```
         IFS=',' read -ra group_list <<< "$groups"; IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
         echo -e "${CYAN}>> ${domain} ${PURPLE}[${record_types}] ${YELLOW}(${test_types})${NC}"
         
-        # Reset Domain Stats
-        local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
+        # Reset Counters for this run (if needed, though already global)
+    # Global TCP Cache for this execution context to avoid redundant checks
+    declare -A GLOBAL_TCP_CHECKED; local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
         > "$TEMP_DOMAIN_BODY"
 
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
@@ -2815,31 +2816,32 @@ process_tests() {
                         local tcp_res="-"
                         local sec_res="-"
 
-                        # TCP Check
+                        # TCP Check (Once per server per session)
                         if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-                             local clean_srv=${srv//./_}
-                             local clean_tgt=${target//./_}
-                             local tcp_id="tcp_${clean_srv}_${clean_tgt}"
-                             
-                             local opts_tcp; [[ "$mode" == "iterative" ]] && opts_tcp="$DEFAULT_DIG_OPTIONS" || opts_tcp="$RECURSIVE_DIG_OPTIONS"
-                             opts_tcp+=" +tcp +time=$TIMEOUT"
-                             local out_tcp=$(dig $opts_tcp @$srv $target A 2>&1)
-                             log_cmd_result "TCP CHECK $srv -> $target" "dig $opts_tcp @$srv $target A" "$out_tcp" "0"
-                             
-                             local safe_tcp=$(echo "$out_tcp" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-                                 echo "<div id=\"${tcp_id}_content\" style=\"display:none\"><pre>$safe_tcp</pre></div>" >> "$TEMP_DETAILS"
-                                 echo "<div id=\"${tcp_id}_title\" style=\"display:none\">TCP Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
-
-                             if echo "$out_tcp" | grep -q -i -E "connection timed out|communications error|no servers could be reached|failed: timed out|network is unreachable|host is unreachable|connection refused|no route to host"; then
-                                 CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Failed'>T</span></a>"
-                                 tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>FAIL</span></a>"
-                                 TCP_FAIL+=1
-                                 echo -ne "${RED}T${NC}"
+                             if [[ "${GLOBAL_TCP_CHECKED[$srv]}" == "true" ]]; then
+                                 # Use cached status (assuming it didn't change in milliseconds)
+                                 # We don't increment counters again to avoid inflation
+                                 tcp_res="<span class='badge-mini neutral' title='Cached'>T</span>"
                              else
-                                 CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP OK'>T</span></a>"
-                                 tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
-                                 TCP_SUCCESS+=1
-                                 echo -ne "${GREEN}T${NC}"
+                                 # For logging, we still need a unique ID for the TCP check
+                                 local clean_srv=${srv//./_}
+                                 local tcp_id="tcp_${clean_srv}_session" # Unique per server for session
+                                 
+                                 # check_tcp_dns is a helper function that performs the actual check
+                                 # and logs its output to TEMP_DETAILS for later display.
+                                 # It returns 0 for success, non-zero for failure.
+                                 if check_tcp_dns "$srv" 53 "$tcp_id"; then
+                                     CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP Connection OK'>T</span></a>"
+                                     tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
+                                     TCP_SUCCESS+=1
+                                     echo -ne "${GREEN}T${NC}"
+                                 else
+                                     CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Connection Failed'>T</span></a>"
+                                     tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
+                                     TCP_FAIL+=1
+                                     echo -ne "${RED}T${NC}"
+                                 fi
+                                 GLOBAL_TCP_CHECKED[$srv]="true"
                              fi
                         fi
 
@@ -2916,7 +2918,9 @@ process_tests() {
                             # Connectivity
                             if [[ "$VALIDATE_CONNECTIVITY" == "true" ]]; then
                                 if ! validate_connectivity "$srv" "${DNS_GROUP_TIMEOUT[$grp]}"; then
-                                    FAILED_TESTS+=1; g_fail=$((g_fail+1)); echo -ne "${RED}x${NC}";
+                                    FAILED_TESTS+=1; g_fail=$((g_fail+1)); 
+                                    GROUP_FAIL_TESTS[$grp]=$((GROUP_FAIL_TESTS[$grp] + 1))
+                                    echo -ne "${RED}x${NC}";
                                     
                                     # Store results for DOWN state instead of writing HTML immediately
                                     RES_FINAL_CLASS[$srv]="status-fail"
@@ -3341,6 +3345,12 @@ print_final_terminal_summary() {
     echo -e "${BLUE}------------------------------------------------------${NC}"
     echo -e "${BLUE}       PERFORMANCE & DETALHES    ${NC}"
     echo -e "  📡 Latência Rede   : ${avg_lat}${lat_suffix} (ICMP Ping)"
+    
+    # Calculate DNS Avg
+    local avg_dns="0ms"
+    if [[ $TOTAL_DNS_QUERY_COUNT -gt 0 ]]; then
+         avg_dns=$(LC_NUMERIC=C awk "BEGIN {printf \"%.1fms\", $TOTAL_DNS_DURATION_SUM / $TOTAL_DNS_QUERY_COUNT}")
+    fi
     echo -e "  🐢 Resolução DNS   : ${avg_dns} (Dig Total)"
     echo -e "  -------------------------------------"
     echo -e "  ✅ NOERROR         : ${CNT_NOERROR}"
