@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # ==============================================
-# SCRIPT DIAGNÓSTICO DNS - COMPLETE DASHBOARD
-# Versão: 10.9.2   
-# "Fix % Response Coverage in Stats"
+# SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
+# Versão: 11.0.0
+# "Executive Summary, Health Maps & Clean Code"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="10.9.2"
+SCRIPT_VERSION="11.0.0"
 
 # Carrega configurações externas
 # Carrega configurações externas
@@ -114,7 +114,7 @@ init_html_parts() {
     TEMP_DISCLAIMER="logs/temp_disclaimer_$$.html"
 
     # Full Report Temp Files - Conditional Initialization
-    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
         TEMP_MATRIX="logs/temp_matrix_$$.html"
         TEMP_DETAILS="logs/temp_details_$$.html"
         TEMP_PING="logs/temp_ping_$$.html"
@@ -127,7 +127,7 @@ init_html_parts() {
     fi
 
     # Simple Mode Temp Files - Conditional Creation
-    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
         TEMP_MATRIX_SIMPLE="logs/temp_matrix_simple_$$.html"
         TEMP_PING_SIMPLE="logs/temp_ping_simple_$$.html"
         TEMP_TRACE_SIMPLE="logs/temp_trace_simple_$$.html"
@@ -148,13 +148,17 @@ init_html_parts() {
         TEMP_SECURITY_SIMPLE=""
     fi
     
-    # Security Temp Files
+    
     # Security Temp Files
     TEMP_SECURITY="logs/temp_security_$$.html"
     > "$TEMP_SECURITY"
     
+    # New Sections Temp Files
+    TEMP_HEALTH_MAP="logs/temp_health_$$.html"
+    > "$TEMP_HEALTH_MAP"
+    
     # JSON Temp Files - Conditional Creation
-    if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
         TEMP_JSON_Ping="logs/temp_json_ping_$$.json"
         TEMP_JSON_DNS="logs/temp_json_dns_$$.json"
         TEMP_JSON_Sec="logs/temp_json_sec_$$.json"
@@ -243,7 +247,10 @@ print_help_text() {
     echo -e "      Tenta extrair a versão do software DNS usando consultas CHAOS TXT."
     echo -e "      (Geralmente bloqueado por segurança em servidores de produção)."
     echo -e ""
-    echo -e "  ${CYAN}ENABLE_TCP_CHECK / ENABLE_DNSSEC_CHECK${NC}"
+    echo -e "  ${CYAN}ENABLE_FULL_REPORT / ENABLE_SIMPLE_REPORT / ENABLE_JSON_REPORT${NC}
+      Controlam o formato de saída. Padrão: FULL=true.
+      
+  ${CYAN}ENABLE_TCP_CHECK / ENABLE_DNSSEC_CHECK${NC}"
     echo -e "      Ativa verificações de conformidade RFC 7766 (TCP) e suporte a DNSSEC."
     echo -e ""
     echo -e "  ${CYAN}ENABLE_AXFR_CHECK / ENABLE_RECURSION_CHECK${NC}"
@@ -276,7 +283,7 @@ print_help_text() {
     echo -e "      Opções avançadas passadas ao binário 'dig'. Útil para ajustes de buffer,"
     echo -e "      cookies ou flag +cd."
     echo -e ""
-    echo -e "  ${CYAN}GENERATE_LOG_TEXT / VERBOSE${NC}"
+    echo -e "  ${CYAN}ENABLE_LOG_TEXT / VERBOSE${NC}"
     echo -e "      Controle de verbosidade e geração de log forense em texto plano (.log)."
     echo -e ""
     echo -e "  ${CYAN}COLOR_OUTPUT${NC} (true/false)"
@@ -374,7 +381,7 @@ print_execution_summary() {
     echo ""
     echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
     echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
-    echo -e "  📝 Gerar Log TXT : ${CYAN}${GENERATE_LOG_TEXT}${NC}"
+    echo -e "  📝 Gerar Log TXT : ${CYAN}${ENABLE_LOG_TEXT}${NC}"
     echo -e "  🛠️ Dig Opts (Iter): ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
     echo -e "  🛠️ Dig Opts (Rec) : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
     echo ""
@@ -385,14 +392,14 @@ print_execution_summary() {
     echo -e "  🎨 Color Output   : ${CYAN}${COLOR_OUTPUT}${NC}"
     echo ""
     echo -e "${PURPLE}[SAÍDA]${NC}"
-    [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
-    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+    [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo -e "  📄 Relatório Completo: ${GREEN}$HTML_FILE${NC}"
+    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
         echo -e "  📄 Relatório Simplificado: ${GREEN}${HTML_FILE%.html}_simple.html${NC}"
         echo -e "     ${GRAY}ℹ️  Nota: Relatório otimizado para tamanho reduzido (sem logs técnicos/raw data).${NC}"
     fi
-    [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]] && echo -e "  ⚠️  ${YELLOW}Nenhum relatório selecionado? (Configurar e rodar)${NC}"
-    [[ "$GENERATE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
-    [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
+    [[ "$ENABLE_FULL_REPORT" == "false" && "$ENABLE_SIMPLE_REPORT" == "false" && "$ENABLE_JSON_REPORT" == "false" ]] && echo -e "  ⚠️  ${YELLOW}Nenhum relatório selecionado? (Configurar e rodar)${NC}"
+    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
+    [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
     echo ""
 }
@@ -402,14 +409,14 @@ print_execution_summary() {
 # ==============================================
 
 log_entry() {
-    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     local msg="$1"
     local ts=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$ts] $msg" >> "$LOG_FILE_TEXT"
 }
 
 log_section() {
-    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     local title="$1"
     {
         echo ""
@@ -420,7 +427,7 @@ log_section() {
 }
 
 log_cmd_result() {
-    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     local context="$1"; local cmd="$2"; local output="$3"; local time="$4"
     {
         echo "--------------------------------------------------------------------------------"
@@ -432,7 +439,7 @@ log_cmd_result() {
 }
 
 init_log_file() {
-    [[ "$GENERATE_LOG_TEXT" != "true" ]] && return
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     {
         echo "DNS DIAGNOSTIC TOOL v$SCRIPT_VERSION - FORENSIC LOG"
         echo "Date: $START_TIME_HUMAN"
@@ -446,7 +453,7 @@ init_log_file() {
 "
         echo "  Ping: Enabled=$ENABLE_PING, Count=$PING_COUNT, Timeout=$PING_TIMEOUT, LossLimit=$PING_PACKET_LOSS_LIMIT%"
         echo "  Analysis: LatencyThreshold=${LATENCY_WARNING_THRESHOLD}ms, Color=$COLOR_OUTPUT"
-        echo "  Reports: Full=$GENERATE_FULL_REPORT, Simple=$GENERATE_SIMPLE_REPORT"
+        echo "  Reports: Full=$ENABLE_FULL_REPORT, Simple=$ENABLE_SIMPLE_REPORT"
         echo "  Dig Opts: $DEFAULT_DIG_OPTIONS"
         echo "  Rec Dig Opts: $RECURSIVE_DIG_OPTIONS"
         echo ""
@@ -506,11 +513,11 @@ interactive_configuration() {
         ask_variable "Sleep entre queries (segundos)" "SLEEP"
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
         ask_boolean "Verbose Debug?" "VERBOSE"
-        ask_boolean "Gerar log texto?" "GENERATE_LOG_TEXT"
+        ask_boolean "Gerar log texto?" "ENABLE_LOG_TEXT"
         ask_boolean "Gerar relatório HTML Detalhado?" "ENABLE_FULL_REPORT"
         ask_boolean "Gerar relatório HTML Simplificado?" "ENABLE_SIMPLE_REPORT"
         ask_boolean "Habilitar Gráficos no HTML?" "ENABLE_CHARTS"
-        ask_boolean "Gerar relatório JSON?" "GENERATE_JSON_REPORT"
+        ask_boolean "Gerar relatório JSON?" "ENABLE_JSON_REPORT"
         
         echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
@@ -540,18 +547,9 @@ interactive_configuration() {
         
         echo -e "\n${GREEN}Configurações atualizadas!${NC}"
         
-        # Apply Logic for Interactive Changes
-        GENERATE_FULL_REPORT="${ENABLE_FULL_REPORT}"
-        GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT}"
-        GENERATE_JSON_REPORT="${GENERATE_JSON_REPORT}" # Ensure this is also synced if variable names differed, but they share name in ask_boolean logic in some versions, checking... 
-        # actually ask_boolean uses the variable name passed as 2nd arg.
-        # In interactive_configuration, we utilize GENERATE_JSON_REPORT directly in ask_boolean? 
-        # Line 506: ask_boolean ... "GENERATE_JSON_REPORT" -> So that one is direct.
-        
         # Fallback Logic (Prevent user from disabling everything without realizing)
-        if [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]]; then
+        if [[ "$ENABLE_FULL_REPORT" == "false" && "$ENABLE_SIMPLE_REPORT" == "false" && "$ENABLE_JSON_REPORT" == "false" ]]; then
              echo -e "\n${YELLOW}⚠️  Aviso: Nenhum relatório foi selecionado. Reativando Relatório Completo por padrão.${NC}"
-             GENERATE_FULL_REPORT="true"
              ENABLE_FULL_REPORT="true"
         fi
 
@@ -577,6 +575,10 @@ interactive_configuration() {
 save_config_to_file() {
     [[ ! -f "$CONFIG_FILE" ]] && { echo "Erro: $CONFIG_FILE não encontrado para escrita."; return; }
     
+    # Backup existing config
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+    echo -e "     ${GRAY}ℹ️  Backup criado: ${CONFIG_FILE}.bak${NC}"
+    
     # Helper to update key="val" or key=val in conf file
     # Handles quoted and unquoted values, preserves comments
     update_conf_key() {
@@ -584,11 +586,6 @@ save_config_to_file() {
         local val="$2"
         # Escape slashes in value just in case (though mostly simple strings here)
         val="${val//\//\\/}"
-        
-        # Determine if original was quoted. Actually, we enforce our standard format: KEY="val" or KEY=val
-        # Let's try to detect if we should quote it.
-        # String values usually quoted, numbers/booleans maybe not.
-        # The script uses quotes for most things in defaults.
         
         sed -i "s|^$key=.*|$key=\"$val\"|" "$CONFIG_FILE"
     }
@@ -603,13 +600,13 @@ save_config_to_file() {
     
     update_conf_key "VALIDATE_CONNECTIVITY" "$VALIDATE_CONNECTIVITY"
     update_conf_key "VERBOSE" "$VERBOSE"
-    update_conf_key "GENERATE_LOG_TEXT" "$GENERATE_LOG_TEXT"
+    update_conf_key "ENABLE_LOG_TEXT" "$ENABLE_LOG_TEXT"
     
     # Report Flags
-    update_conf_key "ENABLE_FULL_REPORT" "$GENERATE_FULL_REPORT" # Map back internal to config var
-    update_conf_key "ENABLE_SIMPLE_REPORT" "$GENERATE_SIMPLE_REPORT"
+    update_conf_key "ENABLE_FULL_REPORT" "$ENABLE_FULL_REPORT"
+    update_conf_key "ENABLE_SIMPLE_REPORT" "$ENABLE_SIMPLE_REPORT"
     update_conf_key "ENABLE_CHARTS" "$ENABLE_CHARTS"
-    update_conf_key "GENERATE_JSON_REPORT" "$GENERATE_JSON_REPORT"
+    update_conf_key "ENABLE_JSON_REPORT" "$ENABLE_JSON_REPORT"
     
     # Tests
     sed -i "s|^ENABLE_PING=.*|ENABLE_PING=$ENABLE_PING|" "$CONFIG_FILE"
@@ -636,7 +633,7 @@ save_config_to_file() {
     sed -i "s|^LATENCY_WARNING_THRESHOLD=.*|LATENCY_WARNING_THRESHOLD=$LATENCY_WARNING_THRESHOLD|" "$CONFIG_FILE"
     sed -i "s|^PING_PACKET_LOSS_LIMIT=.*|PING_PACKET_LOSS_LIMIT=$PING_PACKET_LOSS_LIMIT|" "$CONFIG_FILE"
     update_conf_key "COLOR_OUTPUT" "$COLOR_OUTPUT"
-
+    
     # Strict Criteria
     update_conf_key "STRICT_IP_CHECK" "$STRICT_IP_CHECK"
     update_conf_key "STRICT_ORDER_CHECK" "$STRICT_ORDER_CHECK"
@@ -1249,11 +1246,10 @@ EOF
 
 }
 
-generate_stats_block() {
-    local p_succ=0
-    [[ $TOTAL_TESTS -gt 0 ]] && p_succ=$(( (SUCCESS_TESTS * 100) / TOTAL_TESTS ))
+generate_executive_summary() {
+    # Calculate Risk Score
+    local sec_risk_count=$((SEC_REVEALED + SEC_AXFR_RISK + SEC_REC_RISK + DNSSEC_FAIL))
     
-    # Calculate Stats for HTML
     local domain_count=0
     [[ -f "$FILE_DOMAINS" ]] && domain_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
     local group_count=${#ACTIVE_GROUPS[@]}
@@ -1274,9 +1270,9 @@ generate_stats_block() {
     fi
 
 cat > "$TEMP_STATS" << EOF
-        <h2>📊 Estatísticas Gerais</h2>
+        <h2>📊 Resumo Executivo</h2>
         <!-- General Inventory Row -->
-        <div class="dashboard" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
+        <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('DOMÍNIOS', 'Total de domínios únicos carregados do arquivo de entrada.<br><br><b>Fonte:</b> $FILE_DOMAINS')">
                 <span class="card-num">${domain_count}</span>
                 <span class="card-label">Domínios</span>
@@ -1293,24 +1289,23 @@ cat > "$TEMP_STATS" << EOF
                 <span class="card-num">${avg_lat}${avg_lat_suffix}</span>
                 <span class="card-label">Latência Média</span>
             </div>
+            
+            <!-- Risk Card -->
+            <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RISCO DE SEGURANÇA', 'Contagem acumulada de falhas de segurança detectadas.<br><br><b>Inclui:</b><br>- Versão Revelada<br>- AXFR Permitido<br>- Recursão Aberta<br>- DNSSEC Falho<br><br>Meta: <b>0</b>')">
+                <span class="card-num" style="color: ${sec_risk_count:+"var(--accent-danger)"};">${sec_risk_count}</span>
+                <span class="card-label">Risco de Segurança</span>
+            </div>
+            
+            <!-- Divergence Card -->
+            <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('SERVIDORES INCONSISTENTES', 'Número de testes onde houve divergência de resposta (IP, Ordem ou TTL) entre tentativas consecutivas no mesmo servidor.<br><br>Indica instabilidade ou má configuração de balanceamento.')">
+                <span class="card-num" style="color: ${DIVERGENT_TESTS:+"var(--accent-divergent)"};">${DIVERGENT_TESTS}</span>
+                <span class="card-label">Inconsistências</span>
+            </div>
         </div>
-        
 EOF
-
-
-
-
+    
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
-        if [[ $SUCCESS_TESTS -eq 0 && $WARNING_TESTS -eq 0 ]]; then
-             # No valid data to show charts
-             cat >> "$TEMP_STATS" << EOF
-             <div class="disclaimer-box" style="text-align:center;">
-                <span style="font-size:1.2rem;">📉 Sem dados para exibir gráficos</span><br>
-                <span style="font-size:0.9rem; color:var(--text-secondary);">Todos os testes falharam ou nenhum dado foi coletado.</span>
-             </div>
-EOF
-        else
-             cat >> "$TEMP_STATS" << EOF
+         cat >> "$TEMP_STATS" << EOF
         <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px;">
              <!-- Overview Chart Container -->
              <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-primary); align-items: center; justify-content: center;">
@@ -1318,13 +1313,8 @@ EOF
                  <div style="position: relative; height: 300px; width: 100%;">
                     <canvas id="chartOverview"></canvas>
                  </div>
-                 <div style="margin-top:10px;">
-                    <button class="btn" style="font-size:0.8rem; padding:4px 10px;" onclick="updateChartType('chartOverview', 'doughnut')">Doughnut</button>
-                    <button class="btn" style="font-size:0.8rem; padding:4px 10px;" onclick="updateChartType('chartOverview', 'pie')">Pie</button>
-                    <button class="btn" style="font-size:0.8rem; padding:4px 10px;" onclick="updateChartType('chartOverview', 'bar')">Bar</button>
-                 </div>
              </div>
-             <!-- Latency Chart Container (Placeholder) -->
+             <!-- Latency Chart Container -->
              <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-warning); align-items: center; justify-content: center;">
                  <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Top Latência (Médias)</h3>
                  <div style="position: relative; height: 300px; width: 100%;">
@@ -1333,116 +1323,103 @@ EOF
              </div>
         </div>
 EOF
-        fi
     fi
+}
 
-    cat >> "$TEMP_STATS" << EOF
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; margin-bottom:30px;">
-        <div class="card" style="--card-accent: var(--accent-success); cursor:pointer;" onclick="showInfoModal('SUCESSO', 'Testes concluídos sem erros.<br><br><b>Critério:</b> Resposta NOERROR, latência abaixo do limite (<${LATENCY_WARNING_THRESHOLD}ms) e consistência entre as tentativas.')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">✅</div>
-            <span class="card-label">Sucesso</span>
-            <span class="card-value" style="color:var(--accent-success);">${SUCCESS_TESTS}</span>
-        </div>
+generate_health_map() {
+    cat > "$TEMP_HEALTH_MAP" << EOF
+    <div style="margin-top: 40px; margin-bottom: 40px;">
+        <h2>🗺️ Mapa de Saúde DNS</h2>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Grupo DNS</th>
+                        <th>Latência Média</th>
+                        <th>Falhas / Total</th>
+                        <th>Status Geral</th>
+                    </tr>
+                </thead>
+                <tbody>
+EOF
+    for grp in "${!ACTIVE_GROUPS[@]}"; do
+        local g_rtt_sum=0
+        local g_rtt_cnt=0
+        for ip in ${DNS_GROUPS[$grp]}; do
+            if [[ -n "${IP_RTT_RAW[$ip]}" ]]; then
+                g_rtt_sum=$(LC_NUMERIC=C awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
+                g_rtt_cnt=$((g_rtt_cnt + 1))
+            fi
+        done
+        local g_avg="N/A"
+        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(LC_NUMERIC=C awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
         
-        <div class="card" style="--card-accent: var(--accent-warning); cursor:pointer;" onclick="showInfoModal('ALERTAS', 'Testes com avisos ou performance degradada.<br><br><b>Critério:</b> Resposta válida mas lenta (> ${LATENCY_WARNING_THRESHOLD}ms), ou status não-crítico como NXDOMAIN (domínio não existe).')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">⚠️</div>
-            <span class="card-label">Alertas</span>
-            <span class="card-value" style="color:var(--accent-warning);">${WARNING_TESTS}</span>
-        </div>
+        local g_fail_cnt=${GROUP_FAIL_TESTS[$grp]}
+        [[ -z "$g_fail_cnt" ]] && g_fail_cnt=0
+        local g_total_cnt=${GROUP_TOTAL_TESTS[$grp]}
+        [[ -z "$g_total_cnt" ]] && g_total_cnt=0
+        
+        # Status Logic
+        local status_html="<span class='badge badge-type' style='color:#10b981; border-color:#10b981; background:rgba(16, 185, 129, 0.1);'>HEALTHY</span>"
+        if [[ $g_fail_cnt -gt 0 ]]; then
+             status_html="<span class='badge badge-type' style='color:#ef4444; border-color:#ef4444; background:rgba(239, 68, 68, 0.1);'>ISSUES</span>"
+        elif [[ "$g_avg" != "N/A" ]]; then
+             # Check latency threshold
+             local lat_val=${g_avg%ms}
+             lat_val=${lat_val%.*} # int
+             if [[ $lat_val -gt $LATENCY_WARNING_THRESHOLD ]]; then
+                 status_html="<span class='badge badge-type' style='color:#f59e0b; border-color:#f59e0b; background:rgba(245, 158, 11, 0.1);'>SLOW</span>"
+             fi
+        fi
+        
+        echo "<tr><td><strong style='color:var(--text-primary);'>$grp</strong></td><td>$g_avg</td><td>${g_fail_cnt} / ${g_total_cnt}</td><td>$status_html</td></tr>" >> "$TEMP_HEALTH_MAP"
+    done
 
-        <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('FALHAS CRÍTICAS', 'O servidor falhou em responder corretamente.<br><br><b>Critério:</b> Timeout (sem resposta), Erro de Rede, SERVFAIL (erro interno) ou REFUSED (bloqueio).')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">❌</div>
-            <span class="card-label">Falhas</span>
-            <span class="card-value" style="color:var(--accent-danger);">${FAILED_TESTS}</span>
-        </div>
-
-        <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('DIVERGÊNCIAS', 'Inconsistência nas respostas do mesmo servidor.<br><br><b>Critério:</b> O servidor retornou IPs ou dados diferentes entre as ${CONSISTENCY_CHECKS} tentativas consecutivas.<br>Pode indicar balanceamento de carga instável ou problemas de sincronização.')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">🔀</div>
-            <span class="card-label">Divergências</span>
-            <span class="card-value" style="color:var(--accent-divergent);">${DIVERGENT_TESTS}</span>
+    cat >> "$TEMP_HEALTH_MAP" << EOF
+                </tbody>
+            </table>
         </div>
     </div>
-        <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
 EOF
+}
 
-    if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-        cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="--card-accent: var(--accent-info); cursor:pointer;" onclick="showInfoModal('TCP COMPLIANCE', 'Verifica se o servidor suporta consultas DNS via TCP (Porta 53).<br><br><b>Importância:</b> Obrigatório pela RFC 7766. Essencial para respostas grandes (>512 bytes) e DNSSEC.<br>Falha aqui pode indicar bloqueio de firewall na porta 53/TCP.')">
-                <div style="font-size:1.5rem; margin-bottom:5px;">🔌</div>
-                <span class="card-label">TCP Compliance</span>
-                <div style="margin-top:10px; font-size:1.1rem;">
-                     <span style="font-weight:700; color:var(--text-primary);">${TCP_SUCCESS}</span> <span style="font-size:0.8em; color:var(--accent-success);">OK</span>
-                     <span style="color:#666; margin:0 5px;">|</span>
-                     <span style="font-weight:700; color:var(--text-primary);">${TCP_FAIL}</span> <span style="font-size:0.8em; color:var(--accent-danger);">Fail</span>
-                </div>
-            </div>
-EOF
-    fi
-
-    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-        cat >> "$TEMP_STATS" << EOF
-            <div class="card" style="--card-accent: #8b5cf6; cursor:pointer;" onclick="showInfoModal('DNSSEC STATUS', 'Validação da cadeia de confiança DNSSEC (RRSIG).<br><br><b>Valid:</b> Assinatura correta e validada.<br><b>Absent:</b> Domínio não assinado (inseguro, mas funcional).<br><b>Fail:</b> Assinatura inválida (BOGUS) ou expirada. Risco de segurança!')">
-                <div style="font-size:1.5rem; margin-bottom:5px;">🔐</div>
-                <span class="card-label">DNSSEC Status</span>
-                <div style="margin-top:10px; font-size:1.1rem;">
-                     <span style="font-weight:700; color:var(--text-primary);">${DNSSEC_SUCCESS}</span> <span style="font-size:0.8em; color:var(--accent-success);">Valid</span>
-                     <span style="color:#666; margin:0 5px;">|</span>
-                     <span style="font-weight:700; color:var(--text-primary);">${DNSSEC_ABSENT}</span> <span style="font-size:0.8em; color:var(--text-secondary);">Absent</span>
-                     <span style="color:#666; margin:0 5px;">|</span>
-                     <span style="font-weight:700; color:var(--text-primary);">${DNSSEC_FAIL}</span> <span style="font-size:0.8em; color:var(--accent-danger);">Fail</span>
-                </div>
-            </div>
-EOF
-    fi
-
-    # Security Cards (Unified in same grid)
-    # Adding Counts for Timeouts/Errors to ensure totals match
-    cat >> "$TEMP_STATS" << EOF
-        <div class="card" style="--card-accent: var(--accent-primary); cursor:pointer;" onclick="showInfoModal('VERSION PRIVACY', 'Verifica se o servidor revela sua versão de software (BIND, etc).<br><br><b>Hide (Ideal):</b> O servidor esconde a versão ou retorna REFUSED.<br><b>Revealed (Risco):</b> O servidor informa a versão exata, facilitando exploração de CVEs.')">
+generate_security_cards() {
+    # Output Security Cards HTML (without wrapping details, to be used in assembly)
+    cat << EOF
+    <h2>🛡️ Postura de Segurança</h2>
+    <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 20px;">
+        <div class="card" style="--card-accent: var(--accent-primary); cursor:pointer;" onclick="showInfoModal('VERSION PRIVACY', 'Verifica se o servidor revela sua versão de software (BIND, etc).')">
             <div style="font-size:1.5rem; margin-bottom:5px;">🕵️</div>
             <span class="card-label">Version Privacy</span>
             <div style="margin-top:10px; font-size:0.95rem;">
                  <span style="color:var(--accent-success);">Hide:</span> <strong>${SEC_HIDDEN}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Rev:</span> <strong>${SEC_REVEALED}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_VER_TIMEOUT}</strong>
+                 <span style="color:var(--accent-danger);">Rev:</span> <strong>${SEC_REVEALED}</strong>
             </div>
         </div>
-        <div class="card" style="--card-accent: var(--accent-warning); cursor:pointer;" onclick="showInfoModal('ZONE TRANSFER (AXFR)', 'Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.<br><br><b>Deny (Ideal):</b> A transferência foi recusada.<br><b>Allow (Crítico):</b> O servidor permitiu o download de toda a zona (vazamento de topologia).')">
+        <div class="card" style="--card-accent: var(--accent-warning); cursor:pointer;" onclick="showInfoModal('ZONE TRANSFER (AXFR)', 'Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.')">
             <div style="font-size:1.5rem; margin-bottom:5px;">📂</div>
             <span class="card-label">Zone Transfer</span>
             <div style="margin-top:10px; font-size:0.95rem;">
                  <span style="color:var(--accent-success);">Deny:</span> <strong>${SEC_AXFR_OK}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Allow:</span> <strong>${SEC_AXFR_RISK}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_AXFR_TIMEOUT}</strong>
+                 <span style="color:var(--accent-danger);">Allow:</span> <strong>${SEC_AXFR_RISK}</strong>
             </div>
         </div>
-        <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RECURSION', 'Verifica se o servidor aceita consultas recursivas para domínios externos (ex: google.com).<br><br><b>Close (Ideal para Autoritativo):</b> Recusa recursão.<br><b>Open (Risco):</b> Aceita recursão (pode ser usado para ataques de amplificação DNS).')">
+        <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RECURSION', 'Verifica se o servidor aceita consultas recursivas para domínios externos.')">
             <div style="font-size:1.5rem; margin-bottom:5px;">🔄</div>
             <span class="card-label">Recursion</span>
             <div style="margin-top:10px; font-size:0.95rem;">
                  <span style="color:var(--accent-success);">Close:</span> <strong>${SEC_REC_OK}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Open:</span> <strong>${SEC_REC_RISK}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--text-secondary);">Err:</span> <strong>${SEC_REC_TIMEOUT}</strong>
+                 <span style="color:var(--accent-danger);">Open:</span> <strong>${SEC_REC_RISK}</strong>
             </div>
         </div>
-EOF
-
-    # SOA Sync Card
-    if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]]; then
-    cat >> "$TEMP_STATS" << EOF
-        <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('SOA SYNC', 'Verifica a sincronização do Serial Number (SOA) entre os servidores.<br><br><b>Synced:</b> Todos os servidores responderam com o mesmo número serial.<br><b>Div:</b> Servidores retornaram seriais diferentes (problema de propagação).')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">⚖️</div>
-            <span class="card-label">SOA Sync</span>
-            <div style="margin-top:10px; font-size:1.1rem;">
-                 <span style="font-weight:700; color:var(--text-primary);">${SOA_SYNC_OK}</span> <span style="font-size:0.8em; color:var(--accent-success);">Synced</span>
-                 <span style="color:#666; margin:0 5px;">|</span>
-                 <span style="font-weight:700; color:var(--text-primary);">${SOA_SYNC_FAIL}</span> <span style="font-size:0.8em; color:var(--accent-danger);">Div</span>
+        <div class="card" style="--card-accent: #8b5cf6; cursor:pointer;" onclick="showInfoModal('DNSSEC', 'Validação da cadeia de confiança DNSSEC (RRSIG).')">
+            <div style="font-size:1.5rem; margin-bottom:5px;">🔐</div>
+            <span class="card-label">DNSSEC Status</span>
+            <div style="margin-top:10px; font-size:0.95rem;">
+                 <span style="color:var(--accent-success);">Valid:</span> <strong>${DNSSEC_SUCCESS}</strong> <span style="color:#444">|</span>
+                 <span style="color:var(--accent-danger);">Fail:</span> <strong>${DNSSEC_FAIL}</strong>
             </div>
         </div>
-EOF
-    fi
-
-    cat >> "$TEMP_STATS" << EOF
     </div>
 EOF
 }
@@ -2080,13 +2057,15 @@ assemble_html() {
     if [[ "$mode" == "simple" ]]; then
         target_file="${HTML_FILE%.html}_simple.html"
     fi
-    
-    
-    # Check internet before generation if charts enabled
+
+    # Initialize Target File
+    > "$target_file"
+     
     prepare_chart_resources
     
-    generate_stats_block
-    generate_group_stats_html
+    generate_executive_summary
+    generate_health_map
+    generate_group_stats_html 
     generate_object_summary
     generate_timing_html
     generate_disclaimer_html 
@@ -2094,21 +2073,30 @@ assemble_html() {
     generate_modal_html
     generate_help_html
 
-    # Reset header for simple/full difference (banner)
+    # --- FINAL ASSEMBLY ---
     > "$TEMP_HEADER"
     write_html_header "$mode"
 
     cat "$TEMP_HEADER" >> "$target_file"
     cat "$TEMP_MODAL" >> "$target_file"
+    
+    # 1. Executive Summary
     cat "$TEMP_STATS" >> "$target_file"
     
+    # 2. Health Map
+    cat "$TEMP_HEALTH_MAP" >> "$target_file"
     
+    # 3. Detailed Diagnosis (Matrix)
     if [[ "$mode" == "simple" ]]; then
         cat "$TEMP_MATRIX_SIMPLE" >> "$target_file"
     else
         cat "$TEMP_MATRIX" >> "$target_file"
     fi
     
+    # 4. Services (TCP/DNSSEC) - Generated by generate_object_summary
+    cat "logs/temp_obj_summary_$$.html" >> "$target_file"
+    
+    # Controls
     cat >> "$target_file" << EOF
     <div style="display:flex; justify-content:flex-end; margin-bottom: 20px;">
         <div class="tech-controls">
@@ -2120,26 +2108,31 @@ assemble_html() {
     </div>
 EOF
 
-    if [[ -s "$TEMP_PING" ]]; then
-         if [[ "$ENABLE_CHARTS" == "true" ]]; then
-              cat >> "$target_file" << EOF
-              <!-- Chart Injection for ICMP Section -->
-              <div class="card" style="margin-bottom: 20px; --card-accent: var(--accent-warning); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
-                   <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Detalhe de Latência por Servidor</h3>
-                   <div style="position: relative; height: 300px; width: 100%;">
-                      <canvas id="chartLatencyDetail"></canvas>
-                   </div>
-                   <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
-              </div>
+    # 5. Network & Path Section
+    cat >> "$target_file" << EOF
+    <div style="margin-top: 50px;">
+        <h2>🌐 Rede & Caminho (Path)</h2>
 EOF
-         fi
-
+    # Inject Trace Chart
+    if [[ "$ENABLE_CHARTS" == "true" && -s "$TEMP_TRACE" ]]; then
          cat >> "$target_file" << EOF
-         <details class="section-details" style="margin-top: 30px; border-left: 4px solid var(--accent-warning);">
-              <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
-              <div class="table-responsive" style="padding:15px;">
-              
-              <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
+         <div class="card" style="margin-bottom: 20px; --card-accent: var(--accent-divergent); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
+             <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Topologia de Rede (Hops)</h3>
+             <div style="position: relative; height: 300px; width: 100%;">
+                <canvas id="chartTrace"></canvas>
+             </div>
+             <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
+         </div>
+EOF
+    fi
+
+    # Ping Table
+    if [[ -s "$TEMP_PING" ]]; then
+        cat >> "$target_file" << EOF
+        <details class="section-details" style="margin-bottom: 20px; border-left: 4px solid var(--accent-info);">
+            <summary style="font-size: 1.1rem; font-weight: 600;">📡 Latência e Disponibilidade (ICMP)</summary>
+            <div class="table-responsive" style="padding:15px;">
+                <table><thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Perda (%)</th><th>Latência Média</th></tr></thead><tbody>
 EOF
         if [[ "$mode" == "simple" ]]; then
              cat "$TEMP_PING_SIMPLE" >> "$target_file"
@@ -2149,49 +2142,8 @@ EOF
         echo "</tbody></table></div></details>" >> "$target_file"
     fi
 
-    # SECTION: SECURITY (AXFR, Version, Recursion)
-    if [[ -s "$TEMP_SECURITY" ]]; then
-        # Inject Chart BEFORE the details block? No, inside description or after title.
-        # Ideally inside the details block for clean layout, but standard approach here is appending files.
-        # We can construct the header manually here to inject chart.
-        
-        if [[ "$mode" == "simple" ]]; then
-             cat "$TEMP_SECURITY_SIMPLE" >> "$target_file"
-        else
-             # For Full Mode, TEMP_SECURITY contains the whole block wrapper if generated by generate_security_html?
-             # No, generate_security_html wraps it.
-             # Let's check generate_security_html (It wraps in <details>).
-             # To inject chart inside, we would need to edit generate_security_html.
-             # ALTERNATIVE: Place chart ABOVE the table, but we can't edit the temp file easily now.
-             # BETTER: Place chart ABOVE the details block.
-             if [[ "$ENABLE_CHARTS" == "true" ]]; then
-                 cat >> "$target_file" << EOF
-                 <div class="card" style="margin-top: 20px; --card-accent: var(--accent-danger); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
-                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Gráfico de Conformidade de Segurança</h3>
-                     <div style="position: relative; height: 300px; width: 100%;">
-                        <canvas id="chartSecurity"></canvas>
-                     </div>
-                     <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
-                 </div>
-EOF
-             fi
-             cat "$TEMP_SECURITY" >> "$target_file"
-        fi
-    fi
-
+    # Trace Table
     if [[ -s "$TEMP_TRACE" ]]; then
-         if [[ "$ENABLE_CHARTS" == "true" ]]; then
-             cat >> "$target_file" << EOF
-                 <div class="card" style="margin-top: 20px; --card-accent: var(--accent-divergent); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
-                     <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Topologia de Rede (Hops)</h3>
-                     <div style="position: relative; height: 300px; width: 100%;">
-                        <canvas id="chartTrace"></canvas>
-                     </div>
-                     <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
-                 </div>
-EOF
-         fi
-         
          cat >> "$target_file" << EOF
         <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-divergent);">
              <summary style="font-size: 1.1rem; font-weight: 600;">🛤️ Rota de Rede (Traceroute)</summary>
@@ -2204,30 +2156,51 @@ EOF
         fi
         echo "</div></details>" >> "$target_file"
     fi
+     cat >> "$target_file" << EOF
+    </div>
+EOF
 
-    # SECTION: SERVICES (TCP, DNSSEC) - Moved to generate_object_summary
-    # Content handled by logs/temp_obj_summary_$$.html
+    # 6. Security Posture
+    generate_security_cards >> "$target_file"
     
-    # Mover Resumo da Execução para cá (após os resultados, antes das configs)
-    cat "logs/temp_obj_summary_$$.html" >> "$target_file"
+    # Append Security Details Table (generated in TEMP_SECURITY)
+    if [[ -s "$TEMP_SECURITY" ]]; then
+         # Check if we should inject chart?
+         if [[ "$ENABLE_CHARTS" == "true" ]]; then
+             cat >> "$target_file" << EOF
+             <div class="card" style="margin-top: 20px; --card-accent: var(--accent-danger); cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
+                 <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Gráfico de Conformidade de Segurança</h3>
+                 <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="chartSecurity"></canvas>
+                 </div>
+                 <div style="text-align:center; font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">(Clique para expandir/recolher detalhes)</div>
+             </div>
+EOF
+         fi
+         
+         if [[ "$mode" == "simple" ]]; then
+            cat "$TEMP_SECURITY_SIMPLE" >> "$target_file"
+         else
+            cat "$TEMP_SECURITY" >> "$target_file"
+         fi
+    fi
 
+    # 7. Config & Methodology
+    cat "$TEMP_CONFIG" >> "$target_file"
+    
+    # 8. Help (Reference)
+    cat "logs/temp_help_$$.html" >> "$target_file"
+    
+    # 9. Disclaimer
+    cat "$TEMP_DISCLAIMER" >> "$target_file"
+    
+    # 10. Footer (Timing)
+    cat "$TEMP_TIMING" >> "$target_file"
+    
+    # ADDED: Charts script injection if enabled
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
         generate_charts_script >> "$target_file"
     fi
-
-    cat >> "$target_file" << EOF
-        <div style="display:none;">
-EOF
-    if [[ "$mode" != "simple" ]]; then
-         cat "$TEMP_DETAILS" >> "$target_file"
-    fi
-    echo "</div>" >> "$target_file"
-    cat "$TEMP_CONFIG" >> "$target_file"
-    cat "$TEMP_TIMING" >> "$target_file"
-    cat "logs/temp_help_$$.html" >> "$target_file"
-
-
-    cat "$TEMP_DISCLAIMER" >> "$target_file"
 
     cat >> "$target_file" << EOF
         <footer>
@@ -2241,7 +2214,6 @@ EOF
 </body>
 </html>
 EOF
-    # Clean up handled by trap
 }
 
 generate_security_html() {
@@ -2251,7 +2223,7 @@ generate_security_html() {
         sec_content=$(cat "$TEMP_SEC_ROWS")
         
         # Simple Mode
-        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
             cat >> "$TEMP_SECURITY_SIMPLE" << EOF
             <details class="section-details" style="margin-top: 20px; border-left: 4px solid var(--accent-danger);">
                  <summary style="font-size: 1.1rem; font-weight: 600;">🛡️ Análise de Segurança & Riscos</summary>
@@ -2362,7 +2334,7 @@ run_security_diagnostics() {
             rm -f "$tfile_ver"
             log_cmd_result "VERSION CHECK $ip" "$v_cmd" "$v_out" "0"
             
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 local safe_v_out=$(echo "$v_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                 echo "<div id=\"${ver_id}_content\" style=\"display:none\"><pre>$safe_v_out</pre></div>" >> "$TEMP_DETAILS"
                 echo "<div id=\"${ver_id}_title\" style=\"display:none\">Version Check | $ip</div>" >> "$TEMP_DETAILS"
@@ -2416,7 +2388,7 @@ run_security_diagnostics() {
             rm -f "$tfile_axfr"
             log_cmd_result "AXFR CHECK $ip ($target_axfr)" "$axfr_cmd" "${axfr_out:0:500}..." "0"
             
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 local safe_axfr_out=$(echo "$axfr_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                 echo "<div id=\"${axfr_id}_content\" style=\"display:none\"><pre>$safe_axfr_out</pre></div>" >> "$TEMP_DETAILS"
                 echo "<div id=\"${axfr_id}_title\" style=\"display:none\">AXFR Check | $ip ($target_axfr)</div>" >> "$TEMP_DETAILS"
@@ -2481,7 +2453,7 @@ run_security_diagnostics() {
             rm -f "$tfile_rec"
             log_cmd_result "RECURSION CHECK $ip" "$rec_cmd" "$rec_out" "0"
 
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 local safe_rec_out=$(echo "$rec_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                 echo "<div id=\"${rec_id}_content\" style=\"display:none\"><pre>$safe_rec_out</pre></div>" >> "$TEMP_DETAILS"
                 echo "<div id=\"${rec_id}_title\" style=\"display:none\">Recursion Check | $ip</div>" >> "$TEMP_DETAILS"
@@ -2532,7 +2504,7 @@ run_security_diagnostics() {
         # Add Row
         echo "<tr><td><strong>$ip</strong></td><td>$html_ver</td><td>$html_axfr</td><td>$html_rec</td></tr>" >> "$TEMP_SEC_ROWS" 
         
-        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
             # Clean string values for JSON
             local j_ver=$(echo "$v_res" | sed 's/"/\\"/g')
             local j_axfr=$(echo "$axfr_res" | sed 's/"/\\"/g')
@@ -2638,17 +2610,17 @@ run_ping_diagnostics() {
         else status_html="✅ UP"; class_html="status-ok"; console_res="${GREEN}${rtt_fmt}${NC}"; fi
         
         echo -e "$console_res"
-        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_fmt}</td></tr>" >> "$TEMP_PING"
             local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
             echo "<tr><td colspan=\"5\" style=\"padding:0; border:none;\"><details style=\"margin:5px;\"><summary style=\"font-size:0.8em; color:#888;\">Ver output ping #$ping_id</summary><pre>$safe_output</pre></details></td></tr>" >> "$TEMP_PING"
         fi
 
-        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td class=\"$class_html\">$status_html</td><td>${loss}%</td><td>${rtt_fmt}</td></tr>" >> "$TEMP_PING_SIMPLE"
         fi
         
-        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
             # Clean RTT for JSON (remove 'ms' if exists, though awk above likely kept it pure numbers or N/A)
             # JSON format: { "ip": "...", "groups": "...", "status": "...", "loss_percent": ..., "rtt_avg_ms": ... },
             # We handle the trailing comma later or use a list join strategy
@@ -2686,10 +2658,10 @@ run_trace_diagnostics() {
         done
     done
 
-    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
         echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE"
     fi
-    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
         echo "<table><thead><tr><th>Grupo</th><th>Servidor</th><th>Hops</th><th>Caminho (Resumo)</th></tr></thead><tbody>" >> "$TEMP_TRACE_SIMPLE"
     fi
 
@@ -2778,7 +2750,7 @@ run_trace_diagnostics() {
             last_hop_plain="Stopped: $last_hop_clean"
         fi
         
-        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
             local clean_ip=${ip//./_}
             local trace_id="trace_${clean_ip}"
             local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
@@ -2793,11 +2765,11 @@ run_trace_diagnostics() {
             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td><a href='#' $click_handler style='color:inherit; text-decoration:underline;'>${hops}</a></td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop_html</span></td></tr>" >> "$TEMP_TRACE"
         fi
 
-        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
             echo "<tr><td><span class=\"badge\">$groups_str</span></td><td><strong>$ip</strong></td><td>${hops}</td><td><span style=\"font-size:0.85em; color:#888;\">$last_hop_html</span></td></tr>" >> "$TEMP_TRACE_SIMPLE"
         fi
         
-        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
             # Clean output for JSON string to avoid breaking json
             local j_out=$(echo "$output" | tr '"' "'" | tr '\n' ' ' | sed 's/\\/\\\\/g')
             local j_hops="$hops" # string or number
@@ -2808,7 +2780,7 @@ run_trace_diagnostics() {
     done
     echo "</tbody></table>" >> "$TEMP_TRACE"
 
-    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
         echo "</tbody></table>" >> "$TEMP_TRACE_SIMPLE"
     fi
 }
@@ -2841,10 +2813,10 @@ process_tests() {
         
         # Reset Domain Stats
         local d_total=0; local d_ok=0; local d_warn=0; local d_fail=0; local d_div=0
-        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
             > "$TEMP_DOMAIN_BODY"
         fi
-        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
             > "$TEMP_DOMAIN_BODY_SIMPLE"
         fi
 
@@ -2862,24 +2834,24 @@ process_tests() {
             
             # Reset Group Stats
             local g_total=0; local g_ok=0; local g_warn=0; local g_fail=0; local g_div=0
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 > "$TEMP_GROUP_BODY"
                 echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:20%\">Alvo</th><th style=\"width:10%\">Tipo</th>" >> "$TEMP_GROUP_BODY"
             fi
-            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                 > "$TEMP_GROUP_BODY_SIMPLE"
                 echo "<div class=\"table-responsive\"><table><thead><tr><th style=\"width:20%\">Alvo</th><th style=\"width:10%\">Tipo</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
             for srv in "${srv_list[@]}"; do 
-                [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
-                if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY"
+                if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                     echo "<th>$srv</th>" >> "$TEMP_GROUP_BODY_SIMPLE"
                 fi
             done
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY"
             fi
-            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                 echo "</tr></thead><tbody>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
             
@@ -2906,7 +2878,7 @@ process_tests() {
                              local out_tcp=$(dig $opts_tcp @$srv $target A 2>&1)
                              log_cmd_result "TCP CHECK $srv -> $target" "dig $opts_tcp @$srv $target A" "$out_tcp" "0"
                              
-                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                             if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                                  local safe_tcp=$(echo "$out_tcp" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                                  echo "<div id=\"${tcp_id}_content\" style=\"display:none\"><pre>$safe_tcp</pre></div>" >> "$TEMP_DETAILS"
                                  echo "<div id=\"${tcp_id}_title\" style=\"display:none\">TCP Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
@@ -2936,7 +2908,7 @@ process_tests() {
                              local out_sec=$(dig $opts_sec @$srv $target A 2>&1)
                              log_cmd_result "DNSSEC CHECK $srv -> $target" "dig $opts_sec @$srv $target A" "$out_sec" "0"
                              
-                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                             if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                                  local safe_sec=$(echo "$out_sec" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                                  echo "<div id=\"${sec_id}_content\" style=\"display:none\"><pre>$safe_sec</pre></div>" >> "$TEMP_DETAILS"
                                  echo "<div id=\"${sec_id}_title\" style=\"display:none\">DNSSEC Check | $srv &rarr; $target</div>" >> "$TEMP_DETAILS"
@@ -2965,8 +2937,8 @@ process_tests() {
                         
                         # Write to Matrix Log
                         if [[ "$ENABLE_TCP_CHECK" == "true" || "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-                             [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_$$.html"
-                             [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_services_simple_$$.html"
+                             [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_svc_table_$$.html"
+                             [[ "$ENABLE_SIMPLE_REPORT" == "true" ]] && echo "<tr><td><strong>$target</strong> ($mode)</td><td>$grp / $srv</td><td>$tcp_res</td><td>$sec_res</td></tr>" >> "logs/temp_services_simple_$$.html"
                         fi
                     done
 
@@ -2980,8 +2952,8 @@ process_tests() {
                              row_start="<td rowspan=\"$rec_count\" style=\"vertical-align:middle; background:var(--bg-secondary); border-right:1px solid var(--border-color);\"><strong>$target</strong></td>"
                         fi
                         
-                        [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr>$row_start<td><span style=\"color:var(--text-secondary); font-weight:bold;\">$rec</span></td>" >> "$TEMP_GROUP_BODY"
-                        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                        [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo "<tr>$row_start<td><span style=\"color:var(--text-secondary); font-weight:bold;\">$rec</span></td>" >> "$TEMP_GROUP_BODY"
+                        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                             echo "<tr>$row_start<td><span style=\"color:var(--text-secondary); font-weight:bold;\">$rec</span></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
                         fi
                         
@@ -3123,7 +3095,7 @@ process_tests() {
 
 
                             
-                            if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+                            if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
                                 local j_tcp_status="skipped"
                                 if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
                                     if [[ "${CACHE_TCP_BADGE[$srv]}" == *"fail"* ]]; then j_tcp_status="FAIL"; else j_tcp_status="OK"; fi
@@ -3218,7 +3190,7 @@ process_tests() {
                                   fi
                              fi
 
-                             if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                             if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                                 # Make Latency Clickable (Conditional "ms")
                                 local lat_display=""
                                 if [[ -n "${RES_DUR[$srv]}" ]]; then
@@ -3234,7 +3206,7 @@ process_tests() {
                                 echo "<div id=\"${RES_UNIQUE_ID[$srv]}_title\" style=\"display:none\">#$test_id ${RES_FINAL_STATUS[$srv]} | $srv &rarr; $target ($rec)</div>" >> "$TEMP_DETAILS"
                              fi
                              
-                             if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                             if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                                 local simple_lat=""
                                 [[ -n "${RES_DUR[$srv]}" ]] && simple_lat="<span class=\"time-val\" style='margin-left:4px'>${RES_DUR[$srv]}ms</span>"
                                 echo "<td><div class=\"status-cell ${RES_FINAL_CLASS[$srv]}\">${RES_ICON[$srv]} ${RES_FINAL_STATUS[$srv]} ${RES_BADGE[$srv]} <div style='margin-top:2px;'>$s_badges $simple_lat</div></div></td>" >> "$TEMP_GROUP_BODY_SIMPLE"
@@ -3242,28 +3214,28 @@ process_tests() {
                         done
                         
                         if [[ "$soa_divergence_detected" == "true" ]]; then
-                                  [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "<tr><td colspan='$(( ${#srv_list[@]} + 2 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
-                                  if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                                  [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo "<tr><td colspan='$(( ${#srv_list[@]} + 2 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY"
+                                  if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                                       echo "<tr><td colspan='$(( ${#srv_list[@]} + 2 ))' style='background:rgba(239, 68, 68, 0.1); color:var(--accent-warning); font-weight:bold; text-align:center;'>⚠️ SOA Serial Divergence Detected: ${unique_serials[@]}</td></tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                                   fi
                         fi
 
                         
 
-                        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+                        if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                             echo "</tr>" >> "$TEMP_GROUP_BODY"
                         fi
-                        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+                        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                             echo "</tr>" >> "$TEMP_GROUP_BODY_SIMPLE"
                         fi
                     done
                 done
             done
             # Close table AFTER all modes and targets are done
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY"
             fi
-            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                 echo "</tbody></table></div>" >> "$TEMP_GROUP_BODY_SIMPLE"
             fi
 
@@ -3278,13 +3250,13 @@ process_tests() {
             [[ $g_div -gt 0 ]] && g_stats_html+="<span class=\"st-div\">🔀 $g_div</span>"
             g_stats_html+="</span>"
 
-            if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
                 echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY"
                 cat "$TEMP_GROUP_BODY" >> "$TEMP_DOMAIN_BODY"
                 echo "</details>" >> "$TEMP_DOMAIN_BODY"
             fi
 
-            if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+            if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
                 echo "<details class=\"group-level\"><summary>📂 Grupo: $grp $g_stats_html</summary>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
                 cat "$TEMP_GROUP_BODY_SIMPLE" >> "$TEMP_DOMAIN_BODY_SIMPLE"
                 echo "</details>" >> "$TEMP_DOMAIN_BODY_SIMPLE"
@@ -3301,20 +3273,20 @@ process_tests() {
         [[ $d_div -gt 0 ]] && d_stats_html+="<span class=\"st-div\">🔀 $d_div</span>"
         d_stats_html+="</span>"
 
-        if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
             echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX"
             cat "$TEMP_DOMAIN_BODY" >> "$TEMP_MATRIX"
             echo "</details>" >> "$TEMP_MATRIX"
         fi
 
-        if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
             echo "<details class=\"domain-level\"><summary>🌐 $domain $d_stats_html <span style=\"font-size:0.8em; color:var(--text-secondary); margin-left:10px;\">[Recs: $record_types]</span> <span class=\"badge\" style=\"margin-left:auto\">$test_types</span></summary>" >> "$TEMP_MATRIX_SIMPLE"
             cat "$TEMP_DOMAIN_BODY_SIMPLE" >> "$TEMP_MATRIX_SIMPLE"
             echo "</details>" >> "$TEMP_MATRIX_SIMPLE"
         fi
         
         # JSON Domain Summary
-        if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+        if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
              echo "{ \"domain\": \"$domain\", \"tests_total\": $d_total, \"tests_ok\": $d_ok, \"tests_warn\": $d_warn, \"tests_fail\": $d_fail, \"tests_div\": $d_div, \"final_state\": \"$( [[ $d_fail -gt 0 ]] && echo 'FAIL' || { [[ $d_warn -gt 0 || $d_div -gt 0 ]] && echo 'WARN' || echo 'OK'; } )\" }," >> "$TEMP_JSON_DOMAINS"
         fi
         
@@ -3322,7 +3294,7 @@ process_tests() {
     done < "$FILE_DOMAINS"
     
     rm -f "$TEMP_DOMAIN_BODY" "$TEMP_GROUP_BODY"
-    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
         rm -f "$TEMP_DOMAIN_BODY_SIMPLE" "$TEMP_GROUP_BODY_SIMPLE"
     fi
     
@@ -3334,7 +3306,7 @@ process_tests() {
 }
 
 assemble_json() {
-    [[ "$GENERATE_JSON_REPORT" != "true" ]] && return
+    [[ "$ENABLE_JSON_REPORT" != "true" ]] && return
     
     local JSON_FILE="${HTML_FILE%.html}.json"
     
@@ -3528,7 +3500,7 @@ print_final_terminal_summary() {
     echo -e "${BLUE}======================================================${NC}"
 
     # Log to File (Strip ANSI codes)
-    if [[ "$GENERATE_LOG_TEXT" == "true" ]]; then
+    if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
          {
              echo ""
              echo "======================================================"
@@ -3569,31 +3541,36 @@ print_final_terminal_summary() {
     fi
 }
 
+resolve_configuration() {
+    # 1. Resolve Strict Report Logic
+    if [[ "$ENABLE_FULL_REPORT" == "false" && "$ENABLE_SIMPLE_REPORT" == "false" && "$ENABLE_JSON_REPORT" == "false" ]]; then
+        [[ "$INTERACTIVE_MODE" == "false" && "$VERBOSE" == "true" ]] && echo "Info: Nenhum formato selecionado. Gerando HTML Detalhado (Padrão)."
+        ENABLE_FULL_REPORT="true"
+    fi
+
+    # 2. Validation
+    [[ ! "$TIMEOUT" =~ ^[0-9]+$ ]] && TIMEOUT=4
+    [[ ! "$CONSISTENCY_CHECKS" =~ ^[0-9]+$ ]] && CONSISTENCY_CHECKS=3
+}
+
 main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "logs/temp_chart_$$.js" 2>/dev/null' EXIT
-
-    # Initialize Flags based on Config
-    GENERATE_FULL_REPORT="${ENABLE_FULL_REPORT:-true}"
-    GENERATE_SIMPLE_REPORT="${ENABLE_SIMPLE_REPORT:-false}"
-    # JSON Default comes from config file now (GENERATE_JSON_REPORT)
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_$$.html" "logs/temp_obj_summary_$$.html" "logs/temp_svc_table_$$.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_$$.html" "logs/temp_group_body_simple_$$.html" "logs/temp_security_$$.html" "logs/temp_security_simple_$$.html" "logs/temp_sec_rows_$$.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "logs/temp_chart_$$.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhyjstdxrTVZ" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
         g) FILE_GROUPS=$OPTARG ;; 
-        l) GENERATE_LOG_TEXT="true" ;; 
+        l) ENABLE_LOG_TEXT="true" ;; 
         y) INTERACTIVE_MODE="false" ;; 
         s) 
-            GENERATE_SIMPLE_REPORT="true" 
-            # Per user request: If -s is chosen, disable default full report
-            GENERATE_FULL_REPORT="false"
+            ENABLE_SIMPLE_REPORT="true" 
+            ENABLE_FULL_REPORT="false"
             ;; 
         j) 
-            GENERATE_JSON_REPORT="true" 
-            # Per user request: If -j is chosen, disable default full report
-            GENERATE_FULL_REPORT="false"
+            ENABLE_JSON_REPORT="true" 
+            ENABLE_FULL_REPORT="false"
             ;;
         t) ENABLE_TCP_CHECK="true" ;;
         d) ENABLE_DNSSEC_CHECK="true" ;;
@@ -3606,52 +3583,47 @@ main() {
         *) echo "Opção inválida"; exit 1 ;; 
     esac; done
 
-    # Fallback Logic: If everything is False, Default to Full
-    if [[ "$GENERATE_FULL_REPORT" == "false" && "$GENERATE_SIMPLE_REPORT" == "false" && "$GENERATE_JSON_REPORT" == "false" ]]; then
-        # Check if it was because of user CLI or Config?
-        # User requirement: "caso o usuário deixe as três opções [...] como false ... gera o html detalhado"
-        # This covers that.
-        [[ "$INTERACTIVE_MODE" == "false" ]] && echo "Info: Nenhum formato selecionado. Gerando HTML Detalhado (Padrão)."
-        GENERATE_FULL_REPORT="true"
-    fi
-
     if ! command -v dig &> /dev/null; then echo "Erro: 'dig' nao encontrado."; exit 1; fi
     if ! command -v timeout &> /dev/null; then echo "Erro: 'timeout' nao encontrado (necessario para checks)."; exit 1; fi
     if [[ "$ENABLE_PING" == "true" ]] && ! command -v ping &> /dev/null; then echo "Erro: 'ping' nao encontrado (necessario para -t/Ping)."; exit 1; fi
     if [[ "$ENABLE_TRACE_CHECK" == "true" ]] && ! command -v traceroute &> /dev/null; then echo "Erro: 'traceroute' nao encontrado (necessario para -T)."; exit 1; fi
+    
     init_log_file
     validate_csv_files
+    
     interactive_configuration
+    
+    resolve_configuration
     
     # Capture initial preference for charts logic
     INITIAL_ENABLE_CHARTS="$ENABLE_CHARTS"
     
     [[ "$INTERACTIVE_MODE" == "false" ]] && print_execution_summary
+    
     init_html_parts; write_html_header; load_dns_groups; process_tests; run_ping_diagnostics; run_trace_diagnostics; run_security_diagnostics
 
     END_TIME_EPOCH=$(date +%s); END_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S"); TOTAL_DURATION=$((END_TIME_EPOCH - START_TIME_EPOCH))
     
-    # Format Sleep Time (2 decimals, ensure dot)
     if [[ -z "$TOTAL_SLEEP_TIME" ]]; then TOTAL_SLEEP_TIME=0; fi
     TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {printf \"%.2f\", $TOTAL_SLEEP_TIME}")
 
-    if [[ "$GENERATE_FULL_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_FULL_REPORT" == "true" ]]; then
         assemble_html "full"
     fi
     
-    if [[ "$GENERATE_SIMPLE_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_SIMPLE_REPORT" == "true" ]]; then
         assemble_html "simple"
     fi
     
-    if [[ "$GENERATE_JSON_REPORT" == "true" ]]; then
+    if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
         assemble_json
     fi
 
-    [[ "$GENERATE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
+    [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Execution finished" >> "$LOG_FILE_TEXT"
     print_final_terminal_summary
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
-    [[ "$GENERATE_FULL_REPORT" == "true" ]] && echo "Relatório Completo: $HTML_FILE"
-    [[ "$GENERATE_SIMPLE_REPORT" == "true" ]] && echo "Relatório Simplificado: ${HTML_FILE%.html}_simple.html"
+    [[ "$ENABLE_FULL_REPORT" == "true" ]] && echo "Relatório Completo: $HTML_FILE"
+    [[ "$ENABLE_SIMPLE_REPORT" == "true" ]] && echo "Relatório Simplificado: ${HTML_FILE%.html}_simple.html"
 }
 
 main "$@"

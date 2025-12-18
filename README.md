@@ -10,8 +10,9 @@ Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar tecnicam
 
 * **Verificação de Consistência:** Por que testar uma vez se você pode testar 10? O script repete as queries para garantir que o resultado é estável (pega DNS fazendo Load Balance com dados desatualizados).
 * **Critérios de Divergência (Strict Mode):** Você define o que é erro. Mudança de IP no Round-Robin deve alarmar? Ordem dos registros importa? TTL mudando é problema? Você decide.
-* **HTML Dashboard:** Gera um relatório visual com matriz de falhas, tempos de resposta, **resumos de TCP/DNSSEC**, inventário de execução e o **manual de ajuda completo embutido**.
+* **HTML Dashboard:** Gera um relatório visual moderno com **Resumo Executivo**, **Mapa de Saúde DNS**, matriz de falhas, e gráficos interativos de latência e topologia.
 * **Security & Risk Scan:** Verifica vulnerabilidades comuns como **Transferência de Zona (AXFR)** permitida, **Recursão Aberta**, **Sincronismo SOA** (Serial) e vazamento de versão do BIND.
+* **Health Map:** Tabela de calor que identifica rapidamente grupos ou servidores com problemas de performance ou falhas.
 * **Testes de Serviço (Features):** Valida se o servidor suporta **TCP** (RFC 7766) e se responde com validação **DNSSEC** (RRSIG/AD), com contadores de sucesso/falha no terminal e HTML.
 * **Validação de Conectividade:** Testa a porta 53 (TCP/UDP) antes de tentar o DNS. Se a porta estiver fechada, ele nem perde tempo tentando resolver (Smart Error Logging).
 * **Latência (ICMP):** Roda testes de ping contra os servidores DNS para saber se o problema é resolução ou se o link caiu mesmo.
@@ -129,13 +130,13 @@ AD_INTERNO;Active Directory Corp;mixed;1;192.168.10.5,192.168.10.6
  # Relatórios
  ENABLE_FULL_REPORT="true"    # Gera relatório HTML Detalhado (Padrão: true)
  ENABLE_SIMPLE_REPORT="false" # Gera relatório HTML Simplificado (Padrão: false)
- GENERATE_JSON_REPORT="false" # Gera relatório JSON (Padrão: false)
+ ENABLE_JSON_REPORT="false"   # Gera relatório JSON (Padrão: false)
  
  # Comportamento
  VALIDATE_CONNECTIVITY="true" # Testa porta 53 antes do dig
  ONLY_TEST_ACTIVE_GROUPS="true" # Otimização: Testar apenas IPs usados
  VERBOSE="false"              # Logs detalhados no terminal
- GENERATE_LOG_TEXT="false"    # Gera log .log além do HTML
+ ENABLE_LOG_TEXT="false"    # Gera log .log além do HTML
  TIMEOUT=4                    # Timeout global
  LOG_PREFIX="dnsdiag"         # Prefixo dos arquivos de log
  PING_PACKET_LOSS_LIMIT=5     # % - Tolerância de perda de pacotes
