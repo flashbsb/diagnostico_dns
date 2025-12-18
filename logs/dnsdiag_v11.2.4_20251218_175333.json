@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "script_version": "11.2.4",
+    "timestamp_start": "18/12/2025 17:53:33",
+    "timestamp_end": "18/12/2025 17:53:46",
+    "duration_seconds": 13,
+    "user": "flashbsb",
+    "hostname": "debian02"
+  },
+  "config": {
+    "domains_file": "quick_domains.csv",
+    "groups_file": "quick_groups.csv",
+    "timeout": 4,
+    "consistency_checks": 3,
+    "strict_mode": {
+      "ip": false,
+      "order": false,
+      "ttl": true
+    }
+  },
+  "statistics": {
+    "general": {
+    "domains": ,
+    "groups": ,
+    "unique_servers": ,
+    "total_queries": 3,
+    "total_tests": 1,
+    "success_rate": ,
+    "latency_avg_ms": "",
+    "success": 0,
+    "warnings": 0,
+    "failures": 0,
+    "divergences": 1,
+    "tcp_checks": { "ok": 2, "fail": 0 },
+    "dnssec_checks": { "ok": 0, "absent": 2, "fail": 0 },
+    "total_sleep_seconds": 0.02,
+    "total_pings_sent": 3,
+    "soa_sync": { "ok": 0, "fail": 0 },
+    "counters": {
+      "noerror": 3,
+      "nxdomain": 0,
+      "servfail": 0,
+      "refused": 0,
+      "timeout": 0,
+      "noanswer": 0,
+      "network_error": 0
+    }
+    },
+    "per_record_type": {  },
+    "per_group": {  }
+  },
+  "domain_status": [
+    { "domain": "google.com", "tests_total": 1, "tests_ok": 0, "tests_warn": 0, "tests_fail": 0, "tests_div": 1, "final_state": "WARN" }
+  ],
+  "results": [
+    { "domain": "google.com", "group": "QUICK", "server": "8.8.8.8", "record": "a", "mode": "recursive", "status": "DIV", "latency_ms": 77, "consistent": "1/3", "divergent": true, "tcp_check": "OK", "dnssec_check": "UNSIGNED", "soa_serial": null }
+  ],
+  "ping_results": [
+    { "ip": "8.8.8.8", "groups": "[QUICK]", "status": "UP", "loss_percent": "0", "rtt_avg_ms": "24.239", "rtt_min_ms": 23.315, "rtt_max_ms": 24.854, "rtt_mdev_ms": 0.665 }
+  ],
+  "traceroute_results": [
+    { "ip": "8.8.8.8", "groups": "[QUICK]", "hops": 7, "last_hop": "Stopped: Timeout (* * *)" }
+  ],
+  "security_scan": {
+    "summary": {
+       "privacy_hidden": 1, "privacy_revealed": 0,
+       "axfr_denied": 1, "axfr_allowed": 0,
+       "recursion_closed": 0, "recursion_open": 1
+    },
+    "details": [
+      { "ip": "8.8.8.8", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" }
+    ]
+  }
+}

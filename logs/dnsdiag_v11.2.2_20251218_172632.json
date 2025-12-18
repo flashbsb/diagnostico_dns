@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "script_version": "11.2.2",
+    "timestamp_start": "18/12/2025 17:26:32",
+    "timestamp_end": "18/12/2025 17:31:54",
+    "duration_seconds": 322,
+    "user": "flashbsb",
+    "hostname": "debian02"
+  },
+  "config": {
+    "domains_file": "domains_tests.csv",
+    "groups_file": "dns_groups.csv",
+    "timeout": 4,
+    "consistency_checks": 3,
+    "strict_mode": {
+      "ip": false,
+      "order": false,
+      "ttl": true
+    }
+  },
+  "statistics": {
+    "general": {
+    "domains": ,
+    "groups": ,
+    "unique_servers": ,
+    "total_queries": 261,
+    "total_tests": 87,
+    "success_rate": ,
+    "latency_avg_ms": "",
+    "success": 1,
+    "warnings": 9,
+    "failures": 0,
+    "divergences": 77,
+    "tcp_checks": { "ok": 42, "fail": 0 },
+    "dnssec_checks": { "ok": 46, "absent": 52, "fail": 0 },
+    "total_sleep_seconds": 1.74,
+    "total_pings_sent": 63,
+    "soa_sync": { "ok": 6, "fail": 0 },
+    "counters": {
+      "noerror": 198,
+      "nxdomain": 12,
+      "servfail": 0,
+      "refused": 0,
+      "timeout": 0,
+      "noanswer": 51,
+      "network_error": 0
+    }
+    },
+    "per_record_type": {  },
+    "per_group": {  }
+  },
+  "domain_status": [
+    
+  ],
+  "results": [
+    
+  ],
+  "ping_results": [
+    { "ip": "202.12.27.33", "groups": "[ROOT_SERVERS]", "status": "UP", "loss_percent": "0", "rtt_avg_ms": "31.194", "rtt_min_ms": 29.682, "rtt_max_ms": 32.140, "rtt_mdev_ms": 1.080 },
+{ "ip": "9.9.9.9", "groups": "[QUAD9]", "status": "UP", "loss_percent": "0", "rtt_avg_ms": "13.003", "rtt_min_ms": 10.529, "rtt_max_ms": 17.236, "rtt_mdev_ms": 3.006 },
+{ "ip": "149.112.112.112", "groups": "[QUAD9]", "status": "UP", "loss_percent": "0", "rtt_avg_ms": "12.865", "rtt_min_ms": 10.838, "rtt_max_ms": 16.351, "rtt_mdev_ms": 2.475 },
+{ "ip": "1.1.1.1", "groups": "[CLOUDFLARE]", "status": "UP", "loss_percent": "0", "rtt_avg_ms": "27.444", "rtt_min_ms": 26.042, "rtt_max_ms": 28.280, "rtt_mdev_ms": 0.997 },
+{ "ip": "1.0.0.1", "groups": "[CLOUDFLARE]", "status": "UP", "loss_percent": "0", "rtt_avg_ms": "26.001", "rtt_min_ms": 25.369, "rtt_max_ms": 26.463, "rtt_mdev_ms": 0.462 }
+  ],
+  "traceroute_results": [
+    { "ip": "8.8.8.8", "groups": "[GOOGLE]", "hops": 7, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "8.8.4.4", "groups": "[GOOGLE]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "208.67.222.222", "groups": "[OPENDNS]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "208.67.220.220", "groups": "[OPENDNS]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "198.41.0.4", "groups": "[ROOT_SERVERS]", "hops": 12, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "199.9.14.201", "groups": "[ROOT_SERVERS]", "hops": 12, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "192.33.4.12", "groups": "[ROOT_SERVERS]", "hops": 9, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "199.7.91.13", "groups": "[ROOT_SERVERS]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "192.203.230.10", "groups": "[ROOT_SERVERS]", "hops": 10, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "192.5.5.241", "groups": "[ROOT_SERVERS]", "hops": 9, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "192.112.36.4", "groups": "[ROOT_SERVERS]", "hops": 9, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "198.97.190.53", "groups": "[ROOT_SERVERS]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "192.36.148.17", "groups": "[ROOT_SERVERS]", "hops": 13, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "192.58.128.30", "groups": "[ROOT_SERVERS]", "hops": 12, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "193.0.14.129", "groups": "[ROOT_SERVERS]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "199.7.83.42", "groups": "[ROOT_SERVERS]", "hops": 13, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "202.12.27.33", "groups": "[ROOT_SERVERS]", "hops": 12, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "9.9.9.9", "groups": "[QUAD9]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "149.112.112.112", "groups": "[QUAD9]", "hops": 8, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "1.1.1.1", "groups": "[CLOUDFLARE]", "hops": 9, "last_hop": "Stopped: Timeout (* * *)" },
+{ "ip": "1.0.0.1", "groups": "[CLOUDFLARE]", "hops": 10, "last_hop": "Stopped: Timeout (* * *)" }
+  ],
+  "security_scan": {
+    "summary": {
+       "privacy_hidden": 7, "privacy_revealed": 14,
+       "axfr_denied": 21, "axfr_allowed": 0,
+       "recursion_closed": 13, "recursion_open": 8
+    },
+    "details": [
+      { "ip": "8.8.8.8", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "8.8.4.4", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "208.67.222.222", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "208.67.220.220", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "198.41.0.4", "version_check": "REVEALED: ATLAS...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "199.9.14.201", "version_check": "REVEALED: knot 3.x...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "192.33.4.12", "version_check": "REVEALED: c-root...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "199.7.91.13", "version_check": "REVEALED: NSD 4...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "192.203.230.10", "version_check": "REVEALED: 2025.12.0...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "192.5.5.241", "version_check": "REVEALED: 2025.12.0...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "192.112.36.4", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "198.97.190.53", "version_check": "REVEALED: NSD 4.x...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "192.36.148.17", "version_check": "REVEALED: contact info@ne...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "192.58.128.30", "version_check": "REVEALED: NSD...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "193.0.14.129", "version_check": "REVEALED: Knot DNS...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "199.7.83.42", "version_check": "REVEALED: NSD 4...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "202.12.27.33", "version_check": "REVEALED: 9.16...", "axfr_check": "DENIED (OK)", "recursion_check": "DISABLED (OK)" },
+{ "ip": "9.9.9.9", "version_check": "REVEALED: Q9-P-7.6...", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "149.112.112.112", "version_check": "REVEALED: Q9-P-7.6...", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "1.1.1.1", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" },
+{ "ip": "1.0.0.1", "version_check": "HIDDEN (OK)", "axfr_check": "DENIED (OK)", "recursion_check": "OPEN (RISK)" }
+    ]
+  }
+}
