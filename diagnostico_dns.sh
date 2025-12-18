@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.2.1
-# "Hotfix: Restoration"
+# Versão: 11.2.2
+# "Final Polish"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.2.1"
+SCRIPT_VERSION="11.2.2"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -185,6 +185,8 @@ print_help_text() {
     echo -e "  ${GREEN}-g <arquivo>${NC}   Define arquivo CSV de grupos DNS (Padrão: ${GRAY}dns_groups.csv${NC})"
     echo -e "  ${GREEN}-l${NC}            Habilita geração de log em texto (.log)."
     echo -e "  ${GREEN}-y${NC}            Bypassa o menu interativo (Non-interactive/Batch execution)."
+    echo -e "  ${GREEN}-v${NC}            Aumenta Verbose (Nível 2: Logs CMD). Use -vv para Nível 3 (Debug total)."
+    echo -e "  ${GREEN}-q${NC}            Modo Quieto (Nível 0: Apenas progresso)."
     echo -e ""
     echo -e "  ${GREEN}-j${NC}            Gera saída em JSON estruturado (.json)."
     echo -e "  ${GRAY}Nota: O relatório HTML Detalhado é gerado por padrão.${NC}"
@@ -728,7 +730,7 @@ validate_csv_files() {
          # Extract line number and servers column using awk
          while IFS= read -r line_info; do
              local ln=$(echo "$line_info" | awk '{print $1}')
-             local servers=$(echo "$line_info" | cut -d' ' -f2-)
+             local servers=$(echo "$line_info" | cut -d' ' -f2- | tr -d '\r')
              
              # Split servers by comma
              IFS=',' read -ra ADDR <<< "$servers"
@@ -737,11 +739,24 @@ validate_csv_files() {
                  ip=$(echo "$ip" | xargs)
                  if [[ -z "$ip" ]]; then continue; fi
 
-                 # Simple IPv4 Regex
-                 if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] && [[ ! "$ip" =~ : ]]; then
-                      echo -e "${RED}ERRO EM '$FILE_GROUPS' (Linha $ln):${NC} IP Inválido detectado: '$ip'"
-                      error_count=$((error_count+1))
+                 # Check 1: IPv4 Regex
+                 if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+                     continue
                  fi
+                 
+                 # Check 2: IPv6 (Simple check for colon)
+                 if [[ "$ip" =~ : ]]; then
+                     continue
+                 fi
+                 
+                 # Check 3: Hostname/FQDN (Alphanumeric, dots, hyphens)
+                 if [[ "$ip" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+                     continue
+                 fi
+                 
+                 # If we reached here, it's invalid
+                 echo -e "${RED}ERRO EM '$FILE_GROUPS' (Linha $ln):${NC} IP/Host Inválido detectado: '$ip'"
+                 error_count=$((error_count+1))
                  # (IPv6 detection is loose here [contains :], but better than nothing for now)
              done
          done < <(awk -F';' '!/^#/ && !/^$/ {print NR, $5}' "$FILE_GROUPS")
@@ -2337,7 +2352,7 @@ load_dns_groups() {
     [[ ! -f "$FILE_GROUPS" ]] && { echo -e "${RED}ERRO: $FILE_GROUPS não encontrado!${NC}"; exit 1; }
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
-        name=$(echo "$name" | xargs); servers=$(echo "$servers" | tr -d '[:space:]')
+        name=$(echo "$name" | xargs); servers=$(echo "$servers" | tr -d '[:space:]\r')
         [[ -z "$timeout" ]] && timeout=$TIMEOUT
         IFS=',' read -ra srv_arr <<< "$servers"
         DNS_GROUPS["$name"]="${srv_arr[@]}"; DNS_GROUP_DESC["$name"]="$desc"; DNS_GROUP_TYPE["$name"]="$type"; DNS_GROUP_TIMEOUT["$name"]="$timeout"

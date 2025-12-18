@@ -18,6 +18,8 @@ Ideal para engenheiros de rede, sysadmins e pessoas que precisam provar tecnicam
 * **Latência (ICMP):** Roda testes de ping contra os servidores DNS para saber se o problema é resolução ou se o link caiu mesmo.
 * **Modo Interativo:** Pergunta se você quer mudar os timeouts, número de tentativas de consistência e critérios rigorosos (Strict IP/TTL/Order).
 * **Agnóstico:** Se não tiver `nc` (netcat), ele usa `/dev/tcp` do Bash. Se não tiver `dig`, bem... aí você não devia estar rodando um script de DNS.
+* **Smart Logging:** Níveis de verbosidade ajustáveis (`-v`, `-vv`, `-q`) e suporte a logs estruturados em JSON para ingestão em ferramentas de observabilidade (ex: Elastic/Splunk).
+* **Robustez:** Suporta arquivos CSV criados no Windows (CRLF), aceita Hostnames/FQDNs nos grupos e possui alertas visuais para falha no carregamento de gráficos (Offline Mode).
 
 ## 📋 Pré-requisitos
 
@@ -69,7 +71,10 @@ Use a flag `-y` para pular as perguntas e aceitar os padrões definidos no cabe�
   * `-n <arquivo>`: Caminho do CSV de domínios (Default: domains_tests.csv)
   * `-g <arquivo>`: Caminho do CSV de grupos DNS (Default: dns_groups.csv)
   * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
+  * `-l`: Gerar LOG de texto (.log) estilo forense (Auditoria)
   * `-y`: Modo Silencioso (Não interativo / Aceita defaults do .conf)
+  * `-v`: Aumenta o nível de verbosidade (Pode usar múltiplas vezes, ex: `-vv`)
+  * `-q`: Modo Quieto (Apenas progresso, sem output detalhado)
   * `-j`: Gera saída em JSON estruturado (.json) para integrações.
   * `-t`: Habilita testes de conectividade TCP (Sobrescreve conf)
   * `-d`: Habilita validação DNSSEC (Sobrescreve conf)
@@ -106,7 +111,7 @@ Formato: `NOME_GRUPO;DESCRICAO;TIPO;TIMEOUT;SERVIDORES`
 | **Descrição** | Texto livre para o relatório. |
 | **Tipo** | `authoritative` (não recursivo), `recursive` (resolvers públicos) ou `mixed`. |
 | **Timeout** | Timeout específico para este grupo em segundos (ex: `2`). |
-| **Servidores** | IPs ou Hostnames separados por vírgula (ex: `8.8.8.8,8.8.4.4`). |
+| **Servidores** | IPs (v4/v6) ou Hostnames (FQDN) separados por vírgula (ex: `8.8.8.8,ns1.google.com`). |
 
 **Exemplo:**
 
