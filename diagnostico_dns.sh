@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.2.0
-# "Observability Pack"
+# Versão: 11.2.1
+# "Hotfix: Restoration"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.2.0"
+SCRIPT_VERSION="11.2.1"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2818,6 +2818,37 @@ run_trace_diagnostics() {
 
 
 
+
+check_tcp_dns() {
+    local host=$1
+    local port=$2
+    local log_id=$3
+    
+    local out=""
+    local ret=1
+    
+    # Try nc first (netcat)
+    if command -v nc >/dev/null; then
+        out=$(timeout "$TIMEOUT" nc -z -v -w "$TIMEOUT" "$host" "$port" 2>&1)
+        ret=$?
+    else
+        # Fallback to bash /dev/tcp
+        if timeout "$TIMEOUT" bash -c "</dev/tcp/$host/$port" 2>/dev/null; then
+            out="Connection to $host $port port [tcp/*] succeeded!"
+            ret=0
+        else
+            out="Connection to $host $port port [tcp/*] failed: Connection refused or Timeout."
+            ret=1
+        fi
+    fi
+    
+    local safe_out=$(echo "$out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    echo "<div id=\"${log_id}_content\" style=\"display:none\"><pre>$safe_out</pre></div>" >> "$TEMP_DETAILS"
+    echo "<div id=\"${log_id}_title\" style=\"display:none\">TCP Check | $host:$port</div>" >> "$TEMP_DETAILS"
+    
+    return $ret
+}
+
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
     local legend="LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
@@ -3040,34 +3071,9 @@ process_tests() {
                                 
                                 # Accumulate for local average and global stats
                                 sum_dur_iter=$((sum_dur_iter + dur))
-                                TOTAL_DNS_DURATION_SUM=$((TOTAL_DNS_DURATION_SUM + dur))
-                                [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "$final_icon_term"
-                                [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
+                                TOTAL_DNS_QUERY_COUNT=$((TOTAL_DNS_QUERY_COUNT + 1))
                                 
-                                # Record Stats Collection
-                                STATS_REC_TOTAL[$rec]=$((STATS_REC_TOTAL[$rec] + 1))
-                                if [[ "$final_status" == "FAIL" || "$final_status" == "DOWN" ]]; then
-                                     STATS_REC_FAIL[$rec]=$((STATS_REC_FAIL[$rec] + 1))
-                                else
-                                     STATS_REC_OK[$rec]=$((STATS_REC_OK[$rec] + 1))
-                                fi
-                            fi
-                            # Log Logic Refactored for Levels
-                            # Level 2+: Log everything. Level 1: Log only errors.
-                            if [[ $VERBOSE_LEVEL -ge 2 || -n "${iter_status##*NOERROR*}" ]]; then
-                                 # If Level 3 (Debug), print to console too? User asked for output complete in level 3
-                                 if [[ $VERBOSE_LEVEL -ge 3 ]]; then
-                                      echo -e "\n${GRAY}CMD: ${cmd_arr[*]}${NC}"
-                                      echo -e "${GRAY}${output}${NC}"
-                                 elif [[ $VERBOSE_LEVEL -ge 2 ]]; then
-                                      echo -e "\n${GRAY}CMD: ${cmd_arr[*]}${NC}" 
-                                 fi
-                                 log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
-                            fi
-                        done
-                    done
-                done
-            doneormalized=$(normalize_dig_output "$output")
+                                local normalized=$(normalize_dig_output "$output")
                                 if [[ $iter -gt 1 ]]; then
                                     if [[ "$normalized" != "$last_normalized" ]]; then is_divergent="true"; else consistent_count=$((consistent_count + 1)); fi
                                 else last_normalized="$normalized"; consistent_count=1; fi
@@ -3083,6 +3089,17 @@ process_tests() {
                                     [[ "$answer_count" -eq 0 ]] && { iter_status="NOANSWER"; CNT_NOANSWER+=1; } || { iter_status="NOERROR"; CNT_NOERROR+=1; }
                                 else
                                     CNT_OTHER_ERROR+=1
+                                fi
+                                
+                                # Logging (Restored)
+                                if [[ $VERBOSE_LEVEL -ge 2 || -n "${iter_status##*NOERROR*}" ]]; then
+                                     if [[ $VERBOSE_LEVEL -ge 3 ]]; then
+                                          echo -e "\n${GRAY}CMD: ${cmd_arr[*]}${NC}"
+                                          echo -e "${GRAY}${output}${NC}"
+                                     elif [[ $VERBOSE_LEVEL -ge 2 ]]; then
+                                          echo -e "\n${GRAY}CMD: ${cmd_arr[*]}${NC}" 
+                                     fi
+                                     log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
                                 fi
 
                                 attempts_log="${attempts_log}"$'\n\n'"=== TENTATIVA #$iter ($iter_status) === "$'\n'"[Normalized Check: $(echo "$normalized" | tr '\n' ' ')]"$'\n'"$output"
@@ -3127,9 +3144,24 @@ process_tests() {
                                 badge="<span class=\"consistency-badge consistency-bad\">${consistent_count}/${CONSISTENCY_CHECKS}</span>"
                                 echo -ne "${PURPLE}~${NC}"
                             else
-                                [[ "$final_class" == "status-ok" ]] && { SUCCESS_TESTS+=1; g_ok=$((g_ok+1)); echo -ne "${GREEN}.${NC}"; }
-                                [[ "$final_class" == "status-warning" ]] && { WARNING_TESTS+=1; g_warn=$((g_warn+1)); echo -ne "${YELLOW}!${NC}"; }
-                                [[ "$final_class" == "status-fail" ]] && { FAILED_TESTS+=1; g_fail=$((g_fail+1)); GROUP_FAIL_TESTS[$grp]=$((GROUP_FAIL_TESTS[$grp] + 1)); echo -ne "${RED}x${NC}"; }
+                                # Update Stats (Post-Loop)
+                                STATS_REC_TOTAL[$rec]=$((STATS_REC_TOTAL[$rec] + 1))
+                                if [[ "$final_class" == "status-ok" ]]; then
+                                    STATS_REC_OK[$rec]=$((STATS_REC_OK[$rec] + 1))
+                                    SUCCESS_TESTS+=1; g_ok=$((g_ok+1))
+                                    [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}.${NC}"
+                                    [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
+                                elif [[ "$final_class" == "status-warning" ]]; then
+                                    STATS_REC_OK[$rec]=$((STATS_REC_OK[$rec] + 1)) # Warning is technically OK response
+                                    WARNING_TESTS+=1; g_warn=$((g_warn+1))
+                                    [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${YELLOW}!${NC}"
+                                    [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
+                                else # Fail or Divergent (Divergent counts as fail for stats or separate?)
+                                    STATS_REC_FAIL[$rec]=$((STATS_REC_FAIL[$rec] + 1))
+                                    FAILED_TESTS+=1; g_fail=$((g_fail+1)); GROUP_FAIL_TESTS[$grp]=$((GROUP_FAIL_TESTS[$grp] + 1))
+                                    [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}x${NC}"
+                                    [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
+                                fi
                                 badge="<span class=\"badge consistent\">${CONSISTENCY_CHECKS}x</span>"
                             fi
 
