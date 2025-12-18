@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.2.2
-# "Final Polish"
+# Versão: 11.2.3
+# "Log Consistency"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.2.2"
+SCRIPT_VERSION="11.2.3"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -106,8 +106,8 @@ declare -gA STATS_REC_FAIL
 mkdir -p logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
-LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}.log" # No timestamp to allow rotation
-LOG_FILE_JSON="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}.json.log"
+LOG_FILE_TEXT="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
+LOG_FILE_JSON="logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.json.log"
 
 # Default Configuration
 VERBOSE_LEVEL=1  # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
