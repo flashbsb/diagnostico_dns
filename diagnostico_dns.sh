@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.1.6
-# "Metrology Fixes"
+# Versão: 11.1.7
+# "Log & JSON Hygiene"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.1.6"
+SCRIPT_VERSION="11.1.7"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -140,10 +140,12 @@ init_html_parts() {
         TEMP_JSON_DNS="logs/temp_json_dns_${SESSION_ID}.json"
         TEMP_JSON_Sec="logs/temp_json_sec_${SESSION_ID}.json"
         TEMP_JSON_Trace="logs/temp_json_trace_${SESSION_ID}.json"
+        TEMP_JSON_DOMAINS="logs/temp_domains_json_${SESSION_ID}.json"
         > "$TEMP_JSON_Ping"
         > "$TEMP_JSON_DNS"
         > "$TEMP_JSON_Sec"
         > "$TEMP_JSON_Trace"
+        > "$TEMP_JSON_DOMAINS"
     fi
 }
 # ==============================================
@@ -2386,36 +2388,22 @@ run_security_diagnostics() {
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
+            if is_network_error "$axfr_out"; then
+                 axfr_res="TIMEOUT"
+                 axfr_class="status-neutral"
+                 SEC_AXFR_TIMEOUT+=1
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GRAY}AXFR:TIMEOUT${NC} "
             elif echo "$axfr_out" | grep -q -E "REFUSED|Transfer failed"; then
                  axfr_res="DENIED (OK)"
                  axfr_class="status-ok"
                  SEC_AXFR_OK+=1
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
-            elif is_network_error "$axfr_out"; then
-                 axfr_res="TIMEOUT"
-                 axfr_class="status-neutral"
-                 SEC_AXFR_TIMEOUT+=1
-                 if [[ "$VERBOSE" == "true" ]]; then echo -ne "${GRAY}AXFR:TIMEOUT${NC} "; fi
-             elif echo "$axfr_out" | grep -q -i -E "Transfer failed|REFUSED|SERVFAIL|communications error|timed out|no servers"; then
-                 # Fallback for other errors not caught above (weird timeouts?)
-                 if echo "$axfr_out" | grep -q -E "timed out|no servers|communications error"; then
-                     axfr_res="TIMEOUT"
-                     axfr_class="status-neutral"
-                     SEC_AXFR_TIMEOUT+=1
-                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GRAY}AXFR:TIMEOUT${NC} "
-                 else
-                     # Generic denial
-                     axfr_res="DENIED (OK)"
-                     axfr_class="status-ok"
-                     SEC_AXFR_OK+=1
-                     [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}AXFR:OK${NC} "
-                 fi
             elif echo "$axfr_out" | grep -q "SOA"; then
                  axfr_res="ALLOWED (RISK)"
                  axfr_class="status-fail"
                  SEC_AXFR_RISK+=1
                  [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}AXFR:RISK${NC} "
-                 risk_summary+=("AXFR(SOA)")
+                 risk_summary+=("AXFR")
             else
                  axfr_res="NO DATA (OK)"
                  axfr_class="status-ok"
@@ -2448,18 +2436,27 @@ run_security_diagnostics() {
                  rec_res="TIMEOUT"
                  rec_class="status-neutral"
                  SEC_REC_TIMEOUT+=1
-                 if [[ "$VERBOSE" == "true" ]]; then echo -ne "${GRAY}Rec:TIMEOUT${NC}"; fi
-            elif echo "$rec_out" | grep -qE "^google\.com\..*IN.*A.*[0-9]"; then
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GRAY}Rec:TIMEOUT${NC} "
+            elif echo "$rec_out" | grep -q "status: REFUSED"; then
+                 rec_res="REFUSED (OK)"
+                 rec_class="status-ok"
+                 SEC_REC_OK+=1
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}Rec:OK${NC} "
+            elif echo "$rec_out" | grep -q "status: NOERROR" && echo "$rec_out" | grep -q "ANSWER: [1-9]"; then
                  rec_res="OPEN (RISK)"
                  rec_class="status-fail"
                  SEC_REC_RISK+=1
-                 [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}Rec:RISK${NC}"
-                 risk_summary+=("Rec")
-            else
-                 rec_res="CLOSED (OK)"
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${RED}Rec:RISK${NC} "
+                 risk_summary+=("Recursion")
+            elif echo "$rec_out" | grep -q "recursion requested but not available"; then
+                 rec_res="DISABLED (OK)"
                  rec_class="status-ok"
                  SEC_REC_OK+=1
-                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}Rec:OK${NC}"
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${GREEN}Rec:OK${NC} "
+            else
+                 rec_res="UNKNOWN"
+                 rec_class="status-warn"
+                 [[ "$VERBOSE" == "true" ]] && echo -ne "${YELLOW}Rec:UNK${NC} "
             fi
             local html_rec="<a href=\"#\" onclick=\"showLog('${rec_id}'); return false;\" class=\"status-cell\"><span class=\"badge $rec_class\">$rec_res</span></a>"
         else
@@ -2762,17 +2759,17 @@ process_tests() {
     echo -e "$legend"
     
     # Temp files for buffering
-    local TEMP_DOMAIN_BODY="logs/temp_domain_body_$$.html"
-    local TEMP_GROUP_BODY="logs/temp_group_body_$$.html"
-    local TEMP_DOMAIN_BODY_SIMPLE="logs/temp_domain_body_simple_$$.html"
-    local TEMP_GROUP_BODY_SIMPLE="logs/temp_group_body_simple_$$.html"
-    local TEMP_JSON_DOMAINS="logs/temp_domains_json_$$.json"
+    local TEMP_DOMAIN_BODY="logs/temp_domain_body_${SESSION_ID}.html"
+    local TEMP_GROUP_BODY="logs/temp_group_body_${SESSION_ID}.html"
+    local TEMP_DOMAIN_BODY_SIMPLE="logs/temp_domain_body_simple_${SESSION_ID}.html"
+    local TEMP_GROUP_BODY_SIMPLE="logs/temp_group_body_simple_${SESSION_ID}.html"
+    
+    # TEMP_JSON_DOMAINS is now global in init_html_parts
     
     local test_id=0
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
         domain=$(echo "$domain" | xargs); groups=$(echo "$groups" | tr -d '[:space:]')
-```
         IFS=',' read -ra group_list <<< "$groups"; IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
         
@@ -2963,7 +2960,11 @@ process_tests() {
                                 TOTAL_DNS_DURATION_SUM=$((TOTAL_DNS_DURATION_SUM + dur))
                                 TOTAL_DNS_QUERY_COUNT=$((TOTAL_DNS_QUERY_COUNT + 1))
                                 
-                                log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
+                                TOTAL_DNS_QUERY_COUNT=$((TOTAL_DNS_QUERY_COUNT + 1))
+                                
+                                if [[ "$VERBOSE" == "true" || -n "${iter_status##*NOERROR*}" ]]; then
+                                    log_cmd_result "QUERY #$iter $srv -> $target ($rec)" "${cmd_arr[*]}" "$output" "$dur"
+                                fi
 
                                 local normalized=$(normalize_dig_output "$output")
                                 if [[ $iter -gt 1 ]]; then
@@ -3459,7 +3460,7 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_${SESSION_ID}.html" "logs/temp_obj_summary_${SESSION_ID}.html" "logs/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_${SESSION_ID}.html" "logs/temp_group_body_simple_${SESSION_ID}.html" "logs/temp_security_${SESSION_ID}.html" "logs/temp_security_simple_${SESSION_ID}.html" "logs/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "logs/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "logs/temp_help_${SESSION_ID}.html" "logs/temp_obj_summary_${SESSION_ID}.html" "logs/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "logs/temp_domain_body_simple_${SESSION_ID}.html" "logs/temp_group_body_simple_${SESSION_ID}.html" "logs/temp_security_${SESSION_ID}.html" "logs/temp_security_simple_${SESSION_ID}.html" "logs/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "logs/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhyjstdxrTVZ" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
