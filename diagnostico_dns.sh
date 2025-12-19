@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.3.10
-# "Validação de Capabilities do Dig"
+# Versão: 11.3.11
+# "Fix: Tabela Serviços Incompleta (Init Loop)"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.3.10"
+SCRIPT_VERSION="11.3.11"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -3007,6 +3007,10 @@ process_tests() {
     
     # TEMP_JSON_DOMAINS is now global in init_html_parts
     
+    
+    # Initialize Global Service Table Temp (Once per session)
+    > "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html"
+
     local test_id=0
     while IFS=';' read -r domain groups test_types record_types extra_hosts || [ -n "$domain" ]; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
@@ -3026,10 +3030,7 @@ process_tests() {
         local calc_modes=(); if [[ "$test_types" == *"both"* ]]; then calc_modes=("iterative" "recursive"); elif [[ "$test_types" == *"recursive"* ]]; then calc_modes=("recursive"); else calc_modes=("iterative"); fi
         local targets=("$domain"); for ex in "${extra_list[@]}"; do targets+=("$ex.$domain"); done
 
-        # Init Service Table Temp File one time if not exists (checked outside to avoid truncate on every domain)
-    # Initialize Global Service Table Temp
-    > "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html"
-        [[ ! -f "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" ]] && touch "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html"
+
 
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
