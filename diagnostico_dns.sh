@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.3.9
-# "Correção Dig (+opts) e CSV Report Final"
+# Versão: 11.3.10
+# "Validação de Capabilities do Dig"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.3.9"
+SCRIPT_VERSION="11.3.10"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -3945,6 +3945,41 @@ resolve_configuration() {
     [[ ! "$CONSISTENCY_CHECKS" =~ ^[0-9]+$ ]] && CONSISTENCY_CHECKS=3
 }
 
+validate_dig_capabilities() {
+    # Check for DoT support (+tls)
+    if [[ "$ENABLE_DOT_CHECK" == "true" ]]; then
+        # Try a dummy local check. If +tls is invalid, dig returns 1 or prints "Invalid option"
+        if ! dig +tls +noall . &>/dev/null; then
+             echo -e "${YELLOW}⚠️  Aviso: O binário 'dig' local não suporta a opção '+tls'. O teste DoT será desativado.${NC}"
+             ENABLE_DOT_CHECK="false"
+        fi
+    fi
+
+    # Check for DoH support (+https)
+    if [[ "$ENABLE_DOH_CHECK" == "true" ]]; then
+        if ! dig +https +noall . &>/dev/null; then
+             echo -e "${YELLOW}⚠️  Aviso: O binário 'dig' local não suporta a opção '+https'. O teste DoH será desativado.${NC}"
+             ENABLE_DOH_CHECK="false"
+        fi
+    fi
+ 
+    # Check for Cookie support (+cookie)
+    if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
+         if ! dig +cookie +noall . &>/dev/null; then
+             echo -e "${YELLOW}⚠️  Aviso: O binário 'dig' local não suporta a opção '+cookie'. O teste de Cookies será desativado.${NC}"
+             ENABLE_COOKIE_CHECK="false"
+         fi
+    fi
+
+    # Check for DNSSEC support (+dnssec)
+    if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+        if ! dig +dnssec +noall . &>/dev/null; then
+             echo -e "${YELLOW}⚠️  Aviso: O binário 'dig' local não suporta a opção '+dnssec'. A validação DNSSEC será desativada.${NC}"
+             ENABLE_DNSSEC_CHECK="false"
+        fi
+    fi
+}
+
 main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
@@ -3989,6 +4024,9 @@ main() {
     interactive_configuration
     
     resolve_configuration
+    
+    # Init and Validation
+    validate_dig_capabilities
     
     # Capture initial preference for charts logic
     INITIAL_ENABLE_CHARTS="$ENABLE_CHARTS"
