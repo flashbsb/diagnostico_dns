@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.3.0
-# "Adição de testes DNS Modernos (DoT, DoH, DNSSEC Chain, etc)"
+# Versão: 11.3.3
+# "Ajuste dinâmico de caminhos (Logs/CSVs) e persistência de config"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.3.0"
+SCRIPT_VERSION="11.3.3"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -117,16 +117,36 @@ declare -gA STATS_REC_TOTAL
 declare -gA STATS_REC_OK
 declare -gA STATS_REC_FAIL
 
-# Resolve relative paths for input files against SCRIPT_DIR
-[[ "$FILE_DOMAINS" != /* ]] && FILE_DOMAINS="$SCRIPT_DIR/$FILE_DOMAINS"
-[[ "$FILE_GROUPS" != /* ]] && FILE_GROUPS="$SCRIPT_DIR/$FILE_GROUPS"
+# Resolve relative paths for input files (Priority: PWD > SCRIPT_DIR)
+if [[ "$FILE_DOMAINS" != /* ]]; then
+    if [[ -f "$PWD/$FILE_DOMAINS" ]]; then
+        FILE_DOMAINS="$PWD/$FILE_DOMAINS"
+    else
+        FILE_DOMAINS="$SCRIPT_DIR/$FILE_DOMAINS"
+    fi
+fi
 
-# Setup Arquivos
-mkdir -p "$SCRIPT_DIR/logs"
+if [[ "$FILE_GROUPS" != /* ]]; then
+    if [[ -f "$PWD/$FILE_GROUPS" ]]; then
+        FILE_GROUPS="$PWD/$FILE_GROUPS"
+    else
+        FILE_GROUPS="$SCRIPT_DIR/$FILE_GROUPS"
+    fi
+fi
+
+# Setup Log Directory
+[[ -z "$LOG_DIR" ]] && LOG_DIR="logs"
+if [[ "$LOG_DIR" == /* ]]; then
+    LOG_OUTPUT_DIR="$LOG_DIR"
+else
+    LOG_OUTPUT_DIR="$PWD/$LOG_DIR"
+fi
+
+mkdir -p "$LOG_OUTPUT_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-HTML_FILE="$SCRIPT_DIR/logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
-LOG_FILE_TEXT="$SCRIPT_DIR/logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
-LOG_FILE_JSON="$SCRIPT_DIR/logs/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.json.log"
+HTML_FILE="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
+LOG_FILE_TEXT="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
+LOG_FILE_JSON="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.json.log"
 
 # Default Configuration
 VERBOSE_LEVEL=1  # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
@@ -144,19 +164,19 @@ init_html_parts() {
     # Generate unique session ID for temp files (PID + Random + Timestamp)
     SESSION_ID="${$}_${RANDOM}_$(date +%s%N)"
 
-    TEMP_HEADER="$SCRIPT_DIR/logs/temp_header_${SESSION_ID}.html"
-    TEMP_STATS="$SCRIPT_DIR/logs/temp_stats_${SESSION_ID}.html"
-    TEMP_SERVICES="$SCRIPT_DIR/logs/temp_services_${SESSION_ID}.html"
-    TEMP_CONFIG="$SCRIPT_DIR/logs/temp_config_${SESSION_ID}.html"
-    TEMP_TIMING="$SCRIPT_DIR/logs/temp_timing_${SESSION_ID}.html"
-    TEMP_MODAL="$SCRIPT_DIR/logs/temp_modal_${SESSION_ID}.html"
-    TEMP_DISCLAIMER="$SCRIPT_DIR/logs/temp_disclaimer_${SESSION_ID}.html"
+    TEMP_HEADER="$LOG_OUTPUT_DIR/temp_header_${SESSION_ID}.html"
+    TEMP_STATS="$LOG_OUTPUT_DIR/temp_stats_${SESSION_ID}.html"
+    TEMP_SERVICES="$LOG_OUTPUT_DIR/temp_services_${SESSION_ID}.html"
+    TEMP_CONFIG="$LOG_OUTPUT_DIR/temp_config_${SESSION_ID}.html"
+    TEMP_TIMING="$LOG_OUTPUT_DIR/temp_timing_${SESSION_ID}.html"
+    TEMP_MODAL="$LOG_OUTPUT_DIR/temp_modal_${SESSION_ID}.html"
+    TEMP_DISCLAIMER="$LOG_OUTPUT_DIR/temp_disclaimer_${SESSION_ID}.html"
 
     # Detailed Report Temp Files
-    TEMP_MATRIX="$SCRIPT_DIR/logs/temp_matrix_${SESSION_ID}.html"
-    TEMP_DETAILS="$SCRIPT_DIR/logs/temp_details_${SESSION_ID}.html"
-    TEMP_PING="$SCRIPT_DIR/logs/temp_ping_${SESSION_ID}.html"
-    TEMP_TRACE="$SCRIPT_DIR/logs/temp_trace_${SESSION_ID}.html"
+    TEMP_MATRIX="$LOG_OUTPUT_DIR/temp_matrix_${SESSION_ID}.html"
+    TEMP_DETAILS="$LOG_OUTPUT_DIR/temp_details_${SESSION_ID}.html"
+    TEMP_PING="$LOG_OUTPUT_DIR/temp_ping_${SESSION_ID}.html"
+    TEMP_TRACE="$LOG_OUTPUT_DIR/temp_trace_${SESSION_ID}.html"
     
     > "$TEMP_MATRIX"
     > "$TEMP_DETAILS"
@@ -164,20 +184,20 @@ init_html_parts() {
     > "$TEMP_TRACE"
 
     # Security Temp Files
-    TEMP_SECURITY="$SCRIPT_DIR/logs/temp_security_${SESSION_ID}.html"
+    TEMP_SECURITY="$LOG_OUTPUT_DIR/temp_security_${SESSION_ID}.html"
     > "$TEMP_SECURITY"
     
     # New Sections Temp Files
-    TEMP_HEALTH_MAP="$SCRIPT_DIR/logs/temp_health_${SESSION_ID}.html"
+    TEMP_HEALTH_MAP="$LOG_OUTPUT_DIR/temp_health_${SESSION_ID}.html"
     > "$TEMP_HEALTH_MAP"
     
     # JSON Temp Files - Conditional Creation
     if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
-        TEMP_JSON_Ping="$SCRIPT_DIR/logs/temp_json_ping_${SESSION_ID}.json"
-        TEMP_JSON_DNS="$SCRIPT_DIR/logs/temp_json_dns_${SESSION_ID}.json"
-        TEMP_JSON_Sec="$SCRIPT_DIR/logs/temp_json_sec_${SESSION_ID}.json"
-        TEMP_JSON_Trace="$SCRIPT_DIR/logs/temp_json_trace_${SESSION_ID}.json"
-        TEMP_JSON_DOMAINS="$SCRIPT_DIR/logs/temp_domains_json_${SESSION_ID}.json"
+        TEMP_JSON_Ping="$LOG_OUTPUT_DIR/temp_json_ping_${SESSION_ID}.json"
+        TEMP_JSON_DNS="$LOG_OUTPUT_DIR/temp_json_dns_${SESSION_ID}.json"
+        TEMP_JSON_Sec="$LOG_OUTPUT_DIR/temp_json_sec_${SESSION_ID}.json"
+        TEMP_JSON_Trace="$LOG_OUTPUT_DIR/temp_json_trace_${SESSION_ID}.json"
+        TEMP_JSON_DOMAINS="$LOG_OUTPUT_DIR/temp_domains_json_${SESSION_ID}.json"
         > "$TEMP_JSON_Ping"
         > "$TEMP_JSON_DNS"
         > "$TEMP_JSON_Sec"
@@ -366,7 +386,7 @@ generate_help_html() {
         sed "s/${ESC}\[0;90m/<span style='color:#94a3b8'>/g" | \
         sed "s/${ESC}\[0m/<\/span>/g")
     
-    cat > "$SCRIPT_DIR/logs/temp_help_${SESSION_ID}.html" << EOF
+    cat > "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" << EOF
         <details class="section-details" style="margin-top: 40px; border-left: 4px solid #64748b;">
             <summary style="font-size: 1.1rem; font-weight: 600;">📚 Manual de Referência (Help)</summary>
             <div class="modal-body" style="background: #1e293b; color: #cbd5e1; padding: 20px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; overflow-x: auto;">
@@ -583,6 +603,7 @@ interactive_configuration() {
         echo -e "\n${BLUE}--- GERAL ---${NC}"
         ask_variable "Arquivo de Domínios (CSV)" "FILE_DOMAINS"
         ask_variable "Arquivo de Grupos (CSV)" "FILE_GROUPS"
+        ask_variable "Diretório de Logs" "LOG_DIR"
         ask_variable "Prefixo arquivos Log" "LOG_PREFIX"
         ask_variable "Tentativas por Teste (Consistência)" "CONSISTENCY_CHECKS"
         ask_variable "Timeout Global (segundos)" "TIMEOUT"
@@ -669,6 +690,7 @@ save_config_to_file() {
     # Batch Update
     update_conf_key "FILE_DOMAINS" "$FILE_DOMAINS"
     update_conf_key "FILE_GROUPS" "$FILE_GROUPS"
+    update_conf_key "LOG_DIR" "$LOG_DIR"
     update_conf_key "LOG_PREFIX" "$LOG_PREFIX"
     sed -i "s|^CONSISTENCY_CHECKS=.*|CONSISTENCY_CHECKS=$CONSISTENCY_CHECKS|" "$CONFIG_FILE" # Numeric
     sed -i "s|^TIMEOUT=.*|TIMEOUT=$TIMEOUT|" "$CONFIG_FILE" # Numeric
@@ -855,7 +877,7 @@ prepare_chart_resources() {
     if [[ "$ENABLE_CHARTS" != "true" ]]; then return 1; fi
     
     # Define location for temporary chart.js
-    TEMP_CHART_JS="$SCRIPT_DIR/logs/temp_chart_${SESSION_ID}.js"
+    TEMP_CHART_JS="$LOG_OUTPUT_DIR/temp_chart_${SESSION_ID}.js"
     
     local chart_url="https://cdn.jsdelivr.net/npm/chart.js"
     
@@ -1519,58 +1541,67 @@ EOF
 
 generate_security_cards() {
     # Output Security Cards HTML (without wrapping details, to be used in assembly)
-    cat << EOF
-    <h2>🛡️ Postura de Segurança</h2>
-    <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 20px;">
-        <div class="card" style="--card-accent: var(--accent-primary); cursor:pointer;" onclick="showInfoModal('VERSION PRIVACY', 'Verifica se o servidor revela sua versão de software (BIND, etc).')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">🕵️</div>
-            <span class="card-label">Version Privacy</span>
-            <div style="margin-top:10px; font-size:0.95rem;">
-                 <span style="color:var(--accent-success);">Hide:</span> <strong>${SEC_HIDDEN}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Rev:</span> <strong>${SEC_REVEALED}</strong>
-            </div>
-        </div>
-        <div class="card" style="--card-accent: var(--accent-warning); cursor:pointer;" onclick="showInfoModal('ZONE TRANSFER (AXFR)', 'Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">📂</div>
-            <span class="card-label">Zone Transfer</span>
-            <div style="margin-top:10px; font-size:0.95rem;">
-                 <span style="color:var(--accent-success);">Deny:</span> <strong>${SEC_AXFR_OK}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Allow:</span> <strong>${SEC_AXFR_RISK}</strong>
-            </div>
-        </div>
-        <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RECURSION', 'Verifica se o servidor aceita consultas recursivas para domínios externos.')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">🔄</div>
-            <span class="card-label">Recursion</span>
-            <div style="margin-top:10px; font-size:0.95rem;">
-                 <span style="color:var(--accent-success);">Close:</span> <strong>${SEC_REC_OK}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Open:</span> <strong>${SEC_REC_RISK}</strong>
-            </div>
-        </div>
-        <div class="card" style="--card-accent: #8b5cf6; cursor:pointer;" onclick="showInfoModal('DNSSEC', 'Validação da cadeia de confiança DNSSEC (RRSIG).')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">🔐</div>
-            <span class="card-label">DNSSEC Status</span>
-            <div style="margin-top:10px; font-size:0.95rem;">
-                 <span style="color:var(--accent-success);">Valid:</span> <strong>${DNSSEC_SUCCESS}</strong> <span style="color:#444">|</span>
-                 <span style="color:var(--accent-danger);">Fail:</span> <strong>${DNSSEC_FAIL}</strong>
-            </div>
-        </div>
-        <div class="card" style="--card-accent: var(--accent-primary); cursor:pointer;" onclick="showInfoModal('MODERN STANDARDS', 'Suporte a EDNS0, Cookies, QNAME Minimization e Criptografia.')">
-            <div style="font-size:1.5rem; margin-bottom:5px;">🛡️</div>
-            <span class="card-label">Modern Features</span>
-            <div style="margin-top:10px; font-size:0.85rem; display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
-                 <div>EDNS: <strong style="color:var(--accent-success)">${EDNS_SUCCESS}</strong></div>
-                 <div>DoT: <strong style="color:var(--accent-success)">${DOT_SUCCESS}</strong></div>
-                 <div>QNAME: <strong style="color:var(--accent-success)">${QNAME_SUCCESS}</strong></div>
-                 <div>DoH: <strong style="color:var(--accent-success)">${DOH_SUCCESS}</strong></div>
-            </div>
-        </div>
-    </div>
-EOF
+    echo "    <h2>🛡️ Postura de Segurança</h2>"
+    echo "    <div class=\"dashboard\" style=\"grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 20px;\">"
+    
+    # Card 1: Version Privacy
+    echo "        <div class=\"card\" style=\"--card-accent: var(--accent-primary); cursor:pointer;\" onclick=\"showInfoModal('VERSION PRIVACY', 'Verifica se o servidor revela sua versão de software (BIND, etc).')\">"
+    echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🕵️</div>"
+    echo "            <span class=\"card-label\">Version Privacy</span>"
+    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "                 <span style=\"color:var(--accent-success);\">Hide:</span> <strong>${SEC_HIDDEN}</strong> <span style=\"color:#444\">|</span>"
+    echo "                 <span style=\"color:var(--accent-danger);\">Rev:</span> <strong>${SEC_REVEALED}</strong>"
+    echo "            </div>"
+    echo "        </div>"
+    
+    # Card 2: Zone Transfer
+    echo "        <div class=\"card\" style=\"--card-accent: var(--accent-warning); cursor:pointer;\" onclick=\"showInfoModal('ZONE TRANSFER (AXFR)', 'Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.')\">"
+    echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">📂</div>"
+    echo "            <span class=\"card-label\">Zone Transfer</span>"
+    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "                 <span style=\"color:var(--accent-success);\">Deny:</span> <strong>${SEC_AXFR_OK}</strong> <span style=\"color:#444\">|</span>"
+    echo "                 <span style=\"color:var(--accent-danger);\">Allow:</span> <strong>${SEC_AXFR_RISK}</strong>"
+    echo "            </div>"
+    echo "        </div>"
+    
+    # Card 3: Recursion
+    echo "        <div class=\"card\" style=\"--card-accent: var(--accent-danger); cursor:pointer;\" onclick=\"showInfoModal('RECURSION', 'Verifica se o servidor aceita consultas recursivas para domínios externos.')\">"
+    echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🔄</div>"
+    echo "            <span class=\"card-label\">Recursion</span>"
+    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "                 <span style=\"color:var(--accent-success);\">Close:</span> <strong>${SEC_REC_OK}</strong> <span style=\"color:#444\">|</span>"
+    echo "                 <span style=\"color:var(--accent-danger);\">Open:</span> <strong>${SEC_REC_RISK}</strong>"
+    echo "            </div>"
+    echo "        </div>"
+    
+    # Card 4: DNSSEC
+    echo "        <div class=\"card\" style=\"--card-accent: #8b5cf6; cursor:pointer;\" onclick=\"showInfoModal('DNSSEC', 'Validação da cadeia de confiança DNSSEC (RRSIG).')\">"
+    echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🔐</div>"
+    echo "            <span class=\"card-label\">DNSSEC Status</span>"
+    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "                 <span style=\"color:var(--accent-success);\">Valid:</span> <strong>${DNSSEC_SUCCESS}</strong> <span style=\"color:#444\">|</span>"
+    echo "                 <span style=\"color:var(--accent-danger);\">Fail:</span> <strong>${DNSSEC_FAIL}</strong>"
+    echo "            </div>"
+    echo "        </div>"
+    
+    # Card 5: Modern Standards
+    echo "        <div class=\"card\" style=\"--card-accent: var(--accent-primary); cursor:pointer;\" onclick=\"showInfoModal('MODERN STANDARDS', 'Suporte a EDNS0, Cookies, QNAME Minimization e Criptografia.')\">"
+    echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🛡️</div>"
+    echo "            <span class=\"card-label\">Modern Features</span>"
+    echo "            <div style=\"margin-top:10px; font-size:0.85rem; display:grid; grid-template-columns: 1fr 1fr; gap:5px;\">"
+    echo "                 <div>EDNS: <strong style=\"color:var(--accent-success)\">${EDNS_SUCCESS}</strong></div>"
+    echo "                 <div>DoT: <strong style=\"color:var(--accent-success)\">${DOT_SUCCESS}</strong></div>"
+    echo "                 <div>QNAME: <strong style=\"color:var(--accent-success)\">${QNAME_SUCCESS}</strong></div>"
+    echo "                 <div>DoH: <strong style=\"color:var(--accent-success)\">${DOH_SUCCESS}</strong></div>"
+    echo "            </div>"
+    echo "        </div>"
+    
+    echo "    </div>"
 }
 
 generate_object_summary() {
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
-        cat >> "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html" << EOF
+        cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
                 <div class="card" style="margin-bottom: 20px; --card-accent: #8b5cf6; cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
                      <h3 style="margin-top:0; font-size:1rem; margin-bottom:15px;">📊 Estatísticas de Serviços</h3>
                      <div style="position: relative; height: 300px; width: 100%;">
@@ -1600,15 +1631,15 @@ generate_object_summary() {
 EOF
     fi
 
-    cat >> "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html" << EOF
+    cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
     
-    if [[ -s "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html" ]]; then
-        cat "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html" >> "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html"
+    if [[ -s "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" ]]; then
+        cat "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html"
     else
-        echo "<tr><td colspan='4' style='text-align:center; color:#888;'>Nenhum dado de serviço coletado.</td></tr>" >> "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html"
+        echo "<tr><td colspan='4' style='text-align:center; color:#888;'>Nenhum dado de serviço coletado.</td></tr>" >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html"
     fi
 
-    cat >> "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html" << EOF
+    cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
                         </tbody>
                     </table>
                 </div>
@@ -2245,7 +2276,7 @@ EOF
     fi
     
     # 5. Services (TCP/DNSSEC) - Generated by generate_object_summary
-    cat "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html" >> "$target_file"
+    cat "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" >> "$target_file"
     
     # Controls
     cat >> "$target_file" << EOF
@@ -2332,7 +2363,7 @@ EOF
     cat "$TEMP_CONFIG" >> "$target_file"
     
     # 8. Help (Reference)
-    cat "$SCRIPT_DIR/logs/temp_help_${SESSION_ID}.html" >> "$target_file"
+    cat "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" >> "$target_file"
     
     # 9. Disclaimer
     cat "$TEMP_DISCLAIMER" >> "$target_file"
@@ -2441,7 +2472,7 @@ run_security_diagnostics() {
 
     # Temp file for rows (Global var initialized in init_html_parts if needed, but safe to overwrite here)
     # Using SESSION_ID to ensure cleanup traps works
-    TEMP_SEC_ROWS="$SCRIPT_DIR/logs/temp_sec_rows_${SESSION_ID}.html"
+    TEMP_SEC_ROWS="$LOG_OUTPUT_DIR/temp_sec_rows_${SESSION_ID}.html"
     > "$TEMP_SEC_ROWS"
 
     declare -A CHECKED_IPS; declare -A IP_GROUPS_MAP; local unique_ips=()
@@ -2938,22 +2969,28 @@ check_tcp_dns() {
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
     local legend="LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
-    [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}=TCP_OK ${RED}T${NC}=TCP_Fail"
-    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC_OK ${RED}D${NC}=SEC_Fail ${GRAY}D${NC}=SEC_Abs"
-    [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && legend+=" ${GREEN}SOA${NC}=Synced ${RED}SOA${NC}=Div"
+    [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}=TCP"
+    [[ "$ENABLE_EDNS_CHECK" == "true" ]] && legend+=" ${GREEN}E${NC}=EDNS"
+    [[ "$ENABLE_COOKIE_CHECK" == "true" ]] && legend+=" ${GREEN}C${NC}=Cook"
+    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC"
+    [[ "$ENABLE_TLS_CHECK" == "true" ]] && legend+=" ${GREEN}L${NC}=TLS"
+    [[ "$ENABLE_DOT_CHECK" == "true" ]] && legend+=" ${GREEN}S${NC}=DoT"
+    [[ "$ENABLE_DOH_CHECK" == "true" ]] && legend+=" ${GREEN}H${NC}=DoH"
+    [[ "$ENABLE_QNAME_CHECK" == "true" ]] && legend+=" ${GREEN}Q${NC}=QNAME"
+    [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && legend+=" ${GREEN}SOA${NC}=Sync"
     echo -e "$legend"
     
     # Create per-domain temp files for Simple Mode
-    local t_dom_body_simple="$SCRIPT_DIR/logs/temp_domain_body_simple_${SESSION_ID}.html"
-    local t_grp_body_simple="$SCRIPT_DIR/logs/temp_group_body_simple_${SESSION_ID}.html"
+    local t_dom_body_simple="$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html"
+    local t_grp_body_simple="$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html"
     > "$t_dom_body_simple"
     > "$t_grp_body_simple"
     
     # Temp files for buffering
-    local TEMP_DOMAIN_BODY="$SCRIPT_DIR/logs/temp_domain_body_${SESSION_ID}.html"
-    local TEMP_GROUP_BODY="$SCRIPT_DIR/logs/temp_group_body_${SESSION_ID}.html"
-    local TEMP_DOMAIN_BODY_SIMPLE="$SCRIPT_DIR/logs/temp_domain_body_simple_${SESSION_ID}.html"
-    local TEMP_GROUP_BODY_SIMPLE="$SCRIPT_DIR/logs/temp_group_body_simple_${SESSION_ID}.html"
+    local TEMP_DOMAIN_BODY="$LOG_OUTPUT_DIR/temp_domain_body_${SESSION_ID}.html"
+    local TEMP_GROUP_BODY="$LOG_OUTPUT_DIR/temp_group_body_${SESSION_ID}.html"
+    local TEMP_DOMAIN_BODY_SIMPLE="$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html"
+    local TEMP_GROUP_BODY_SIMPLE="$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html"
     
     # TEMP_JSON_DOMAINS is now global in init_html_parts
     
@@ -2978,8 +3015,8 @@ process_tests() {
 
         # Init Service Table Temp File one time if not exists (checked outside to avoid truncate on every domain)
     # Initialize Global Service Table Temp
-    > "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html"
-        [[ ! -f "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html" ]] && touch "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html"
+    > "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html"
+        [[ ! -f "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" ]] && touch "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html"
 
         for grp in "${group_list[@]}"; do
             [[ -z "${DNS_GROUPS[$grp]}" ]] && continue
@@ -3088,6 +3125,9 @@ process_tests() {
                              local sec_id="sec_${clean_srv}_${clean_tgt}"
 
                              local opts_sec; [[ "$mode" == "iterative" ]] && opts_sec="$DEFAULT_DIG_OPTIONS" || opts_sec="$RECURSIVE_DIG_OPTIONS"
+                             # Remove +cd (Checking Disabled) so we can see if validation fails/succeeds (AD flag)
+                             opts_sec=${opts_sec/ +cd/}
+                             opts_sec=${opts_sec/+cd /}
                              opts_sec+=" +dnssec +time=$TIMEOUT"
                              local out_sec=$(dig $opts_sec @$srv $target A 2>&1)
                              log_cmd_result "DNSSEC CHECK $srv -> $target" "dig $opts_sec @$srv $target A" "$out_sec" "0"
@@ -3219,7 +3259,7 @@ process_tests() {
                         
                         # Format: Group | Target | Server | Badges
                         local svc_row="<tr><td><span class='badge-group'>$grp</span></td><td>$target</td><td><strong>$srv</strong></td><td>$combined_badges</td></tr>"
-                        echo "$svc_row" >> "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html"
+                        echo "$svc_row" >> "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html"
                     done
                     local rec_idx=0
                     local rec_count=${#rec_list[@]}
@@ -3852,7 +3892,7 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$SCRIPT_DIR/logs/temp_help_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_obj_summary_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$SCRIPT_DIR/logs/temp_domain_body_simple_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_group_body_simple_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_security_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_security_simple_${SESSION_ID}.html" "$SCRIPT_DIR/logs/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$SCRIPT_DIR/logs/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$LOG_OUTPUT_DIR/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhyjstdxrTVZMvq" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
