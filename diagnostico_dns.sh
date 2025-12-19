@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.3.6
-# "Correção HTML Tabela Serviços e Legenda"
+# Versão: 11.3.7
+# "Fix Duplicate Group Stats e Correção HTML Tabela"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.3.6"
+SCRIPT_VERSION="11.3.7"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2249,7 +2249,6 @@ EOF
     
     generate_executive_summary
     generate_health_map
-    generate_group_stats_html 
     generate_group_stats_html 
     generate_object_summary
     generate_timing_html
