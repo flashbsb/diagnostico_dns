@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.3.7
-# "Fix Duplicate Group Stats e Correção HTML Tabela"
+# Versão: 11.3.9
+# "Correção Dig (+opts) e CSV Report Final"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.3.7"
+SCRIPT_VERSION="11.3.9"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -116,6 +116,7 @@ declare -A GROUP_RTT_COUNT
 declare -gA STATS_REC_TOTAL
 declare -gA STATS_REC_OK
 declare -gA STATS_REC_FAIL
+declare -gA GLOBAL_TCP_STATUS
 
 # Resolve relative paths for input files (Priority: PWD > SCRIPT_DIR)
 if [[ "$FILE_DOMAINS" != /* ]]; then
@@ -146,7 +147,8 @@ mkdir -p "$LOG_OUTPUT_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
 LOG_FILE_TEXT="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
-LOG_FILE_JSON="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.json.log"
+LOG_FILE_JSON="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.json"
+LOG_FILE_CSV="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.csv"
 
 # Default Configuration
 VERBOSE_LEVEL=1  # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
@@ -203,6 +205,11 @@ init_html_parts() {
         > "$TEMP_JSON_Sec"
         > "$TEMP_JSON_Trace"
         > "$TEMP_JSON_DOMAINS"
+    fi
+    
+    # Init CSV
+    if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
+        echo "Timestamp;Grupo;Servidor;Dominio;Record;Status;Latencia_ms;Detalhes;TCP;DNSSEC;EDNS0;Cookie;TLS;DoT;DoH;QNAME" > "$LOG_FILE_CSV"
     fi
 }
 # ==============================================
@@ -448,6 +455,7 @@ print_execution_summary() {
     echo -e "${PURPLE}[SAÍDA]${NC}"
     echo -e "  📄 Relatório Detalhado: ${GREEN}$HTML_FILE${NC}"
     [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
+    [[ "$ENABLE_CSV_REPORT" == "true" ]] && echo -e "  📄 Relatório CSV     : ${GREEN}$LOG_FILE_CSV${NC}"
     [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
     echo -e "${BLUE}======================================================${NC}"
     echo ""
@@ -613,6 +621,7 @@ interactive_configuration() {
         ask_boolean "Gerar log texto?" "ENABLE_LOG_TEXT"
         ask_boolean "Habilitar Gráficos no HTML?" "ENABLE_CHARTS"
         ask_boolean "Gerar relatório JSON?" "ENABLE_JSON_REPORT"
+        ask_boolean "Gerar relatório CSV (Plano)?" "ENABLE_CSV_REPORT"
         
         echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
         ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
@@ -703,6 +712,7 @@ save_config_to_file() {
     # Report Flags
     update_conf_key "ENABLE_CHARTS" "$ENABLE_CHARTS"
     update_conf_key "ENABLE_JSON_REPORT" "$ENABLE_JSON_REPORT"
+    update_conf_key "ENABLE_CSV_REPORT" "$ENABLE_CSV_REPORT"
     
     # Tests
     sed -i "s|^ENABLE_PING=.*|ENABLE_PING=$ENABLE_PING|" "$CONFIG_FILE"
@@ -3049,41 +3059,54 @@ process_tests() {
                     declare -A CACHE_TLS_BADGE
                     declare -A CACHE_DOT_BADGE
                     declare -A CACHE_DOH_BADGE
+                    # Cache for raw CSV status
+                    declare -A CACHE_TCP_STATUS
+                    declare -A CACHE_SEC_STATUS
+                    declare -A CACHE_EDNS_STATUS
+                    declare -A CACHE_COOKIE_STATUS
+                    declare -A CACHE_QNAME_STATUS
+                    declare -A CACHE_TLS_STATUS
+                    declare -A CACHE_DOT_STATUS
+                    declare -A CACHE_DOH_STATUS
 
                     for srv in "${srv_list[@]}"; do
                         local tcp_res="-"; local sec_res="-"; local edns_res="-"; local cookie_res="-"
                         local qname_res="-"; local tls_res="-"; local dot_res="-"; local doh_res="-"
 
                         # 1. TCP Check (Once per server per session)
-                        if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
-                             if [[ "${GLOBAL_TCP_CHECKED[$srv]}" == "true" ]]; then
-                                 tcp_res="<span class='badge-mini neutral' title='Cached'>T</span>"
-                             else
-                                 local clean_srv=${srv//./_}
-                                 local tcp_id="tcp_${clean_srv}_${clean_tgt}"
-                                 tcp_id=$(echo "$tcp_id" | tr -s '_')
-                                 if check_tcp_dns "$srv" 53 "$tcp_id"; then
-                                     CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP Connection OK'>T</span></a>"
-                                     tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
-                                     TCP_SUCCESS+=1
-                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}T${NC}"
-                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
-                                 else
-                                     CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Connection Failed'>T</span></a>"
-                                     tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
-                                     TCP_FAIL+=1
-                                     [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}T${NC}"
-                                     [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
-                                 fi
-                                 GLOBAL_TCP_CHECKED[$srv]="true"
-                             fi
-                        fi
+                         if [[ "$ENABLE_TCP_CHECK" == "true" ]]; then
+                              if [[ "${GLOBAL_TCP_CHECKED[$srv]}" == "true" ]]; then
+                                  tcp_res="<span class='badge-mini neutral' title='Cached'>T</span>"
+                                  CACHE_TCP_STATUS[$srv]="${GLOBAL_TCP_STATUS[$srv]}"
+                              else
+                                  local clean_srv=${srv//./_}
+                                  local tcp_id="tcp_${clean_srv}_${clean_tgt}"
+                                  tcp_id=$(echo "$tcp_id" | tr -s '_')
+                                  if check_tcp_dns "$srv" 53 "$tcp_id"; then
+                                      CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success' title='TCP Connection OK'>T</span></a>"
+                                      tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini success'>OK</span></a>"
+                                      TCP_SUCCESS+=1
+                                      GLOBAL_TCP_STATUS[$srv]="OK"
+                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}T${NC}"
+                                      [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "."
+                                  else
+                                      CACHE_TCP_BADGE[$srv]="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail' title='TCP Connection Failed'>T</span></a>"
+                                      tcp_res="<a href='#' onclick=\"showLog('${tcp_id}'); return false;\"><span class='badge-mini fail'>ERR</span></a>"
+                                      TCP_FAIL+=1
+                                      GLOBAL_TCP_STATUS[$srv]="FAIL"
+                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}T${NC}"
+                                      [[ $VERBOSE_LEVEL -eq 0 ]] && echo -ne "x"
+                                  fi
+                                  GLOBAL_TCP_CHECKED[$srv]="true"
+                                  CACHE_TCP_STATUS[$srv]="${GLOBAL_TCP_STATUS[$srv]}"
+                              fi
+                         fi
 
                         # 2. EDNS0 Check
                         if [[ "$ENABLE_EDNS_CHECK" == "true" ]]; then
                              local clean_srv=${srv//./_}; local edns_id="edns_${clean_srv}"
-                             local edns_cmd="dig +edns=0 +noall +opts @$srv $target"
-                             local out_edns=$(dig +edns=0 +noall +opts +time=$TIMEOUT @$srv $target 2>&1)
+                             local edns_cmd="dig +edns=0 +noall +comments @$srv $target"
+                             local out_edns=$(dig +edns=0 +noall +comments +time=$TIMEOUT @$srv $target 2>&1)
                              log_cmd_result "EDNS CHECK $srv" "$edns_cmd" "$out_edns" "0"
                              local safe_edns=$(echo "$out_edns" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                              echo "<div id=\"${edns_id}_content\" style=\"display:none\"><pre>$safe_edns</pre></div>" >> "$TEMP_DETAILS"
@@ -3092,10 +3115,12 @@ process_tests() {
                              if echo "$out_edns" | grep -q "; EDNS: version: 0"; then
                                  CACHE_EDNS_BADGE[$srv]="<a href='#' onclick=\"showLog('${edns_id}'); return false;\"><span class='badge-mini success' title='EDNS0 Supported'>E</span></a>"
                                  EDNS_SUCCESS+=1
+                                 CACHE_EDNS_STATUS[$srv]="OK"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}E${NC}"
                              else
                                  CACHE_EDNS_BADGE[$srv]="<a href='#' onclick=\"showLog('${edns_id}'); return false;\"><span class='badge-mini fail' title='EDNS0 Fail/Absent'>E</span></a>"
                                  EDNS_FAIL+=1
+                                 CACHE_EDNS_STATUS[$srv]="FAIL"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}E${NC}"
                              fi
                         fi
@@ -3103,8 +3128,8 @@ process_tests() {
                         # 3. Cookie Check
                         if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
                              local clean_srv=${srv//./_}; local cook_id="cook_${clean_srv}"
-                             local cook_cmd="dig +cookie +noall +opts @$srv $target"
-                             local out_cook=$(dig +cookie +noall +opts +time=$TIMEOUT @$srv $target 2>&1)
+                             local cook_cmd="dig +cookie +noall +comments @$srv $target"
+                             local out_cook=$(dig +cookie +noall +comments +time=$TIMEOUT @$srv $target 2>&1)
                              log_cmd_result "COOKIE CHECK $srv" "$cook_cmd" "$out_cook" "0"
                              local safe_cook=$(echo "$out_cook" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
                              echo "<div id=\"${cook_id}_content\" style=\"display:none\"><pre>$safe_cook</pre></div>" >> "$TEMP_DETAILS"
@@ -3113,10 +3138,12 @@ process_tests() {
                              if echo "$out_cook" | grep -q "COOKIE:" || echo "$out_cook" | grep -q "BADCOOKIE"; then
                                  CACHE_COOKIE_BADGE[$srv]="<a href='#' onclick=\"showLog('${cook_id}'); return false;\"><span class='badge-mini success' title='Cookie Supported'>C</span></a>"
                                  COOKIE_SUCCESS+=1
+                                 CACHE_COOKIE_STATUS[$srv]="OK"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}C${NC}"
                              else
                                  CACHE_COOKIE_BADGE[$srv]="<a href='#' onclick=\"showLog('${cook_id}'); return false;\"><span class='badge-mini neutral' title='Cookie Alert/Absent'>C</span></a>"
                                  COOKIE_FAIL+=1 
+                                 CACHE_COOKIE_STATUS[$srv]="ABSENT"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}C${NC}"
                              fi
                         fi
@@ -3142,17 +3169,20 @@ process_tests() {
                              if echo "$out_sec" | grep -q -E "connection timed out|communications error|no servers could be reached"; then
                                  CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini fail' title='DNSSEC Error'>D</span></a>"
                                  DNSSEC_FAIL+=1
+                                 CACHE_SEC_STATUS[$srv]="FAIL"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}D${NC}"
                              else
                                  # Enhanced check: RRSIG (Auth) or AD flag (Rec)
                                  if echo "$out_sec" | grep -q ";; flags:.* ad" || echo "$out_sec" | grep -q "RRSIG"; then
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini success' title='DNSSEC Signed/Supported'>D</span></a>"
                                      DNSSEC_SUCCESS+=1
+                                     CACHE_SEC_STATUS[$srv]="OK"
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}D${NC}"
                                  else
                                      # Check for chain errors?
                                      CACHE_SEC_BADGE[$srv]="<a href='#' onclick=\"showLog('${sec_id}'); return false;\"><span class='badge-mini neutral' title='DNSSEC Unsigned'>D</span></a>"
                                      DNSSEC_ABSENT+=1
+                                     CACHE_SEC_STATUS[$srv]="ABSENT"
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}D${NC}"
                                  fi
                              fi
@@ -3163,10 +3193,12 @@ process_tests() {
                              if check_tcp_dns "$srv" 853 "tls_${clean_srv}"; then
                                  CACHE_TLS_BADGE[$srv]="<span class='badge-mini success' title='TLS/853 Port Open'>T853</span>"
                                  TLS_SUCCESS+=1
+                                 CACHE_TLS_STATUS[$srv]="OK"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}L${NC}"
                              else
                                  CACHE_TLS_BADGE[$srv]="<span class='badge-mini neutral' title='TLS/853 Port Closed'>T853</span>"
                                  TLS_FAIL+=1
+                                 CACHE_TLS_STATUS[$srv]="FAIL"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}L${NC}"
                              fi
                         fi
@@ -3185,10 +3217,12 @@ process_tests() {
                              if echo "$out_dot" | grep -q "status: NOERROR" || echo "$out_dot" | grep -q "status: NXDOMAIN"; then
                                  CACHE_DOT_BADGE[$srv]="<a href='#' onclick=\"showLog('${dot_id}'); return false;\"><span class='badge-mini success' title='DoT Active'>DoT</span></a>"
                                  DOT_SUCCESS+=1
+                                 CACHE_DOT_STATUS[$srv]="OK"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}S${NC}"
                              else
                                  CACHE_DOT_BADGE[$srv]="<a href='#' onclick=\"showLog('${dot_id}'); return false;\"><span class='badge-mini neutral' title='DoT Failed'>DoT</span></a>"
                                  DOT_FAIL+=1
+                                 CACHE_DOT_STATUS[$srv]="FAIL"
                                  [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}S${NC}"
                              fi
                         fi
@@ -3215,10 +3249,12 @@ process_tests() {
                                   if echo "$out_doh" | grep -q "status: NOERROR" || echo "$out_doh" | grep -q "status: NXDOMAIN"; then
                                      CACHE_DOH_BADGE[$srv]="<a href='#' onclick=\"showLog('${doh_id}'); return false;\"><span class='badge-mini success' title='DoH Active'>DoH</span></a>"
                                      DOH_SUCCESS+=1
+                                     CACHE_DOH_STATUS[$srv]="OK"
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}H${NC}"
                                   else
                                      CACHE_DOH_BADGE[$srv]="<a href='#' onclick=\"showLog('${doh_id}'); return false;\"><span class='badge-mini neutral' title='DoH Failed'>DoH</span></a>"
                                      DOH_FAIL+=1
+                                     CACHE_DOH_STATUS[$srv]="FAIL"
                                      [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GRAY}H${NC}"
                                   fi
                              fi
@@ -3237,10 +3273,12 @@ process_tests() {
                                   if echo "$out_q" | grep -q "HOORAY"; then
                                        CACHE_QNAME_BADGE[$srv]="<span class='badge-mini success' title='QNAME Min Enabled'>Q</span>"
                                        QNAME_SUCCESS+=1
+                                       CACHE_QNAME_STATUS[$srv]="OK"
                                        [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${GREEN}Q${NC}"
                                   else
                                        CACHE_QNAME_BADGE[$srv]="<span class='badge-mini fail' title='QNAME Min Disabled'>Q</span>"
                                        QNAME_FAIL+=1
+                                       CACHE_QNAME_STATUS[$srv]="FAIL"
                                        [[ $VERBOSE_LEVEL -ge 1 ]] && echo -ne "${RED}Q${NC}"
                                   fi
                              else
@@ -3378,6 +3416,22 @@ process_tests() {
                                 # Decision Logging
                                 if [[ "$final_class" != "status-ok" || "$VERBOSE" == "true" ]]; then
                                     log_entry "DECISION: Domain=$target Server=$srv Record=$rec Iteration=$iter Result=$iter_status Class=$final_class"
+                                fi
+
+                                # CSV Export
+                                if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
+                                    local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
+                                    local csv_tcp="${CACHE_TCP_STATUS[$srv]:--}"
+                                    local csv_sec="${CACHE_SEC_STATUS[$srv]:--}"
+                                    local csv_edns="${CACHE_EDNS_STATUS[$srv]:--}"
+                                    local csv_cook="${CACHE_COOKIE_STATUS[$srv]:--}"
+                                    local csv_tls="${CACHE_TLS_STATUS[$srv]:--}"
+                                    local csv_dot="${CACHE_DOT_STATUS[$srv]:--}"
+                                    local csv_doh="${CACHE_DOH_STATUS[$srv]:--}"
+                                    local csv_qname="${CACHE_QNAME_STATUS[$srv]:--}"
+                                    
+                                    # CSV Format: Timestamp;Grupo;Servidor;Dominio;Record;Status;Latencia_ms;Detalhes;TCP;DNSSEC;EDNS0;Cookie;TLS;DoT;DoH;QNAME
+                                    echo "$csv_ts;$grp;$srv;$target;$rec;$iter_status;$dur;Iter #$iter;$csv_tcp;$csv_sec;$csv_edns;$csv_cook;$csv_tls;$csv_dot;$csv_doh;$csv_qname" >> "$LOG_FILE_CSV"
                                 fi
 
                                 [[ "$SLEEP" != "0" && $iter -lt $CONSISTENCY_CHECKS ]] && { sleep "$SLEEP"; TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {print $TOTAL_SLEEP_TIME + $SLEEP}"); }
@@ -3959,7 +4013,8 @@ main() {
     print_final_terminal_summary
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
     echo "Relatório HTML: $HTML_FILE"
-    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo "Relatório JSON: $JSON_FILE"
+    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo "Relatório JSON: $LOG_FILE_JSON"
+    [[ "$ENABLE_CSV_REPORT" == "true" ]] && echo "Relatório CSV : $LOG_FILE_CSV"
     [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Log Texto     : $LOG_FILE_TEXT"
     [[ "$ENABLE_JSON_LOG" == "true" ]] && echo "Log JSON      : $LOG_FILE_JSON"
 }
