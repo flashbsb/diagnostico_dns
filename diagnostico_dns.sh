@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.3.3
-# "Ajuste dinâmico de caminhos (Logs/CSVs) e persistência de config"
+# Versão: 11.3.6
+# "Correção HTML Tabela Serviços e Legenda"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.3.3"
+SCRIPT_VERSION="11.3.6"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -1600,6 +1600,7 @@ generate_security_cards() {
 }
 
 generate_object_summary() {
+    # Part 1: Charts Card (Only if ENABLE_CHARTS is true)
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
         cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
                 <div class="card" style="margin-bottom: 20px; --card-accent: #8b5cf6; cursor: pointer;" onclick="this.nextElementSibling.open = !this.nextElementSibling.open">
@@ -1613,7 +1614,11 @@ generate_object_summary() {
                         </p>
                      </div>
                 </div>
+EOF
+    fi
 
+    # Part 2: Table Header
+    cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
         <details class="section-details" style="margin-bottom: 30px;">
             <summary>📋  Tabela Detalhada de Serviços</summary>
             <div style="padding: 15px;">
@@ -1629,16 +1634,15 @@ generate_object_summary() {
                         </thead>
                         <tbody>
 EOF
-    fi
 
-    cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
-    
+    # Part 3: Inject Rows (Bash Logic)
     if [[ -s "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" ]]; then
         cat "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html"
     else
         echo "<tr><td colspan='4' style='text-align:center; color:#888;'>Nenhum dado de serviço coletado.</td></tr>" >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html"
     fi
 
+    # Part 4: Table Footer
     cat >> "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" << EOF
                         </tbody>
                     </table>
@@ -2969,15 +2973,15 @@ check_tcp_dns() {
 process_tests() {
     [[ ! -f "$FILE_DOMAINS" ]] && { echo -e "${RED}ERRO: $FILE_DOMAINS não encontrado!${NC}"; exit 1; }
     local legend="LEGENDA: ${GREEN}.${NC}=OK ${YELLOW}!${NC}=Alert ${PURPLE}~${NC}=Div ${RED}x${NC}=Fail"
-    [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}=TCP"
-    [[ "$ENABLE_EDNS_CHECK" == "true" ]] && legend+=" ${GREEN}E${NC}=EDNS"
-    [[ "$ENABLE_COOKIE_CHECK" == "true" ]] && legend+=" ${GREEN}C${NC}=Cook"
-    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}=SEC"
-    [[ "$ENABLE_TLS_CHECK" == "true" ]] && legend+=" ${GREEN}L${NC}=TLS"
-    [[ "$ENABLE_DOT_CHECK" == "true" ]] && legend+=" ${GREEN}S${NC}=DoT"
-    [[ "$ENABLE_DOH_CHECK" == "true" ]] && legend+=" ${GREEN}H${NC}=DoH"
-    [[ "$ENABLE_QNAME_CHECK" == "true" ]] && legend+=" ${GREEN}Q${NC}=QNAME"
-    [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && legend+=" ${GREEN}SOA${NC}=Sync"
+    [[ "$ENABLE_TCP_CHECK" == "true" ]] && legend+=" ${GREEN}T${NC}/${RED}T${NC}=TCP"
+    [[ "$ENABLE_EDNS_CHECK" == "true" ]] && legend+=" ${GREEN}E${NC}/${RED}E${NC}=EDNS"
+    [[ "$ENABLE_COOKIE_CHECK" == "true" ]] && legend+=" ${GREEN}C${NC}/${GRAY}C${NC}=Cook"
+    [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && legend+=" ${GREEN}D${NC}/${GRAY}D${NC}/${RED}D${NC}=SEC"
+    [[ "$ENABLE_TLS_CHECK" == "true" ]] && legend+=" ${GREEN}L${NC}/${GRAY}L${NC}=TLS"
+    [[ "$ENABLE_DOT_CHECK" == "true" ]] && legend+=" ${GREEN}S${NC}/${GRAY}S${NC}=DoT"
+    [[ "$ENABLE_DOH_CHECK" == "true" ]] && legend+=" ${GREEN}H${NC}/${GRAY}H${NC}=DoH"
+    [[ "$ENABLE_QNAME_CHECK" == "true" ]] && legend+=" ${GREEN}Q${NC}/${RED}Q${NC}=QNAME"
+    [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && legend+=" ${GREEN}SOA${NC}/${RED}SOA${NC}=Sync"
     echo -e "$legend"
     
     # Create per-domain temp files for Simple Mode
