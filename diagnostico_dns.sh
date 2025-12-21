@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.6.23
+# Versão: 11.6.28
 # "Output Polish & Group Table Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.6.23"
+SCRIPT_VERSION="11.6.28"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2691,7 +2691,7 @@ generate_hierarchical_stats() {
             else GRP_EDNS_FAIL[$g]=$(( ${GRP_EDNS_FAIL[$g]:-0} + 1 )); fi
             
             if [[ "$dnssec" == "OK" ]]; then GRP_DNSSEC_OK[$g]=$(( ${GRP_DNSSEC_OK[$g]:-0} + 1 ));
-            else GRP_DNSSEC_FAIL[$g]=$(( ${GRP_DNSSEC_FAIL[$g]:-0} + 1 )); fi
+            elif [[ "$dnssec" == "FAIL" ]]; then GRP_DNSSEC_FAIL[$g]=$(( ${GRP_DNSSEC_FAIL[$g]:-0} + 1 )); fi
             
             if [[ "$doh" == "OK" ]]; then GRP_DOH_OK[$g]=$(( ${GRP_DOH_OK[$g]:-0} + 1 ));
             else GRP_DOH_FAIL[$g]=$(( ${GRP_DOH_FAIL[$g]:-0} + 1 )); fi
@@ -2781,13 +2781,13 @@ generate_hierarchical_stats() {
              local c_edns=$GREEN; [[ "$edns" == "FAIL" ]] && c_edns=$RED
              local c_cookie=$GREEN; [[ "$cookie" != "OK" ]] && c_cookie=$YELLOW
              local c_dnssec=$GREEN; [[ "$dnssec" != "OK" ]] && c_dnssec=$RED
-             local c_doh=$GREEN; [[ "$doh" != "OK" ]] && c_doh=$GRAY
-             local c_tls=$GREEN; [[ "$tls" != "OK" ]] && c_tls=$GRAY
+             local c_doh=$GREEN; [[ "$doh" != "OK" ]] && c_doh=$RED; [[ "$doh" == "SKIP" ]] && c_doh=$GRAY
+             local c_tls=$GREEN; [[ "$tls" != "OK" ]] && c_tls=$RED; [[ "$tls" == "SKIP" ]] && c_tls=$GRAY
              
              local lat_str="${s_lat_avg}/${s_jit}/${s_loss}%"
              [[ "$s_loss" == "100" ]] && lat_str="DOWN"
              
-             printf "       %-18s | %-20s | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
+             printf "       %-18s | ${c_stat}%-20s${NC} | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
                  "$ip" "$lat_str" "${p53:0:4}" "${p853:0:3}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
         done
     done
@@ -2863,6 +2863,7 @@ generate_hierarchical_stats() {
                 rec_type=${rec_type^^}
                 
                 echo -e "  🔍 ${CYAN}$target${NC} IN ${PURPLE}$rec_type${NC}"
+                echo -e "  Legend: [Status] [Inconsistency=Differs from Group]"
                 
                 for grp in "${grp_list[@]}"; do
                     local srv_list=${DNS_GROUPS[$grp]}
@@ -2870,15 +2871,14 @@ generate_hierarchical_stats() {
                     # Consistency Tracking (List based - Robust)
                     local ANSWERS_LIST_RAW=""
                     
-                    # Legend moved to start of phase
-                    
+
                     # Build server results HTML
                     local results_html=""
                     # Buffer for terminal output
                     local term_output_buffer=()
                     
                     for srv in $srv_list; do
-                         CNT_TESTS_REC=$((CNT_TESTS_REC + 1))
+                         # Do not increment global counters here to avoid double counting
                          
                          # Uses full output to capture Status and Answer
                          local out_full
@@ -2928,7 +2928,7 @@ generate_hierarchical_stats() {
                          local term_extra=""
                          if [[ -n "$answer_data" && "$status" == "NOERROR" ]]; then
                             badge_title="$answer_data"
-                            term_extra=" (${answer_data:0:50}...)" # Truncate for term
+                            term_extra=""
                          fi
                          
                          # Generate HTML & Counters
@@ -3686,7 +3686,7 @@ run_record_tests() {
      fi
     [[ -z "$rec_count" ]] && rec_count=0
     echo "  Identificados ${rec_count} registros únicos para teste."
-    echo -e "  Legend: [Server] (Group) : [Status] (Answer/Error) [${RED}⚠️${NC}=Inconsistências]"
+    echo -e "  Legend: [Status] [Inconsistency=Differs from Group]"
     
     # Global Stats Arrays for Records
     declare -gA STATS_RECORD_RES      # Status code
@@ -3797,7 +3797,7 @@ EOF
                          local term_extra=""
                          if [[ -n "$answer_data" && "$status" == "NOERROR" ]]; then
                             badge_title="$answer_data"
-                            term_extra=" (${answer_data:0:50}...)" # Truncate for term
+                            term_extra=""
                          fi
                          
                          # Generate HTML & Counters
