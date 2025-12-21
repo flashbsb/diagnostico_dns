@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.6.41
+# Versão: 11.6.49
 # "Output Polish & Group Table Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.6.41"
+SCRIPT_VERSION="11.6.49"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2839,9 +2839,21 @@ generate_hierarchical_stats() {
     # ==========================
     echo -e "\n${BLUE}${BOLD}2. TESTES DE ZONA (SOA & AXFR)${NC}"
     
-    # Header
-    printf "  %-30s | %-20s | %-15s | %-20s\n" "ZONA" "SOA CONSENSUS" "SOA SERIAL" "AXFR SECURITY"
-    echo -e "  ${GRAY}-----------------------------------------------------------------------------------------${NC}"
+    # Header (Widths adjusted to match colorized rows: 30 | 29 | 15 | 29 | 15 )
+    # Note: Row placeholders are larger due to ANSI codes. 
+    # Let's align visually. 
+    # ZONE: 30
+    # SOA CONSENSUS: 20 (Header) vs 29 (Row - 9 for color) -> Real width ~13. So 20 is enough space visually.
+    # SOA SERIAL: 15 (Header) vs 15 (Row)
+    # AXFR: 20 (Header) vs 29 (Row - 9 for color) -> Real width ~18. So 20 is enough space.
+    # DNSSEC: 15 (Header) vs 15 (Row)
+    
+    printf "  %-30s | %-20s | %-16s | %-20s | %-15s\n" "ZONA" "SOA CONSENSUS" "SOA SERIAL" "AXFR SECURITY" "DNSSEC"
+    echo -e "  ${GRAY}-----------------------------------------------------------------------------------------------------------------${NC}"
+
+    # Global Summary Counters (Reset)
+    declare -g CNT_ZONES_OK=0
+    declare -g CNT_ZONES_DIV=0
 
     while IFS=';' read -r domain groups _ _ _; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
@@ -2873,196 +2885,212 @@ generate_hierarchical_stats() {
         if [[ "$soa_consistent" == "false" ]]; then
              soa_display="${RED}⚠️ DIVERGENT${NC}"
              soa_val="${YELLOW}MIXED${NC}"
+             CNT_ZONES_DIV=$((CNT_ZONES_DIV+1))
+        else
+             CNT_ZONES_OK=$((CNT_ZONES_OK+1))
         fi
         
-        # 2. AXFR Analysis
+        # 2. AXFR & DNSSEC Analysis
         local axfr_allowed_count=0
         local axfr_total_count=0
+        
+        local dnssec_signed_count=0
+        local dnssec_total_count=0
+        
         for grp in "${grp_list[@]}"; do
              for srv in ${DNS_GROUPS[$grp]}; do
                   local status="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
                   axfr_total_count=$((axfr_total_count+1))
                   if [[ "$status" == "ALLOWED" ]]; then axfr_allowed_count=$((axfr_allowed_count+1)); fi
+                  
+                  local d_sig="${STATS_ZONE_DNSSEC[$domain|$grp|$srv]}"
+                  dnssec_total_count=$((dnssec_total_count+1))
+                  if [[ "$d_sig" == "SIGNED" ]]; then dnssec_signed_count=$((dnssec_signed_count+1)); fi
              done
         done
         
-        local axfr_display="${GREEN}🛡️ SECURE${NC}"
+        local axfr_display="${GREEN}🛡️ DENIED${NC}"
         if [[ $axfr_allowed_count -gt 0 ]]; then
-             axfr_display="${RED}❌ OPEN ($axfr_allowed_count/$axfr_total_count)${NC}"
+             axfr_display="${RED}❌ ALLOWED ($axfr_allowed_count/$axfr_total_count)${NC}"
         fi
         
-        printf "  %-30s | %-29s | %-15s | %-29s\n" "$domain" "$soa_display" "$soa_val" "$axfr_display"
+        local dnssec_display="${RED}🔓 UNSIGNED${NC}"
+        if [[ $dnssec_signed_count -eq $dnssec_total_count && $dnssec_total_count -gt 0 ]]; then
+             dnssec_display="${GREEN}🔐 SIGNED${NC}"
+        elif [[ $dnssec_signed_count -gt 0 ]]; then
+             dnssec_display="${YELLOW}⚠️ PARTIAL${NC}"
+        fi
+        
+        # Use wider columns in printf to accommodate potential color codes if we want perfect alignment 
+        # or stick to standard visual width. The issue is likely that the header is NARROWER than the content definition.
+        
+        # Row: 
+        # Zone: 30
+        # SOA Sync: 29 (11 text + 9 color chars [5 start, 4 end] = 20?)
+        # Wait, \e[32m is 5 chars. \e[0m is 4 chars. Total 9 invis chars. 
+        # Text "✅ SYNC". Length 7. 7+9 = 16.
+        # printf %-29s pads it to 29. Visual length 29-9 = 20. Match Header 20. Correct.
+        
+        # SOA Val:
+        # Text "1234567890". Color 9. 19 chars.
+        # printf %-15s... If serialized is 10 chars + 9 color = 19. It will overflow 15.
+        # Let's bump SOA SERIAL col to 25 in Row.
+        
+        # AXFR:
+        # Text "🛡️ DENIED". Length 9? (Shield is 2 chars?). 9+9=18. 
+        # printf %-29s. Visual 20. Correct.
+        
+        # DNSSEC:
+        # Text "🔓 UNSIGNED". Length 11. 11+9=20.
+        # printf %-15s. Overflow!
+        
+        # FIX: Align everything to:
+        # Zone: 30
+        # SOA Cons: 20 visual -> 29 raw
+        # SOA Ser: 15 visual -> 24 raw (inc color)
+        # AXFR: 20 visual -> 29 raw
+        # DNSSEC: 15 visual -> 24 raw
+        
+        printf "  %-30s | %-29s | %-24s | %-29s | %-24s\n" "$domain" "$soa_display" "$soa_val" "$axfr_display" "$dnssec_display"
         
         # 3. Detail on Divergence (SOA)
         if [[ "$soa_consistent" == "false" ]]; then
-             echo -e "  ${GRAY}   -> Breakdown:${NC}"
+             echo -e "  ${GRAY}   └── Breakdown:${NC}"
              for grp in "${grp_list[@]}"; do
                   local g_soa=""
                   for srv in ${DNS_GROUPS[$grp]}; do
                        local s_soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
-                       # Show per server if needed, or grouped
-                       echo -e "       • ${grp} ($srv) : $s_soa"
+                       printf "       %-20s : %s\n" "• ${grp} ($srv)" "$s_soa" 
                   done
              done
              echo ""
         fi
+
         
     done <<< "$sorted_domains"
     
     # ==========================
     # 3. RECORD STATS AGGREGATION
     # ==========================
-    echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Consistência)${NC}"
+    echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Resolução & Consistência)${NC}"
+    
+    # Header
+    printf "  %-30s | %-6s | %-16s | %-24s | %-40s\n" "RECORD" "TYPE" "STATUS" "CONSISTENCY" "ANSWERS"
+    echo -e "  ${GRAY}------------------------------------------------------------------------------------------------------------------------------------${NC}"
+
+    # Global Summary Counters (Reset)
+    declare -g CNT_REC_FULL_OK=0
+    declare -g CNT_REC_PARTIAL=0
+    declare -g CNT_REC_FAIL=0
+    declare -g CNT_REC_NXDOMAIN=0
+    declare -g CNT_REC_CONSISTENT=0
+    declare -g CNT_REC_DIVERGENT=0
 
     while IFS=';' read -r domain groups test_types record_types extra_hosts; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
         
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra grp_list <<< "$groups"
-        
-        # Build Targets (Domain + Extras)
         IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
+        
         local targets=("$domain")
         for h in "${extra_list[@]}"; do [[ -n "$h" ]] && targets+=("$h.$domain"); done
         
         for target in "${targets[@]}"; do
-            # Use target for display and testing
-            
             for rec_type in "${rec_list[@]}"; do
                 rec_type=${rec_type^^}
                 
-                echo -e "  🔍 ${CYAN}$target${NC} IN ${PURPLE}$rec_type${NC}"
-                echo -e "  Legend: [Status] [Inconsistency=Differs from Group]"
+                # Aggregation Vars
+                local total_servers=0
+                local total_ok=0
+                local first_answer=""
+                local is_consistent=true
+                local answers_summary=""
                 
+                # Collect Data
                 for grp in "${grp_list[@]}"; do
-                    local srv_list=${DNS_GROUPS[$grp]}
-                    
-                    # Consistency Tracking (List based - Robust)
-                    local ANSWERS_LIST_RAW=""
-                    
-
-                    # Build server results HTML
-                    local results_html=""
-                    # Buffer for terminal output
-                    local term_output_buffer=()
-                    
-                    for srv in $srv_list; do
-                         # Do not increment global counters here to avoid double counting
+                    for srv in ${DNS_GROUPS[$grp]}; do
+                         total_servers=$((total_servers+1))
+                         local st="${STATS_RECORD_RES[$target|$rec_type|$grp|$srv]}"
+                         local ans="${STATS_RECORD_ANSWER[$target|$rec_type|$grp|$srv]}"
                          
-                         # Uses full output to capture Status and Answer
-                         local out_full
-                         out_full=$(dig +tries=1 +time=$TIMEOUT @$srv $target $rec_type 2>&1)
-                         local ret=$?
-                         
-                         # Extract status
-                         local status="UNKNOWN"
-                         if [[ $ret -ne 0 ]]; then status="ERR:$ret"; CNT_NETWORK_ERROR=$((CNT_NETWORK_ERROR + 1));
-                         elif echo "$out_full" | grep -q "status: NOERROR"; then status="NOERROR"; CNT_NOERROR=$((CNT_NOERROR + 1));
-                         elif echo "$out_full" | grep -q "status: NXDOMAIN"; then status="NXDOMAIN"; CNT_NXDOMAIN=$((CNT_NXDOMAIN + 1));
-                         elif echo "$out_full" | grep -q "status: SERVFAIL"; then status="SERVFAIL"; CNT_SERVFAIL=$((CNT_SERVFAIL + 1));
-                         elif echo "$out_full" | grep -q "status: REFUSED"; then status="REFUSED"; CNT_REFUSED=$((CNT_REFUSED + 1));
-                         elif echo "$out_full" | grep -q "connection timed out"; then status="TIMEOUT"; CNT_TIMEOUT=$((CNT_TIMEOUT + 1));
-                         else status="OTHER"; CNT_OTHER_ERROR=$((CNT_OTHER_ERROR + 1)); fi
-                         
-                         # Extract Answer Data for comparison (Sort to handle RRset order)
-                         local answer_data=""
-                         if [[ "$status" == "NOERROR" ]]; then
-                            answer_data=$(echo "$out_full" | grep -A 20 ";; ANSWER SECTION:" | grep -v ";; ANSWER SECTION:" | sed '/^$/d' | grep -v ";;" | sort | awk '{$1=$2=$3=$4=""; print $0}' | xargs)
-                         else
-                            answer_data="STATUS:$status"
+                         if [[ "$st" == "NOERROR" ]]; then
+                             total_ok=$((total_ok+1))
+                             if [[ -z "$first_answer" ]]; then first_answer="$ans"; fi
+                             # Strict comparison of answers
+                             if [[ "$ans" != "$first_answer" ]]; then is_consistent=false; fi
                          fi
-                         
-                         local comparison_data="$answer_data"
-                         if [[ "$rec_type" == "SOA" && "$status" == "NOERROR" ]]; then
-                             # For SOA, extract strict Serial (usually 3rd field in parsed answer: MNAME RNAME SERIAL...)
-                             # answer_data is typically: "ns1.host.com. dns.host.com. 2023122001 7200..."
-                             comparison_data=$(echo "$answer_data" | awk '{print $3}')
-                         fi
-                         
-                         # Store Result Globally (Using target instead of domain key)
-                         STATS_RECORD_RES["$target|$rec_type|$grp|$srv"]="$status"
-                         STATS_RECORD_ANSWER["$target|$rec_type|$grp|$srv"]="$answer_data"
-                         
-                         # Map answer to server for consistency check (Use Base64 key to avoid special char issues)
-                         local ans_key=$(echo -n "$comparison_data" | base64 -w0)
-                         ANSWERS_LIST_RAW+="$ans_key"$'\n'
-    
-                         # Extract Latency
-                         local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
-                         [[ -z "$dur" ]] && dur=0
-                         STATS_RECORD_LATENCY["$target|$rec_type|$grp|$srv"]="$dur"
-                         
-                         # Extract short answer for display (Badge Title & Terminal)
-                         local badge_title="Status: $status"
-                         local term_extra=""
-                         if [[ -n "$answer_data" && "$status" == "NOERROR" ]]; then
-                            badge_title="$answer_data"
-                            term_extra=""
-                         fi
-                         
-                         # Generate HTML & Counters
-                         local term_line=""
-                         if [[ "$status" == "NOERROR" ]]; then
-                             results_html+="<span class='badge status-ok' title='$srv: $badge_title'>$srv: OK</span> "
-                             term_line="     💻 $srv ($grp) : ${GREEN}OK${NC}$term_extra"
-                             SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
-                         elif [[ "$status" == "NXDOMAIN" ]]; then
-                             results_html+="<span class='badge status-warn' title='$srv: NXDOMAIN'>$srv: NX</span> "
-                             term_line="     💻 $srv ($grp) : ${YELLOW}NXDOMAIN${NC}"
-                             SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
-                         else
-                             results_html+="<span class='badge status-fail' title='$srv: $status'>$srv: ERR</span> "
-                             term_line="     💻 $srv ($grp) : ${RED}FAIL ($status)${NC}"
-                             FAILED_TESTS=$((FAILED_TESTS + 1))
-                         fi
-                         term_output_buffer+=("$term_line")
-                         
-                         # --- CSV EXPORT (Restored) ---
-                         if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
-                             local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
-                             local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
-                             [[ -z "$dur" ]] && dur=0
-                             # Timestamp;Grupo;Servidor;Dominio;Record;Status;Latencia_ms;Detail;TCP;SEC;EDNS;COOKIE;TLS;DOT;DOH;QNAME
-                             echo "$csv_ts;$grp;$srv;$target;$rec_type;$status;$dur;Phase3-Record;${CACHE_TCP_STATUS[$srv]};${CACHE_SEC_STATUS[$srv]};${CACHE_EDNS_STATUS[$srv]};${CACHE_COOKIE_STATUS[$srv]};${CACHE_TLS_STATUS[$srv]};;;;" >> "$LOG_FILE_CSV"
-                         fi
-                         
-                         # --- JSON EXPORT (Restored) ---
-                         if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
-                             local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
-                             [[ -z "$dur" ]] && dur=0
-                             echo "{ \"domain\": \"$target\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec_type\", \"status\": \"$status\", \"latency_ms\": $dur }," >> "$TEMP_JSON_DNS"
-                         fi
-    
                     done
-                    # Consistency Analysis for Group
-                    local unique_answers=$(echo -n "$ANSWERS_LIST_RAW" | sort -u | sed '/^$/d' | wc -l)
-                    STATS_RECORD_DIV_COUNT["$target|$rec_type|$grp"]=$unique_answers
-                    
-                    if [[ $unique_answers -gt 1 ]]; then
-                         STATS_RECORD_CONSISTENCY["$target|$rec_type|$grp"]="DIVERGENT"
-                         DIVERGENT_TESTS=$((DIVERGENT_TESTS + 1))
-                         results_html+="<span class='badge status-fail' style='margin-left:10px;'>DIVERGENT ($unique_answers)</span>"
-                         
-                         # Print buffered lines with [D] appended
-                         for line in "${term_output_buffer[@]}"; do
-                             echo -e "${line} ${RED}[Inconsistente]${NC}"
-                         done
-                    else
-                         STATS_RECORD_CONSISTENCY["$target|$rec_type|$grp"]="CONSISTENT"
-                         # Print buffered lines normally
-                         for line in "${term_output_buffer[@]}"; do
-                             echo -e "$line"
-                         done
-                    fi
-                    
-                    # Add row to HTML
-                    echo "<tr><td>$target</td><td>$rec_type</td><td>$grp</td><td>$results_html</td></tr>" >> "$TEMP_SECTION_RECORD"
                 done
+                
+                # Determine Status Display & Counters
+                local status_fmt=""
+                if [[ $total_ok -eq $total_servers ]]; then
+                    status_fmt="${GREEN}✅ OK ($total_ok/$total_servers)${NC}"
+                    CNT_REC_FULL_OK=$((CNT_REC_FULL_OK+1))
+                elif [[ $total_ok -eq 0 ]]; then
+                     # Check if it was NXDOMAIN
+                     local sample_st="${STATS_RECORD_RES[$target|$rec_type|${grp_list[0]}|${DNS_GROUPS[${grp_list[0]}]%% *}]}" 
+                     # (Approximation: check first server result)
+                     if [[ "$sample_st" == "NXDOMAIN" ]]; then
+                         status_fmt="${YELLOW}🚫 NXDOMAIN${NC}"
+                         CNT_REC_NXDOMAIN=$((CNT_REC_NXDOMAIN+1))
+                     else
+                         status_fmt="${RED}❌ FAIL (0/$total_servers)${NC}"
+                         CNT_REC_FAIL=$((CNT_REC_FAIL+1))
+                     fi
+                else
+                    status_fmt="${YELLOW}⚠️ PARTIAL ($total_ok/$total_servers)${NC}"
+                    CNT_REC_PARTIAL=$((CNT_REC_PARTIAL+1))
+                fi
+                
+                # Determine Consistency Display
+                local cons_fmt="${GRAY}--${NC}"
+                if [[ $total_ok -gt 0 ]]; then
+                     if [[ "$is_consistent" == "true" ]]; then
+                          cons_fmt="${GREEN}✅ SYNC${NC}"
+                          CNT_REC_CONSISTENT=$((CNT_REC_CONSISTENT+1))
+                     else
+                          cons_fmt="${RED}⚠️ DIVERGENT${NC}"
+                          CNT_REC_DIVERGENT=$((CNT_REC_DIVERGENT+1))
+                     fi
+                fi
+                
+                # Determine Answer Display
+                local ans_fmt=""
+                if [[ $total_ok -gt 0 ]]; then
+                     if [[ "$is_consistent" == "true" ]]; then
+                          ans_fmt="${first_answer:0:50}"
+                          if [[ ${#first_answer} -gt 50 ]]; then ans_fmt="${ans_fmt}..."; fi
+                     else
+                          ans_fmt="${YELLOW}Mixed (See Breakdown)${NC}"
+                     fi
+                else
+                     ans_fmt="${GRAY}No Answer${NC}"
+                fi
+                
+                printf "  %-30s | %-6s | %-25s | %-33s | %s\n" "$target" "$rec_type" "$status_fmt" "$cons_fmt" "$ans_fmt"
+                
+                # Expansion for inconsistencies
+                if [[ $total_ok -gt 0 && "$is_consistent" == "false" ]]; then
+                     echo -e "  ${GRAY}   └── Breakdown:${NC}"
+                     for grp in "${grp_list[@]}"; do
+                          for srv in ${DNS_GROUPS[$grp]}; do
+                               local s_ans="${STATS_RECORD_ANSWER[$target|$rec_type|$grp|$srv]}"
+                               local s_st="${STATS_RECORD_RES[$target|$rec_type|$grp|$srv]}"
+                               if [[ "$s_st" == "NOERROR" ]]; then
+                                    printf "       %-20s : %s\n" "• ${grp} ($srv)" "${s_ans:0:60}"
+                               else
+                                    printf "       %-20s : %s\n" "• ${grp} ($srv)" "${RED}$s_st${NC}"
+                               fi
+                          done
+                     done
+                     echo ""
+                fi
             done
         done
-    done < "$FILE_DOMAINS"
+    done <<< "$sorted_domains"
     echo ""
-    
 }
 
 print_final_terminal_summary() {
@@ -3111,17 +3139,15 @@ print_final_terminal_summary() {
      echo -e "\n${BLUE}${BOLD}ZONAS:${NC}"
      # Calcs for Zone Summary if not fully populated in previous steps (using available globals)
      # SEC_AXFR_RISK = Allowed, SEC_AXFR_OK = Denied
-     echo -e "  🔄 SOA Sync        : ${GREEN}${SOA_SYNC_OK:-0} Consistentes${NC} / ${RED}${SOA_SYNC_FAIL:-0} Divergentes${NC}"
+     echo -e "  🔄 SOA Sync        : ${GREEN}${CNT_ZONES_OK:-0} Consistentes${NC} / ${RED}${CNT_ZONES_DIV:-0} Divergentes${NC}"
      echo -e "  🌍 AXFR            : ${GREEN}${SEC_AXFR_OK:-0} Bloqueados${NC} / ${RED}${SEC_AXFR_RISK:-0} Expostos${NC}"
      echo -e "  🔐 Assinaturas     : ${GREEN}${ZONE_SEC_SIGNED:-0} Assinadas${NC} / ${RED}${ZONE_SEC_UNSIGNED:-0} Falhas (Missing)${NC}"
      
      echo -e "\n${BLUE}${BOLD}REGISTROS:${NC}"
      local rec_ok=$((CNT_NOERROR))
-     echo -e "  ✅ Sucessos        : ${GREEN}${CNT_NOERROR:-0} NOERROR${NC}"
-     echo -e "  🚫 Não Encontrados : ${YELLOW}${CNT_NXDOMAIN:-0} NXDOMAIN${NC}"
-     echo -e "  💥 Erros           : ${RED}${CNT_SERVFAIL:-0} SERVFAIL${NC} / ${RED}${CNT_REFUSED:-0} REFUSED${NC}"
-     echo -e "  ⏱️  Timeouts        : ${RED}${CNT_TIMEOUT:-0}${NC}"
-     echo -e "  ⚠️  Inconsistências : ${YELLOW}${DIVERGENT_TESTS:-0}${NC} (Grupos com respostas divergentes)"
+     echo -e "  ✅ Sucessos        : ${GREEN}${CNT_REC_FULL_OK:-0} OK${NC} / ${YELLOW}${CNT_REC_PARTIAL:-0} Parcial${NC}"
+     echo -e "  🚫 Resultados      : ${RED}${CNT_REC_FAIL:-0} Falhas${NC} / ${YELLOW}${CNT_REC_NXDOMAIN:-0} NXDOMAIN${NC}"
+     echo -e "  ⚠️  Consistência    : ${GREEN}${CNT_REC_CONSISTENT:-0} Sincronizados${NC} / ${RED}${CNT_REC_DIVERGENT:-0} Divergentes${NC}"
      
      # Log to text file
      if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
@@ -3587,6 +3613,7 @@ run_zone_tests() {
     # Global Stats Arrays
     declare -gA STATS_ZONE_AXFR
     declare -gA STATS_ZONE_SOA
+    declare -gA STATS_ZONE_DNSSEC
     
     # START ZONE HTML SECTION
     cat >> "$TEMP_SECTION_ZONE" << EOF
@@ -3689,6 +3716,7 @@ EOF
                   [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
                   SERVER_AXFR[$srv]="$axfr_stat"
                   STATS_ZONE_AXFR["$domain|$grp|$srv"]="$axfr_raw"
+                  STATS_ZONE_DNSSEC["$domain|$grp|$srv"]="$sig_res"
              done
 
              # Add Rows
