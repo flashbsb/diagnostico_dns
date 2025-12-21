@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.6.18
-# "FIX"
+# Versão: 11.6.23
+# "Output Polish & Group Table Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.6.18"
+SCRIPT_VERSION="11.6.23"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2713,10 +2713,8 @@ generate_hierarchical_stats() {
         echo -e "     Jitter   : Min ${G_JIT_MIN}ms / Avg ${g_jit_avg}ms / Max ${G_JIT_MAX}ms"
         echo -e "     Avg Loss : ${g_loss_avg}%"
         echo -e "     Port 53  : Open:${GREEN}${G_P53_OPEN}${NC} / Closed:${RED}${G_P53_CLOSED}${NC} / Filt:${YELLOW}${G_P53_FILT}${NC}"
-        echo -e "     Security : Rec Open:${RED}${G_REC_OPEN}${NC} | EDNS OK:${GREEN}${G_EDNS_OK}${NC} | Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC}"
-        echo -e "     Settings : Rec Open:${RED}${G_REC_OPEN}${NC} | EDNS OK:${GREEN}${G_EDNS_OK}${NC} | Cookie OK:${GREEN}${G_COOKIE_OK}${NC}"
-     echo -e "     Modern   : DNSSEC OK:${GREEN}${G_DNSSEC_OK}${NC} | DoH OK:${GREEN}${G_DOH_OK}${NC} | TLS OK:${GREEN}${G_TLS_OK}${NC}"
-     echo -e "     Privacy  : Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC}"
+        echo -e "     Security : Rec Open:${RED}${G_REC_OPEN}${NC} | Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC} | Cookie OK:${GREEN}${G_COOKIE_OK}${NC}"
+        echo -e "     Modern   : EDNS OK:${GREEN}${G_EDNS_OK}${NC} | DNSSEC OK:${GREEN}${G_DNSSEC_OK}${NC} | DoH OK:${GREEN}${G_DOH_OK}${NC} | TLS OK:${GREEN}${G_TLS_OK}${NC}"
     fi
     
     # Display Group Stats
@@ -2747,7 +2745,7 @@ generate_hierarchical_stats() {
         echo -e "     ✨ Modern   : DNSSEC OK:${GREEN}${GRP_DNSSEC_OK[$g]:-0}${NC} | DoH OK:${GREEN}${GRP_DOH_OK[$g]:-0}${NC} | TLS OK:${GREEN}${GRP_TLS_OK[$g]:-0}${NC}"
         
         echo -e "     ${GRAY}Servers:${NC}"
-        printf "       %-18s | %-16s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "COOKIE" "DNSSEC" "DOH" "TLS"
+        printf "       %-18s | %-20s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "COOKIE" "DNSSEC" "DOH" "TLS"
         
         # List Servers in this Group
         for ip in ${DNS_GROUPS[$g]}; do
@@ -2786,10 +2784,10 @@ generate_hierarchical_stats() {
              local c_doh=$GREEN; [[ "$doh" != "OK" ]] && c_doh=$GRAY
              local c_tls=$GREEN; [[ "$tls" != "OK" ]] && c_tls=$GRAY
              
-             local lat_str="${s_lat_avg}ms"
+             local lat_str="${s_lat_avg}/${s_jit}/${s_loss}%"
              [[ "$s_loss" == "100" ]] && lat_str="DOWN"
              
-             printf "       %-18s | %-16s | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
+             printf "       %-18s | %-20s | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
                  "$ip" "$lat_str" "${p53:0:4}" "${p853:0:3}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
         done
     done
@@ -3188,7 +3186,7 @@ run_server_tests() {
                     <th>Servidor</th>
                     <th>Grupos</th>
                     <th>Ping (ICMP)</th>
-                    <th>Latência (Min/Avg/Max)</th>
+                    <th>Latência (Avg/Jit/Loss)</th>
                     <th>Porta 53</th>
                     <th>Porta 853 (ABS)</th>
                     <th>Versão (Bind)</th>
@@ -3245,7 +3243,8 @@ EOF
             local out_ping=$($cmd_ping 2>&1)
             
             # Extract Packet Loss
-            local loss_pct=$(echo "$out_ping" | grep -oP '\d+(?=% packet loss)')
+            # Extract Packet Loss (Handle floats like 66.6667% -> 66)
+            local loss_pct=$(echo "$out_ping" | grep -oP '\d+(\.\d+)?(?=% packet loss)' | awk -F. '{print $1}')
             [[ -z "$loss_pct" ]] && loss_pct=100
             STATS_SERVER_PING_LOSS[$ip]=$loss_pct
             
@@ -3274,7 +3273,7 @@ EOF
                 ping_res_html="<span class='badge status-warn'>${loss_pct}% LOSS</span>"
                 ping_res_term="${YELLOW}FAIL ${ping_details}${NC}"
                 CNT_PING_FAIL=$((CNT_PING_FAIL+1))
-                lat_stats="${p_min}/${p_avg}/${p_max} ms"
+                lat_stats="${p_avg}ms / ±${p_mdev} / ${loss_pct}%"
             else 
                 # Packet Loss OK, Check Latency Threshold
                 local lat_status="OK"
@@ -3290,7 +3289,7 @@ EOF
                     CNT_PING_OK=$((CNT_PING_OK+1))
                 fi
                 
-                lat_stats="${p_min}/${p_avg}/${p_max} ms"
+                lat_stats="${p_avg}ms / ±${p_mdev} / ${loss_pct}%"
             fi
         fi
         
@@ -3507,7 +3506,7 @@ run_zone_tests() {
     local zone_count=0
     [[ -f "$FILE_DOMAINS" ]] && zone_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
     echo "  Identificadas ${zone_count} zonas únicas para teste."
-    echo "  Legend: [SOA] [AXFR]"
+    echo "  Legend: [SOA] [AXFR] [DNSSEC]"
     
     # Global Stats Arrays
     declare -gA STATS_ZONE_AXFR
