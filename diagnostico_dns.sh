@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.6.7
-# "Execution Scope Summary"
+# Versão: 11.6.18
+# "FIX"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.6.7"
+SCRIPT_VERSION="11.6.18"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -51,6 +51,12 @@ fi
 declare -A CONNECTIVITY_CACHE
 declare -A HTML_CONN_ERR_LOGGED 
 declare -i TOTAL_TESTS=0
+declare -i CNT_TESTS_SRV=0
+declare -i CNT_TESTS_ZONE=0
+declare -i CNT_TESTS_REC=0
+declare -i SUCC_TESTS_SRV=0
+declare -i SUCC_TESTS_ZONE=0
+declare -i SUCC_TESTS_REC=0
 declare -i TOTAL_DNS_QUERY_COUNT=0
 declare -i SUCCESS_TESTS=0
 declare -i FAILED_TESTS=0
@@ -73,6 +79,9 @@ declare -i SEC_REC_TIMEOUT=0
 declare -i SOA_SYNC_FAIL=0
 declare -i SOA_SYNC_FAIL=0
 declare -i SOA_SYNC_OK=0
+declare -i ZONE_SEC_SIGNED=0
+declare -i ZONE_SEC_UNSIGNED=0
+declare -i REC_OPEN_COUNT=0
 
 # Modern Features Counters
 declare -i EDNS_SUCCESS=0
@@ -877,17 +886,18 @@ check_dnssec_validation() {
     # Check if server validates DNSSEC (AD flag)
     local ip=$1
     local out
-    out=$(dig @$ip google.com A +dnssec +time=2 +tries=1 2>&1)
-    if echo "$out" | grep -q ";; flags:.* ad"; then return 0; fi
+    # Some older digs output "flags: qr rd ra ad" on one line, others different.
+    # We grep loosely for "ad" in flags line or "ad;" in header.
+    out=$(dig @$ip ietf.org A +dnssec +time=3 +tries=1 2>&1)
+    if echo "$out" | grep -q -E ";; flags:.* ad[ ;]"; then return 0; fi
     return 1
 }
 
 check_doh_avail() {
-    # Check if server responds to DoH (port 443, /dns-query)
-    # Simple check: Is 443 open?
-    if ! check_port_bash "$1" 443 2; then return 1; fi
-    # Better: curl check (optional, keeping it light for now)
-    return 0
+    # Check if server responds to DoH (port 443 TCP connect)
+    # Using true > /dev/tcp... instead of cat < ... to avoid hang waiting for data
+    if timeout 2 bash -c "true > /dev/tcp/$1/443" 2>/dev/null; then return 0; fi
+    return 1
 }
 
 check_tls_handshake() {
@@ -2230,12 +2240,12 @@ EOF
         local g_rtt_cnt=0
         for ip in ${DNS_GROUPS[$grp]}; do
             if [[ -n "${IP_RTT_RAW[$ip]}" ]]; then
-                g_rtt_sum=$(LC_ALL=C awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
+                g_rtt_sum=$(LC_NUMERIC=C awk "BEGIN {print $g_rtt_sum + ${IP_RTT_RAW[$ip]}}")
                 g_rtt_cnt=$((g_rtt_cnt + 1))
             fi
         done
         local g_avg="N/A"
-        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(LC_ALL=C awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
+        [[ $g_rtt_cnt -gt 0 ]] && g_avg=$(LC_NUMERIC=C awk "BEGIN {printf \"%.1fms\", $g_rtt_sum / $g_rtt_cnt}")
         
         local g_fail_cnt=${GROUP_FAIL_TESTS[$grp]}
         [[ -z "$g_fail_cnt" ]] && g_fail_cnt=0
@@ -2704,7 +2714,9 @@ generate_hierarchical_stats() {
         echo -e "     Avg Loss : ${g_loss_avg}%"
         echo -e "     Port 53  : Open:${GREEN}${G_P53_OPEN}${NC} / Closed:${RED}${G_P53_CLOSED}${NC} / Filt:${YELLOW}${G_P53_FILT}${NC}"
         echo -e "     Security : Rec Open:${RED}${G_REC_OPEN}${NC} | EDNS OK:${GREEN}${G_EDNS_OK}${NC} | Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC}"
-        echo -e "     Modern   : DNSSEC OK:${GREEN}${G_DNSSEC_OK}${NC} | DoH OK:${GREEN}${G_DOH_OK}${NC} | TLS OK:${GREEN}${G_TLS_OK}${NC}"
+        echo -e "     Settings : Rec Open:${RED}${G_REC_OPEN}${NC} | EDNS OK:${GREEN}${G_EDNS_OK}${NC} | Cookie OK:${GREEN}${G_COOKIE_OK}${NC}"
+     echo -e "     Modern   : DNSSEC OK:${GREEN}${G_DNSSEC_OK}${NC} | DoH OK:${GREEN}${G_DOH_OK}${NC} | TLS OK:${GREEN}${G_TLS_OK}${NC}"
+     echo -e "     Privacy  : Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC}"
     fi
     
     # Display Group Stats
@@ -2735,7 +2747,7 @@ generate_hierarchical_stats() {
         echo -e "     ✨ Modern   : DNSSEC OK:${GREEN}${GRP_DNSSEC_OK[$g]:-0}${NC} | DoH OK:${GREEN}${GRP_DOH_OK[$g]:-0}${NC} | TLS OK:${GREEN}${GRP_TLS_OK[$g]:-0}${NC}"
         
         echo -e "     ${GRAY}Servers:${NC}"
-        printf "       %-18s | %-16s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "DNSSEC" "DOH" "TLS"
+        printf "       %-18s | %-16s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "COOKIE" "DNSSEC" "DOH" "TLS"
         
         # List Servers in this Group
         for ip in ${DNS_GROUPS[$g]}; do
@@ -2769,6 +2781,7 @@ generate_hierarchical_stats() {
              
              local c_rec=$GREEN; [[ "$rec" == "OPEN" ]] && c_rec=$RED
              local c_edns=$GREEN; [[ "$edns" == "FAIL" ]] && c_edns=$RED
+             local c_cookie=$GREEN; [[ "$cookie" != "OK" ]] && c_cookie=$YELLOW
              local c_dnssec=$GREEN; [[ "$dnssec" != "OK" ]] && c_dnssec=$RED
              local c_doh=$GREEN; [[ "$doh" != "OK" ]] && c_doh=$GRAY
              local c_tls=$GREEN; [[ "$tls" != "OK" ]] && c_tls=$GRAY
@@ -2776,8 +2789,8 @@ generate_hierarchical_stats() {
              local lat_str="${s_lat_avg}ms"
              [[ "$s_loss" == "100" ]] && lat_str="DOWN"
              
-             printf "       %-18s | %-16s | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
-                 "$ip" "$lat_str" "${p53:0:4}" "${p853:0:3}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
+             printf "       %-18s | %-16s | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
+                 "$ip" "$lat_str" "${p53:0:4}" "${p853:0:3}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
         done
     done
     
@@ -2834,7 +2847,7 @@ generate_hierarchical_stats() {
     # ==========================
     echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Consistência)${NC}"
 
-    while IFS=';' read -r domain groups _ record_types extra_hosts; do
+    while IFS=';' read -r domain groups test_types record_types extra_hosts; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
         
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
@@ -2846,49 +2859,148 @@ generate_hierarchical_stats() {
         for h in "${extra_list[@]}"; do [[ -n "$h" ]] && targets+=("$h.$domain"); done
         
         for target in "${targets[@]}"; do
+            # Use target for display and testing
+            
             for rec_type in "${rec_list[@]}"; do
                 rec_type=${rec_type^^}
                 
-                echo -e "${GRAY}---------------------------------------------------------------${NC}"
-                echo -e "  🔍 ${BOLD}RECORD: $target IN $rec_type${NC}"
+                echo -e "  🔍 ${CYAN}$target${NC} IN ${PURPLE}$rec_type${NC}"
                 
                 for grp in "${grp_list[@]}"; do
-                     local cons_status="${STATS_RECORD_CONSISTENCY[$target|$rec_type|$grp]}"
-                     local div_count="${STATS_RECORD_DIV_COUNT[$target|$rec_type|$grp]}"
-                     
-                     local c_cons=$GREEN
-                     local cons_lbl="CONSISTENT"
-                     if [[ "$cons_status" == "DIVERGENT" ]]; then 
-                        c_cons=$RED
-                        cons_lbl="DIVERGENT ($div_count variants)"
-                     fi
-                     
-                     echo -e "     🏢 ${BOLD}Grupo: $grp${NC} -> ${c_cons}${cons_lbl}${NC}"
-                     
-                     # Server Details (Result + match indication if we wanted)
-                     for srv in ${DNS_GROUPS[$grp]}; do
-                          local ans="${STATS_RECORD_ANSWER[$target|$rec_type|$grp|$srv]}"
-                          local status="${STATS_RECORD_RES[$target|$rec_type|$grp|$srv]}"
-                          
-                          # Truncate answer
-                          local ans_show="${ans:0:60}"
-                          [[ ${#ans} -gt 60 ]] && ans_show+="..."
-                          
-                          local c_st=$GREEN
-                          [[ "$status" != "NOERROR" ]] && c_st=$RED
-                          
-                          printf "       - %-15s : [${c_st}%-8s${NC}] %s\n" "$srv" "$status" "$ans_show"
-                     done
+                    local srv_list=${DNS_GROUPS[$grp]}
+                    
+                    # Consistency Tracking (List based - Robust)
+                    local ANSWERS_LIST_RAW=""
+                    
+                    # Legend moved to start of phase
+                    
+                    # Build server results HTML
+                    local results_html=""
+                    # Buffer for terminal output
+                    local term_output_buffer=()
+                    
+                    for srv in $srv_list; do
+                         CNT_TESTS_REC=$((CNT_TESTS_REC + 1))
+                         
+                         # Uses full output to capture Status and Answer
+                         local out_full
+                         out_full=$(dig +tries=1 +time=$TIMEOUT @$srv $target $rec_type 2>&1)
+                         local ret=$?
+                         
+                         # Extract status
+                         local status="UNKNOWN"
+                         if [[ $ret -ne 0 ]]; then status="ERR:$ret"; CNT_NETWORK_ERROR=$((CNT_NETWORK_ERROR + 1));
+                         elif echo "$out_full" | grep -q "status: NOERROR"; then status="NOERROR"; CNT_NOERROR=$((CNT_NOERROR + 1));
+                         elif echo "$out_full" | grep -q "status: NXDOMAIN"; then status="NXDOMAIN"; CNT_NXDOMAIN=$((CNT_NXDOMAIN + 1));
+                         elif echo "$out_full" | grep -q "status: SERVFAIL"; then status="SERVFAIL"; CNT_SERVFAIL=$((CNT_SERVFAIL + 1));
+                         elif echo "$out_full" | grep -q "status: REFUSED"; then status="REFUSED"; CNT_REFUSED=$((CNT_REFUSED + 1));
+                         elif echo "$out_full" | grep -q "connection timed out"; then status="TIMEOUT"; CNT_TIMEOUT=$((CNT_TIMEOUT + 1));
+                         else status="OTHER"; CNT_OTHER_ERROR=$((CNT_OTHER_ERROR + 1)); fi
+                         
+                         # Extract Answer Data for comparison (Sort to handle RRset order)
+                         local answer_data=""
+                         if [[ "$status" == "NOERROR" ]]; then
+                            answer_data=$(echo "$out_full" | grep -A 20 ";; ANSWER SECTION:" | grep -v ";; ANSWER SECTION:" | sed '/^$/d' | grep -v ";;" | sort | awk '{$1=$2=$3=$4=""; print $0}' | xargs)
+                         else
+                            answer_data="STATUS:$status"
+                         fi
+                         
+                         local comparison_data="$answer_data"
+                         if [[ "$rec_type" == "SOA" && "$status" == "NOERROR" ]]; then
+                             # For SOA, extract strict Serial (usually 3rd field in parsed answer: MNAME RNAME SERIAL...)
+                             # answer_data is typically: "ns1.host.com. dns.host.com. 2023122001 7200..."
+                             comparison_data=$(echo "$answer_data" | awk '{print $3}')
+                         fi
+                         
+                         # Store Result Globally (Using target instead of domain key)
+                         STATS_RECORD_RES["$target|$rec_type|$grp|$srv"]="$status"
+                         STATS_RECORD_ANSWER["$target|$rec_type|$grp|$srv"]="$answer_data"
+                         
+                         # Map answer to server for consistency check (Use Base64 key to avoid special char issues)
+                         local ans_key=$(echo -n "$comparison_data" | base64 -w0)
+                         ANSWERS_LIST_RAW+="$ans_key"$'\n'
+    
+                         # Extract Latency
+                         local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
+                         [[ -z "$dur" ]] && dur=0
+                         STATS_RECORD_LATENCY["$target|$rec_type|$grp|$srv"]="$dur"
+                         
+                         # Extract short answer for display (Badge Title & Terminal)
+                         local badge_title="Status: $status"
+                         local term_extra=""
+                         if [[ -n "$answer_data" && "$status" == "NOERROR" ]]; then
+                            badge_title="$answer_data"
+                            term_extra=" (${answer_data:0:50}...)" # Truncate for term
+                         fi
+                         
+                         # Generate HTML & Counters
+                         local term_line=""
+                         if [[ "$status" == "NOERROR" ]]; then
+                             results_html+="<span class='badge status-ok' title='$srv: $badge_title'>$srv: OK</span> "
+                             term_line="     💻 $srv ($grp) : ${GREEN}OK${NC}$term_extra"
+                             SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
+                         elif [[ "$status" == "NXDOMAIN" ]]; then
+                             results_html+="<span class='badge status-warn' title='$srv: NXDOMAIN'>$srv: NX</span> "
+                             term_line="     💻 $srv ($grp) : ${YELLOW}NXDOMAIN${NC}"
+                             SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
+                         else
+                             results_html+="<span class='badge status-fail' title='$srv: $status'>$srv: ERR</span> "
+                             term_line="     💻 $srv ($grp) : ${RED}FAIL ($status)${NC}"
+                             FAILED_TESTS=$((FAILED_TESTS + 1))
+                         fi
+                         term_output_buffer+=("$term_line")
+                         
+                         # --- CSV EXPORT (Restored) ---
+                         if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
+                             local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
+                             local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
+                             [[ -z "$dur" ]] && dur=0
+                             # Timestamp;Grupo;Servidor;Dominio;Record;Status;Latencia_ms;Detail;TCP;SEC;EDNS;COOKIE;TLS;DOT;DOH;QNAME
+                             echo "$csv_ts;$grp;$srv;$target;$rec_type;$status;$dur;Phase3-Record;${CACHE_TCP_STATUS[$srv]};${CACHE_SEC_STATUS[$srv]};${CACHE_EDNS_STATUS[$srv]};${CACHE_COOKIE_STATUS[$srv]};${CACHE_TLS_STATUS[$srv]};;;;" >> "$LOG_FILE_CSV"
+                         fi
+                         
+                         # --- JSON EXPORT (Restored) ---
+                         if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
+                             local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
+                             [[ -z "$dur" ]] && dur=0
+                             echo "{ \"domain\": \"$target\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec_type\", \"status\": \"$status\", \"latency_ms\": $dur }," >> "$TEMP_JSON_DNS"
+                         fi
+    
+                    done
+                    # Consistency Analysis for Group
+                    local unique_answers=$(echo -n "$ANSWERS_LIST_RAW" | sort -u | sed '/^$/d' | wc -l)
+                    STATS_RECORD_DIV_COUNT["$target|$rec_type|$grp"]=$unique_answers
+                    
+                    if [[ $unique_answers -gt 1 ]]; then
+                         STATS_RECORD_CONSISTENCY["$target|$rec_type|$grp"]="DIVERGENT"
+                         DIVERGENT_TESTS=$((DIVERGENT_TESTS + 1))
+                         results_html+="<span class='badge status-fail' style='margin-left:10px;'>DIVERGENT ($unique_answers)</span>"
+                         
+                         # Print buffered lines with [D] appended
+                         for line in "${term_output_buffer[@]}"; do
+                             echo -e "${line} ${RED}[Inconsistente]${NC}"
+                         done
+                    else
+                         STATS_RECORD_CONSISTENCY["$target|$rec_type|$grp"]="CONSISTENT"
+                         # Print buffered lines normally
+                         for line in "${term_output_buffer[@]}"; do
+                             echo -e "$line"
+                         done
+                    fi
+                    
+                    # Add row to HTML
+                    echo "<tr><td>$target</td><td>$rec_type</td><td>$grp</td><td>$results_html</td></tr>" >> "$TEMP_SECTION_RECORD"
                 done
             done
         done
     done < "$FILE_DOMAINS"
-    echo "======================================================"
+    echo ""
+    
 }
 
 print_final_terminal_summary() {
      # Calculate totals
-     local total_tests=$TOTAL_TESTS
+     local total_tests=$((CNT_TESTS_SRV + CNT_TESTS_ZONE + CNT_TESTS_REC))
      local duration=$TOTAL_DURATION
      
      # Use our new function
@@ -2919,11 +3031,14 @@ print_final_terminal_summary() {
 
      echo -e "${BLUE}${BOLD}GERAL:${NC}"
      echo -e "  ⏱️  Duração Total   : ${duration}s"
-     echo -e "  🧪 Total Execuções  : ${total_tests}"
+     echo -e "  🧪 Total Execuções  : ${total_tests} (${CNT_TESTS_SRV} Server Tests, ${CNT_TESTS_ZONE} Zone Tests, ${CNT_TESTS_REC} Record Tests)"
      echo -e "  🔢 Escopo Testado   : ${srv_count} Servidores | ${zone_count} Zonas | ${rec_count} Registros"
      
      echo -e "\n${BLUE}${BOLD}SERVIDORES:${NC}"
      echo -e "  📡 Conectividade   : ${GREEN}${CNT_PING_OK:-0} OK${NC} / ${RED}${CNT_PING_FAIL:-0} Falhas${NC}"
+     echo -e "  🌉 Portas          : 53[${GREEN}${TCP_SUCCESS:-0}${NC}/${RED}${TCP_FAIL:-0}${NC}] | 853[${GREEN}${DOT_SUCCESS:-0}${NC}/${RED}${DOT_FAIL:-0}${NC}]"
+     echo -e "  ⚙️  Configuração    : Ver[${GREEN}${SEC_HIDDEN:-0}${NC}/${RED}${SEC_REVEALED:-0}${NC}] | Rec[${GREEN}${SEC_REC_OK:-0}${NC}/${RED}${SEC_REC_RISK:-0}${NC}]"
+     echo -e "  🔧 Recursos        : EDNS[${GREEN}${EDNS_SUCCESS:-0}${NC}] | Cookie[${GREEN}${COOKIE_SUCCESS:-0}${NC}]"
      echo -e "  🛡️  Segurança       : DNSSEC[${GREEN}${DNSSEC_SUCCESS:-0}${NC}/${RED}${DNSSEC_FAIL:-0}${NC}] | DoH[${GREEN}${DOH_SUCCESS:-0}${NC}/${RED}${DOH_FAIL:-0}${NC}] | TLS[${GREEN}${TLS_SUCCESS:-0}${NC}/${RED}${TLS_FAIL:-0}${NC}]"
      
      echo -e "\n${BLUE}${BOLD}ZONAS:${NC}"
@@ -2931,6 +3046,7 @@ print_final_terminal_summary() {
      # SEC_AXFR_RISK = Allowed, SEC_AXFR_OK = Denied
      echo -e "  🔄 SOA Sync        : ${GREEN}${SOA_SYNC_OK:-0} Consistentes${NC} / ${RED}${SOA_SYNC_FAIL:-0} Divergentes${NC}"
      echo -e "  🌍 AXFR            : ${GREEN}${SEC_AXFR_OK:-0} Bloqueados${NC} / ${RED}${SEC_AXFR_RISK:-0} Expostos${NC}"
+     echo -e "  🔐 Assinaturas     : ${GREEN}${ZONE_SEC_SIGNED:-0} Assinadas${NC} / ${RED}${ZONE_SEC_UNSIGNED:-0} Falhas (Missing)${NC}"
      
      echo -e "\n${BLUE}${BOLD}REGISTROS:${NC}"
      local rec_ok=$((CNT_NOERROR))
@@ -2979,7 +3095,7 @@ validate_dig_capabilities() {
  
     # Check for Cookie support (+cookie)
     if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
-         if ! dig +cookie +noall . &>/dev/null; then
+         if ! dig -h 2>&1 | grep -q "+\[no\]cookie"; then
              echo -e "${YELLOW}⚠️  Aviso: O binário 'dig' local não suporta a opção '+cookie'. O teste de Cookies será desativado.${NC}"
              ENABLE_COOKIE_CHECK="false"
          fi
@@ -3079,6 +3195,9 @@ run_server_tests() {
                     <th>Recursão</th>
                     <th>EDNS</th>
                     <th>Cookie</th>
+                    <th>DNSSEC (Val)</th>
+                    <th>DoH (443)</th>
+                    <th>TLS (Hshake)</th>
                 </tr>
             </thead>
             <tbody>
@@ -3116,6 +3235,9 @@ EOF
         local edns_res_term="${GRAY}N/A${NC}"
         local cookie_res_html="<span class='badge neutral'>N/A</span>"
         local cookie_res_term="${GRAY}N/A${NC}"
+        local dnssec_res_html="<span class='badge neutral'>N/A</span>"
+        local doh_res_html="<span class='badge neutral'>N/A</span>"
+        local tls_res_html="<span class='badge neutral'>N/A</span>"
         
         # Ping with Stats Extraction
         if [[ "$ENABLE_PING" == "true" ]]; then
@@ -3141,19 +3263,33 @@ EOF
             STATS_SERVER_PING_MAX[$ip]=$p_max
             STATS_SERVER_PING_JITTER[$ip]=$p_mdev 
             
+            # Prepare detailed stats string
+            local ping_details="${GRAY}[${p_avg}ms|±${p_mdev}|${loss_pct}%]${NC}"
+            
             if [[ "$loss_pct" -eq 100 ]]; then
                 ping_res_html="<span class='badge status-fail'>100% LOSS</span>"
                 ping_res_term="${RED}DOWN${NC}"
                 CNT_PING_FAIL=$((CNT_PING_FAIL+1))
-            elif [[ "$loss_pct" -gt 0 ]]; then
+            elif [[ "$loss_pct" -gt "$PING_PACKET_LOSS_LIMIT" ]]; then
                 ping_res_html="<span class='badge status-warn'>${loss_pct}% LOSS</span>"
-                ping_res_term="${YELLOW}${loss_pct}% LOSS${NC}"
+                ping_res_term="${YELLOW}FAIL ${ping_details}${NC}"
                 CNT_PING_FAIL=$((CNT_PING_FAIL+1))
                 lat_stats="${p_min}/${p_avg}/${p_max} ms"
             else 
-                ping_res_html="<span class='badge status-ok'>OK</span>"
-                ping_res_term="${GREEN}OK${NC}"
-                CNT_PING_OK=$((CNT_PING_OK+1))
+                # Packet Loss OK, Check Latency Threshold
+                local lat_status="OK"
+                # Use bc for float comparison if available, else integer
+                local p_avg_int=${p_avg%.*}
+                if [[ "$p_avg_int" -gt "$LATENCY_WARNING_THRESHOLD" ]]; then
+                    ping_res_html="<span class='badge status-warn'>SLOW (${p_avg}ms)</span>"
+                    ping_res_term="${YELLOW}SLOW ${ping_details}${NC}"
+                    CNT_PING_OK=$((CNT_PING_OK+1)) # Still reachable
+                else
+                    ping_res_html="<span class='badge status-ok'>OK</span>"
+                    ping_res_term="${GREEN}OK ${ping_details}${NC}"
+                    CNT_PING_OK=$((CNT_PING_OK+1))
+                fi
+                
                 lat_stats="${p_min}/${p_avg}/${p_max} ms"
             fi
         fi
@@ -3178,11 +3314,13 @@ EOF
                  tls853_res_term="${GREEN}OK${NC}"
                  STATS_SERVER_PORT_853[$ip]="OPEN"
                  CACHE_TLS_STATUS[$ip]="OK"
+                 DOT_SUCCESS=$((DOT_SUCCESS+1))
              else 
                  tls853_res_html="<span class='badge status-fail'>CLOSED</span>"
                  tls853_res_term="${RED}FAIL${NC}"
                  STATS_SERVER_PORT_853[$ip]="CLOSED"
                  CACHE_TLS_STATUS[$ip]="FAIL"
+                 DOT_FAIL=$((DOT_FAIL+1))
              fi
         else
              STATS_SERVER_PORT_853[$ip]="SKIPPED"
@@ -3196,10 +3334,12 @@ EOF
                  ver_res_html="<span class='badge status-ok'>HIDDEN</span>"
                  ver_res_term="${GREEN}HIDDEN${NC}"
                  STATS_SERVER_VERSION[$ip]="HIDDEN"
+                 SEC_HIDDEN=$((SEC_HIDDEN+1))
              else 
                  ver_res_html="<span class='badge status-fail' title='$out_ver'>REVEA.</span>"
                  ver_res_term="${RED}REVEALED${NC}"
                  STATS_SERVER_VERSION[$ip]="REVEALED"
+                 SEC_REVEALED=$((SEC_REVEALED+1))
              fi
         else
              STATS_SERVER_VERSION[$ip]="SKIPPED"
@@ -3212,10 +3352,12 @@ EOF
                  rec_res_html="<span class='badge status-ok'>CLOSED</span>"
                  rec_res_term="${GREEN}CLOSED${NC}"
                  STATS_SERVER_RECURSION[$ip]="CLOSED"
+                 SEC_REC_OK=$((SEC_REC_OK+1))
              elif echo "$out_rec" | grep -q "status: NOERROR"; then
                  rec_res_html="<span class='badge status-fail'>OPEN</span>"
                  rec_res_term="${RED}OPEN${NC}"
                  STATS_SERVER_RECURSION[$ip]="OPEN"
+                 SEC_REC_RISK=$((SEC_REC_RISK+1))
              else
                  rec_res_html="<span class='badge status-warn'>UNK</span>"
                  rec_res_term="${YELLOW}UNK${NC}"
@@ -3256,18 +3398,23 @@ EOF
                  STATS_SERVER_COOKIE[$ip]="ABSENT"
                  COOKIE_FAIL=$((COOKIE_FAIL+1)); CACHE_COOKIE_STATUS[$ip]="ABSENT"
              fi
-             STATS_SERVER_COOKIE[$ip]="SKIPPED"
-             cookie_res_term="${GRAY}SKIP${NC}"
         fi
         
         # 1.4 Security & Modern (DNSSEC, DoH, TLS)
         if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
-             if check_dnssec_validation "$ip"; then
+             # Only check validation if server is Recursive (OPEN) or UNKNOWN.
+             # If CLOSED (Authoritative), it won't validate, so mark N/A.
+             if [[ "${STATS_SERVER_RECURSION[$ip]}" == "CLOSED" ]]; then
+                 STATS_SERVER_DNSSEC[$ip]="NA"
+                 dnssec_res_html="<span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span>"
+             elif check_dnssec_validation "$ip"; then
                  STATS_SERVER_DNSSEC[$ip]="OK"
                  DNSSEC_SUCCESS=$((DNSSEC_SUCCESS+1))
+                 dnssec_res_html="<span class='badge status-ok'>VALIDATING</span>"
              else
                  STATS_SERVER_DNSSEC[$ip]="FAIL" 
                  DNSSEC_FAIL=$((DNSSEC_FAIL+1))
+                 dnssec_res_html="<span class='badge status-fail'>FAIL</span>"
              fi
         else STATS_SERVER_DNSSEC[$ip]="SKIP"; fi
         
@@ -3275,9 +3422,11 @@ EOF
              if check_doh_avail "$ip"; then
                  STATS_SERVER_DOH[$ip]="OK"
                  DOH_SUCCESS=$((DOH_SUCCESS+1))
+                 doh_res_html="<span class='badge status-ok'>AVAILABLE</span>"
              else
                  STATS_SERVER_DOH[$ip]="FAIL"
                  DOH_FAIL=$((DOH_FAIL+1))
+                 doh_res_html="<span class='badge status-fail'>FAIL</span>"
              fi
         else STATS_SERVER_DOH[$ip]="SKIP"; fi
         
@@ -3285,18 +3434,41 @@ EOF
              if check_tls_handshake "$ip"; then
                  STATS_SERVER_TLS[$ip]="OK"
                  TLS_SUCCESS=$((TLS_SUCCESS+1))
+                 tls_res_html="<span class='badge status-ok'>OK</span>"
              else
                  STATS_SERVER_TLS[$ip]="FAIL"
                  TLS_FAIL=$((TLS_FAIL+1))
+                 tls_res_html="<span class='badge status-fail'>FAIL</span>"
              fi
         else STATS_SERVER_TLS[$ip]="SKIP"; fi
+        
+        # Ping Count
+        [[ "$ENABLE_PING" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # Port 53
+        CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # Port 853
+        [[ "$ENABLE_DOT_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # Version
+        [[ "$CHECK_BIND_VERSION" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # Recursion
+        [[ "$ENABLE_RECURSION_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # EDNS
+        [[ "$ENABLE_EDNS_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # Cookie
+        [[ "$ENABLE_COOKIE_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # DNSSEC
+        [[ "$ENABLE_DNSSEC_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
+        # DoH
+        [[ "$ENABLE_DOH_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
 
         # ADD ROW
-        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
+        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
         # Prepare Output Terms for new checks
-        local dnssec_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && dnssec_term="${GREEN}OK${NC}"
-        [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]] && dnssec_term="${RED}FAIL${NC}"
+        local dnssec_term="${GRAY}SKIP${NC}"
+        if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then dnssec_term="${GREEN}OK${NC}"; fi
+        if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]]; then dnssec_term="${RED}FAIL${NC}"; fi
+        if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "NA" ]]; then dnssec_term="${YELLOW}N/A${NC}"; fi
         
         local doh_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && doh_term="${GREEN}OK${NC}"
         [[ "${STATS_SERVER_DOH[$ip]}" == "FAIL" ]] && doh_term="${RED}FAIL${NC}"
@@ -3354,6 +3526,7 @@ run_zone_tests() {
                     <th>Servidor</th>
                     <th>SOA Serial</th>
                     <th>AXFR Status</th>
+                    <th>DNSSEC Sig</th>
                 </tr>
             </thead>
             <tbody>
@@ -3373,8 +3546,10 @@ EOF
              
              # Calculate SOA for Group (First pass)
              local first_serial=""
+             local is_signed_zone="false"
              declare -A SERVER_SERIALS
              declare -A SERVER_AXFR
+             declare -A SERVER_DNSSEC_SIG
              
              for srv in $srvs; do
                   # SOA
@@ -3398,14 +3573,33 @@ EOF
                       if echo "$out_axfr" | grep -q "Refused" || echo "$out_axfr" | grep -q "Transfer failed"; then
                           axfr_stat="<span class='badge status-ok'>DENIED</span>"
                           axfr_raw="DENIED"
+                          SEC_AXFR_OK=$((SEC_AXFR_OK+1))
                       elif echo "$out_axfr" | grep -q "SOA"; then
                           axfr_stat="<span class='badge status-fail'>ALLOWED</span>"
                           axfr_raw="ALLOWED"
+                          SEC_AXFR_RISK=$((SEC_AXFR_RISK+1))
                       else
                           axfr_stat="<span class='badge status-warn'>TIMEOUT/ERR</span>"
                           axfr_raw="TIMEOUT"
+                          SEC_AXFR_TIMEOUT=$((SEC_AXFR_TIMEOUT+1))
                       fi
+                      CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
                   fi
+                  
+                  # DNSSEC Signature Check (Smart Detection)
+                  local sig_res="UNSIGNED"
+                  if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                       local out_sig=$(dig +dnssec +noall +answer @$srv $domain SOA +time=$TIMEOUT)
+                       if echo "$out_sig" | grep -q "RRSIG"; then
+                            sig_res="SIGNED"
+                            is_signed_zone="true"
+                       fi
+                       CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
+                  fi
+                  SERVER_DNSSEC_SIG[$srv]="$sig_res"
+                  
+                  # SOA Count
+                  [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]] && CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
                   SERVER_AXFR[$srv]="$axfr_stat"
                   STATS_ZONE_AXFR["$domain|$grp|$srv"]="$axfr_raw"
              done
@@ -3416,7 +3610,7 @@ EOF
                  local ser_html="$serial"
                  if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]]; then
                      if [[ "$serial" == "TIMEOUT" ]]; then
-                         ser_html="<span class='badge status-neutral'>TIMEOUT</span>"
+                         ser_html="<span class='badge neutral'>TIMEOUT</span>"
                      elif [[ "$serial" == "N/A" ]]; then
                          ser_html="<span class='badge neutral'>N/A</span>"
                      elif [[ "$serial" == "$first_serial" ]]; then
@@ -3428,7 +3622,24 @@ EOF
                      fi
                  fi
                  
-                 echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${SERVER_AXFR[$srv]}</td></tr>" >> "$TEMP_SECTION_ZONE"
+                 local sig_status=${SERVER_DNSSEC_SIG[$srv]}
+                 local sig_html="<span class='badge neutral'>N/A</span>"
+                 
+                 if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                      if [[ "$is_signed_zone" == "true" ]]; then
+                          if [[ "$sig_status" == "SIGNED" ]]; then
+                               sig_html="<span class='badge status-ok'>SIGNED</span>"
+                               ZONE_SEC_SIGNED=$((ZONE_SEC_SIGNED+1))
+                          else
+                               sig_html="<span class='badge status-fail'>MISSING</span>"
+                               ZONE_SEC_UNSIGNED=$((ZONE_SEC_UNSIGNED+1))
+                          fi
+                      else
+                          sig_html="<span class='badge neutral'>UNSIGNED</span>"
+                      fi
+                 fi
+                 
+                 echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${SERVER_AXFR[$srv]}</td><td>${sig_html}</td></tr>" >> "$TEMP_SECTION_ZONE"
                  
                  # Term Output
                  local term_soa="$serial"
@@ -3439,11 +3650,20 @@ EOF
                  # Simple AXFR status for term
                  if [[ "$term_axfr" == *"DENIED"* ]]; then term_axfr="${GREEN}DENIED${NC}"
                  elif [[ "$term_axfr" == *"ALLOWED"* ]]; then term_axfr="${RED}ALLOWED${NC}"
-                 else term_axfr="${YELLOW}unk${NC}"; fi
+                 else term_axfr="${YELLOW}TIMEOUT${NC}"; fi
                  
-                 echo -e "     💻 $srv ($grp) | SOA:$term_soa | AXFR:$term_axfr"
+                 local term_sig=""
+                 if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+                      if [[ "$is_signed_zone" == "true" ]]; then
+                           [[ "$sig_status" == "SIGNED" ]] && term_sig="${GREEN}[SIG:OK]${NC}" || term_sig="${RED}[SIG:FAIL]${NC}"
+                      else
+                           term_sig="${YELLOW}[UNSIGNED]${NC}"
+                      fi
+                 fi
+                 
+                 echo -e "     🏢 Grupo: $grp -> $srv : SOA[$term_soa] AXFR[$term_axfr] $term_sig"
              done
-        done
+         done
     done < "$FILE_DOMAINS"
     
     echo "</tbody></table></div></div>" >> "$TEMP_SECTION_ZONE"
@@ -3528,7 +3748,7 @@ EOF
                     local term_output_buffer=()
                     
                     for srv in $srv_list; do
-                         TOTAL_TESTS=$((TOTAL_TESTS + 1))
+                         CNT_TESTS_REC=$((CNT_TESTS_REC + 1))
                          
                          # Uses full output to capture Status and Answer
                          local out_full
