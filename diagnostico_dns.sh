@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.5.13
-# "SOA Serial Strict Consistency"
+# Versão: 11.6.7
+# "Execution Scope Summary"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.5.13"
+SCRIPT_VERSION="11.6.7"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -872,6 +872,31 @@ validate_csv_files() {
 }
 
 check_port_bash() { timeout "$3" bash -c "cat < /dev/tcp/$1/$2" &>/dev/null; return $?; }
+
+check_dnssec_validation() {
+    # Check if server validates DNSSEC (AD flag)
+    local ip=$1
+    local out
+    out=$(dig @$ip google.com A +dnssec +time=2 +tries=1 2>&1)
+    if echo "$out" | grep -q ";; flags:.* ad"; then return 0; fi
+    return 1
+}
+
+check_doh_avail() {
+    # Check if server responds to DoH (port 443, /dns-query)
+    # Simple check: Is 443 open?
+    if ! check_port_bash "$1" 443 2; then return 1; fi
+    # Better: curl check (optional, keeping it light for now)
+    return 0
+}
+
+check_tls_handshake() {
+    # Check SSL handshake on port 853
+    local ip=$1
+    if ! command -v openssl &>/dev/null; then return 2; fi
+    echo "Q" | timeout 3 openssl s_client -connect $ip:853 -brief &>/dev/null
+    return $?
+}
 
 validate_connectivity() {
     local server="$1"; local timeout="${2:-$TIMEOUT}"
@@ -2518,148 +2543,343 @@ EOF
     echo -e "  📄 Relatório JSON    : ${GREEN}$JSON_FILE${NC}"
 }
 
-# --- HIERARCHICAL REPORTING ---
+# --- HIERARCHICAL REPORTING (v2 Refactored) ---
 generate_hierarchical_stats() {
     echo -e "\n${BOLD}======================================================${NC}"
-    echo -e "${BOLD}       RELATÓRIO HIERÁRQUICO DE ESTATÍSTICAS${NC}"
+    echo -e "${BOLD}         RELATÓRIO DE ESTATÍSTICAS (DETALHADO)${NC}"
     echo -e "${BOLD}======================================================${NC}"
 
-    # 1. SERVER STATS
-    echo -e "\n${BLUE}${BOLD}1. ESTATÍSTICAS DE SERVIDORES (Global -> Grupo -> Servidor)${NC}"
-    printf "%-18s | %-15s | %-20s | %-8s | %-8s | %-8s\n" "Servidor" "Grupo" "Latency (Avg/Loss)" "Port 53" "Recursion" "EDNS"
-    echo "-------------------------------------------------------------------------------------------"
+    # ==========================
+    # 1. SERVER STATS AGGREGATION
+    # ==========================
+    echo -e "\n${BLUE}${BOLD}1. TESTES DE SERVIDORES (Infraestrutura & Capabilities)${NC}"
     
-    local total_lat_sum=0
-    local total_lat_cnt=0
+    # Pre-Calculation for Aggregates (Ping/Jitter/Loss are numeric)
+    local G_LAT_MIN=999999; local G_LAT_MAX=0; local G_LAT_SUM=0; local G_LAT_CNT=0
+    local G_JIT_MIN=999999; local G_JIT_MAX=0; local G_JIT_SUM=0; local G_JIT_CNT=0
+    local G_LOSS_SUM=0; local G_LOSS_CNT=0
     
+    # Capability Counters (Global)
+    local G_P53_OPEN=0; local G_P53_CLOSED=0; local G_P53_FILT=0
+    local G_P853_OK=0;  local G_P853_FAIL=0
+    local G_REC_OPEN=0; local G_REC_CLOSED=0
+    local G_EDNS_OK=0;  local G_EDNS_FAIL=0
+    local G_COOKIE_OK=0; local G_COOKIE_NO=0; local G_COOKIE_FAIL=0
+    local G_VER_HIDDEN=0; local G_VER_REVEALED=0
+    local G_DNSSEC_OK=0; local G_DNSSEC_FAIL=0
+    local G_DOH_OK=0; local G_DOH_FAIL=0
+    local G_TLS_OK=0; local G_TLS_FAIL=0
+
+    # Group Stats Storage
+    local -A GRP_LAT_MIN; local -A GRP_LAT_MAX; local -A GRP_LAT_SUM; local -A GRP_LAT_CNT
+    local -A GRP_JIT_MIN; local -A GRP_JIT_MAX; local -A GRP_JIT_SUM; local -A GRP_JIT_CNT
+    local -A GRP_LOSS_SUM; local -A GRP_LOSS_CNT
+    
+    local -A GRP_P53_OPEN; local -A GRP_P53_CLOSED; local -A GRP_P53_FILT
+    local -A GRP_REC_OPEN; local -A GRP_REC_CLOSED
+    local -A GRP_EDNS_OK;  local -A GRP_EDNS_FAIL
+    local -A GRP_DNSSEC_OK; local -A GRP_DNSSEC_FAIL
+    local -A GRP_DOH_OK; local -A GRP_DOH_FAIL
+    local -A GRP_TLS_OK; local -A GRP_TLS_FAIL
+    
+    local -A GROUPS_SEEN
+
+    # Iterate all servers to populate stats
     for ip in "${!UNIQUE_SERVERS[@]}"; do
         local grps="${SERVER_GROUPS_MAP[$ip]}"
-        local ping_avg="${STATS_SERVER_PING_AVG[$ip]}"
-        local ping_loss="${STATS_SERVER_PING_LOSS[$ip]}"
-        local p53="${STATS_SERVER_PORT_53[$ip]}" 
+        
+        # Numeric Metrics
+        local lat_min="${STATS_SERVER_PING_MIN[$ip]}"; [[ -z "$lat_min" ]] && lat_min=0
+        local lat_avg="${STATS_SERVER_PING_AVG[$ip]}"; [[ -z "$lat_avg" ]] && lat_avg=0
+        local lat_max="${STATS_SERVER_PING_MAX[$ip]}"; [[ -z "$lat_max" ]] && lat_max=0
+        local jit="${STATS_SERVER_PING_JITTER[$ip]}";  [[ -z "$jit" ]] && jit=0
+        local loss="${STATS_SERVER_PING_LOSS[$ip]}";   [[ -z "$loss" ]] && loss=0
+        
+        # Capability Metrics
+        local p53="${STATS_SERVER_PORT_53[$ip]}"
+        local p853="${STATS_SERVER_PORT_853[$ip]}"
         local rec="${STATS_SERVER_RECURSION[$ip]}"
         local edns="${STATS_SERVER_EDNS[$ip]}"
-        
-        # Format Ping
-        local ping_str="N/A"
-        if [[ -n "$ping_avg" && "$ping_avg" != "0" ]]; then
-             ping_str="${ping_avg}ms (${ping_loss}%)"
-             # Approximate global avg calc - Handled in valid numeric block below
+        local cookie="${STATS_SERVER_COOKIE[$ip]}"
+        local ver="${STATS_SERVER_VERSION[$ip]}"
+        local dnssec="${STATS_SERVER_DNSSEC[$ip]}"
+        local doh="${STATS_SERVER_DOH[$ip]}"
+        local tls="${STATS_SERVER_TLS[$ip]}"
 
-        elif [[ "$ping_loss" == "100" ]]; then
-             ping_str="DOWN"
+        # Global Aggregates (Safely using awk -v)
+        G_LOSS_SUM=$(awk -v s="$G_LOSS_SUM" -v v="$loss" 'BEGIN {print s+v}')
+        G_LOSS_CNT=$((G_LOSS_CNT + 1))
+        
+        if (( $(echo "$lat_avg > 0" | bc -l) )); then
+             if (( $(echo "$lat_min < $G_LAT_MIN" | bc -l) )); then G_LAT_MIN=$lat_min; fi
+             if (( $(echo "$lat_max > $G_LAT_MAX" | bc -l) )); then G_LAT_MAX=$lat_max; fi
+             G_LAT_SUM=$(awk -v s="$G_LAT_SUM" -v v="$lat_avg" 'BEGIN {print s+v}')
+             G_LAT_CNT=$((G_LAT_CNT + 1))
+             
+             if (( $(echo "$jit < $G_JIT_MIN" | bc -l) )); then G_JIT_MIN=$jit; fi
+             if (( $(echo "$jit > $G_JIT_MAX" | bc -l) )); then G_JIT_MAX=$jit; fi
+             G_JIT_SUM=$(awk -v s="$G_JIT_SUM" -v v="$jit" 'BEGIN {print s+v}')
+             G_JIT_CNT=$((G_JIT_CNT + 1))
         fi
         
-        # Colorize
-        local c_p53=$GREEN; [[ "$p53" != "OPEN" ]] && c_p53=$RED
-        local c_rec=$RED; [[ "$rec" == "CLOSED" ]] && c_rec=$GREEN
-        local c_edns=$GREEN; [[ "$edns" == "FAIL" ]] && c_edns=$RED
+        # Global Capabilities
+        if [[ "$p53" == "OPEN" ]]; then G_P53_OPEN=$((G_P53_OPEN+1));
+        elif [[ "$p53" == "CLOSED" ]]; then G_P53_CLOSED=$((G_P53_CLOSED+1));
+        else G_P53_FILT=$((G_P53_FILT+1)); fi
         
-        # Colorize Latency
-        local c_lat=$GREEN
-        if [[ "$ping_str" == "DOWN" ]]; then
-             c_lat=$RED
-        elif [[ -n "$ping_avg" && "$ping_avg" != "0" ]]; then
-             # Compare float
-             if (( $(echo "$ping_avg > $LATENCY_WARNING_THRESHOLD" | bc -l 2>/dev/null || echo 0) )); then
-                  c_lat=$YELLOW
-             fi
-        fi
+        if [[ "$p853" == "OK" ]]; then G_P853_OK=$((G_P853_OK+1)); else G_P853_FAIL=$((G_P853_FAIL+1)); fi
+        if [[ "$rec" == "OPEN" ]]; then G_REC_OPEN=$((G_REC_OPEN+1)); else G_REC_CLOSED=$((G_REC_CLOSED+1)); fi
+        if [[ "$edns" == "OK" ]]; then G_EDNS_OK=$((G_EDNS_OK+1)); else G_EDNS_FAIL=$((G_EDNS_FAIL+1)); fi
+        
+        if [[ "$cookie" == "OK" ]]; then G_COOKIE_OK=$((G_COOKIE_OK+1));
+        elif [[ "$cookie" == "NO" ]]; then G_COOKIE_NO=$((G_COOKIE_NO+1));
+        else G_COOKIE_FAIL=$((G_COOKIE_FAIL+1)); fi
+        
+        
+        if [[ "$ver" == "HIDDEN" ]]; then G_VER_HIDDEN=$((G_VER_HIDDEN+1)); else G_VER_REVEALED=$((G_VER_REVEALED+1)); fi
+        
+        if [[ "$dnssec" == "OK" ]]; then G_DNSSEC_OK=$((G_DNSSEC_OK+1)); else G_DNSSEC_FAIL=$((G_DNSSEC_FAIL+1)); fi
+        if [[ "$doh" == "OK" ]]; then G_DOH_OK=$((G_DOH_OK+1)); else G_DOH_FAIL=$((G_DOH_FAIL+1)); fi
+        if [[ "$tls" == "OK" ]]; then G_TLS_OK=$((G_TLS_OK+1)); else G_TLS_FAIL=$((G_TLS_FAIL+1)); fi
+        
+        # Group Aggregates
+        IFS=',' read -ra grp_list <<< "$grps"
+        for g in "${grp_list[@]}"; do
+            GROUPS_SEEN[$g]=1
+            
+            # Initialize numeric if empty
+            [[ -z "${GRP_LAT_MIN[$g]}" ]] && GRP_LAT_MIN[$g]=999999
+            [[ -z "${GRP_LAT_MAX[$g]}" ]] && GRP_LAT_MAX[$g]=0
+            [[ -z "${GRP_JIT_MIN[$g]}" ]] && GRP_JIT_MIN[$g]=999999
+            [[ -z "${GRP_JIT_MAX[$g]}" ]] && GRP_JIT_MAX[$g]=0
 
-        # Safe AWK calculation to avoid overflow issues
-        if [[ -n "$ping_avg" && "$ping_avg" != "0" ]]; then
-             if [[ "$ping_avg" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-                 total_lat_sum=$(awk -v s="$total_lat_sum" -v v="$ping_avg" 'BEGIN { printf "%.5f", s + v }')
-                 total_lat_cnt=$((total_lat_cnt + 1))
-             fi
-        fi
-        
-        printf "%-18s | %-15s | ${c_lat}%-20s${NC} | ${c_p53}%-8s${NC} | ${c_rec}%-8s${NC} | ${c_edns}%-8s${NC}\n" \
-            "$ip" "$grps" "$ping_str" "$p53" "$rec" "$edns"
+            GRP_LOSS_SUM[$g]=$(awk -v s="${GRP_LOSS_SUM[$g]:-0}" -v v="$loss" 'BEGIN {print s+v}')
+            GRP_LOSS_CNT[$g]=$(( ${GRP_LOSS_CNT[$g]:-0} + 1 ))
+            
+            # Numeric
+            if (( $(echo "$lat_avg > 0" | bc -l) )); then
+                 if (( $(echo "$lat_min < ${GRP_LAT_MIN[$g]}" | bc -l) )); then GRP_LAT_MIN[$g]=$lat_min; fi
+                 if (( $(echo "$lat_max > ${GRP_LAT_MAX[$g]}" | bc -l) )); then GRP_LAT_MAX[$g]=$lat_max; fi
+                 GRP_LAT_SUM[$g]=$(awk -v s="${GRP_LAT_SUM[$g]:-0}" -v v="$lat_avg" 'BEGIN {print s+v}')
+                 GRP_LAT_CNT[$g]=$(( ${GRP_LAT_CNT[$g]:-0} + 1 ))
+
+                 if (( $(echo "$jit < ${GRP_JIT_MIN[$g]}" | bc -l) )); then GRP_JIT_MIN[$g]=$jit; fi
+                 if (( $(echo "$jit > ${GRP_JIT_MAX[$g]}" | bc -l) )); then GRP_JIT_MAX[$g]=$jit; fi
+                 GRP_JIT_SUM[$g]=$(awk -v s="${GRP_JIT_SUM[$g]:-0}" -v v="$jit" 'BEGIN {print s+v}')
+                 GRP_JIT_CNT[$g]=$(( ${GRP_JIT_CNT[$g]:-0} + 1 ))
+            fi
+            
+            # Capabilities Group
+            if [[ "$p53" == "OPEN" ]]; then GRP_P53_OPEN[$g]=$(( ${GRP_P53_OPEN[$g]:-0} + 1 ));
+            elif [[ "$p53" == "CLOSED" ]]; then GRP_P53_CLOSED[$g]=$(( ${GRP_P53_CLOSED[$g]:-0} + 1 ));
+            else GRP_P53_FILT[$g]=$(( ${GRP_P53_FILT[$g]:-0} + 1 )); fi
+            
+            if [[ "$rec" == "OPEN" ]]; then GRP_REC_OPEN[$g]=$(( ${GRP_REC_OPEN[$g]:-0} + 1 ));
+            else GRP_REC_CLOSED[$g]=$(( ${GRP_REC_CLOSED[$g]:-0} + 1 )); fi
+            
+            if [[ "$edns" == "OK" ]]; then GRP_EDNS_OK[$g]=$(( ${GRP_EDNS_OK[$g]:-0} + 1 ));
+            else GRP_EDNS_FAIL[$g]=$(( ${GRP_EDNS_FAIL[$g]:-0} + 1 )); fi
+            
+            if [[ "$dnssec" == "OK" ]]; then GRP_DNSSEC_OK[$g]=$(( ${GRP_DNSSEC_OK[$g]:-0} + 1 ));
+            else GRP_DNSSEC_FAIL[$g]=$(( ${GRP_DNSSEC_FAIL[$g]:-0} + 1 )); fi
+            
+            if [[ "$doh" == "OK" ]]; then GRP_DOH_OK[$g]=$(( ${GRP_DOH_OK[$g]:-0} + 1 ));
+            else GRP_DOH_FAIL[$g]=$(( ${GRP_DOH_FAIL[$g]:-0} + 1 )); fi
+            
+            if [[ "$tls" == "OK" ]]; then GRP_TLS_OK[$g]=$(( ${GRP_TLS_OK[$g]:-0} + 1 ));
+            else GRP_TLS_FAIL[$g]=$(( ${GRP_TLS_FAIL[$g]:-0} + 1 )); fi
+        done
     done
     
-    # 2. ZONE STATS
-    echo -e "\n${BLUE}${BOLD}2. SAÚDE DAS ZONAS (SOA & AXFR)${NC}"
-    printf "%-25s | %-15s | %-20s | %-10s\n" "Zona" "Grupo" "SOA Serial (Mode)" "AXFR (Allow/Deny)"
-    echo "-----------------------------------------------------------------------------"
+    # Display Global Stats
+    if [[ $G_LAT_CNT -gt 0 ]]; then
+        local g_lat_avg=$(awk -v s="$G_LAT_SUM" -v c="$G_LAT_CNT" 'BEGIN {printf "%.2f", s/c}')
+        local g_jit_avg=$(awk -v s="$G_JIT_SUM" -v c="$G_JIT_CNT" 'BEGIN {printf "%.2f", s/c}')
+        local g_loss_avg=$(awk -v s="$G_LOSS_SUM" -v c="$G_LOSS_CNT" 'BEGIN {printf "%.2f", s/c}')
+        
+        echo -e "${GRAY}---------------------------------------------------------------${NC}"
+        echo -e "  🌍 ${BOLD}GLOBAL ALL SERVERS${NC}"
+        echo -e "     Latência : Min ${G_LAT_MIN}ms / Avg ${g_lat_avg}ms / Max ${G_LAT_MAX}ms"
+        echo -e "     Jitter   : Min ${G_JIT_MIN}ms / Avg ${g_jit_avg}ms / Max ${G_JIT_MAX}ms"
+        echo -e "     Avg Loss : ${g_loss_avg}%"
+        echo -e "     Port 53  : Open:${GREEN}${G_P53_OPEN}${NC} / Closed:${RED}${G_P53_CLOSED}${NC} / Filt:${YELLOW}${G_P53_FILT}${NC}"
+        echo -e "     Security : Rec Open:${RED}${G_REC_OPEN}${NC} | EDNS OK:${GREEN}${G_EDNS_OK}${NC} | Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC}"
+        echo -e "     Modern   : DNSSEC OK:${GREEN}${G_DNSSEC_OK}${NC} | DoH OK:${GREEN}${G_DOH_OK}${NC} | TLS OK:${GREEN}${G_TLS_OK}${NC}"
+    fi
+    
+    # Display Group Stats
+    for g in "${!GROUPS_SEEN[@]}"; do
+        echo -e "${GRAY}---------------------------------------------------------------${NC}"
+        echo -e "  🏢 ${BOLD}GRUPO: $g${NC}"
+        
+        # Calc Group Averages
+        local gl_avg="N/A"; local gl_min="N/A"; local gl_max="N/A"
+        local gj_avg="N/A"; local gj_min="N/A"; local gj_max="N/A"
+        local gloss_avg="N/A"
+        
+        if [[ ${GRP_LAT_CNT[$g]} -gt 0 ]]; then
+            gl_avg=$(awk -v s="${GRP_LAT_SUM[$g]}" -v c="${GRP_LAT_CNT[$g]}" 'BEGIN {printf "%.2f", s/c}')
+            gl_min=${GRP_LAT_MIN[$g]}
+            gl_max=${GRP_LAT_MAX[$g]}
+            
+            gj_avg=$(awk -v s="${GRP_JIT_SUM[$g]}" -v c="${GRP_JIT_CNT[$g]}" 'BEGIN {printf "%.2f", s/c}')
+            gj_min=${GRP_JIT_MIN[$g]}
+            gj_max=${GRP_JIT_MAX[$g]}
+        fi
+        if [[ ${GRP_LOSS_CNT[$g]} -gt 0 ]]; then
+            gloss_avg=$(awk -v s="${GRP_LOSS_SUM[$g]}" -v c="${GRP_LOSS_CNT[$g]}" 'BEGIN {printf "%.2f", s/c}')
+        fi
+        
+        echo -e "     📊 Agregado: Lat [${gl_min}/${gl_avg}/${gl_max}] | Jit [${gj_min}/${gj_avg}/${gj_max}] | Loss [${gloss_avg}%]"
+        echo -e "     🛡️  Segurança: P53 Open:${GREEN}${GRP_P53_OPEN[$g]:-0}${NC} | Rec Open:${RED}${GRP_REC_OPEN[$g]:-0}${NC} | EDNS OK:${GREEN}${GRP_EDNS_OK[$g]:-0}${NC}"
+        echo -e "     ✨ Modern   : DNSSEC OK:${GREEN}${GRP_DNSSEC_OK[$g]:-0}${NC} | DoH OK:${GREEN}${GRP_DOH_OK[$g]:-0}${NC} | TLS OK:${GREEN}${GRP_TLS_OK[$g]:-0}${NC}"
+        
+        echo -e "     ${GRAY}Servers:${NC}"
+        printf "       %-18s | %-16s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "DNSSEC" "DOH" "TLS"
+        
+        # List Servers in this Group
+        for ip in ${DNS_GROUPS[$g]}; do
+             local s_lat_min="${STATS_SERVER_PING_MIN[$ip]}"; [[ -z "$s_lat_min" ]] && s_lat_min="-"
+             local s_lat_avg="${STATS_SERVER_PING_AVG[$ip]}"; [[ -z "$s_lat_avg" ]] && s_lat_avg="-"
+             local s_lat_max="${STATS_SERVER_PING_MAX[$ip]}"; [[ -z "$s_lat_max" ]] && s_lat_max="-"
+             local s_jit="${STATS_SERVER_PING_JITTER[$ip]}";  [[ -z "$s_jit" ]] && s_jit="-"
+             local s_loss="${STATS_SERVER_PING_LOSS[$ip]}";   [[ -z "$s_loss" ]] && s_loss="-"
+             
+             local p53="${STATS_SERVER_PORT_53[$ip]}"
+             local p853="${STATS_SERVER_PORT_853[$ip]}"
+             local ver="${STATS_SERVER_VERSION[$ip]}"
+             local rec="${STATS_SERVER_RECURSION[$ip]}"
+             local edns="${STATS_SERVER_EDNS[$ip]}"
+             local dnssec="${STATS_SERVER_DNSSEC[$ip]}"
+             local doh="${STATS_SERVER_DOH[$ip]}"
+             local tls="${STATS_SERVER_TLS[$ip]}"
+             
+             # Colorize Loss/Down
+             local c_stat=$NC
+             if [[ "$s_loss" != "-" ]]; then
+                if (( $(echo "$s_loss >= 100" | bc -l) )); then c_stat=$RED
+                elif (( $(echo "$s_loss > 0" | bc -l) )); then c_stat=$YELLOW; fi
+             fi
+             
+             # Shorten Columns
+             local c_p53=$GREEN; [[ "$p53" != "OPEN" ]] && c_p53=$RED
+             local c_dot=$GREEN; [[ "$p853" != "OK" ]] && c_dot=$RED
+             local c_ver=$GREEN; [[ "$ver" == "REVEALED" ]] && c_ver=$YELLOW  # Reveal is warning? Or hidden is good.
+             [[ "$ver" == "HIDDEN" ]] && c_ver=$GREEN
+             
+             local c_rec=$GREEN; [[ "$rec" == "OPEN" ]] && c_rec=$RED
+             local c_edns=$GREEN; [[ "$edns" == "FAIL" ]] && c_edns=$RED
+             local c_dnssec=$GREEN; [[ "$dnssec" != "OK" ]] && c_dnssec=$RED
+             local c_doh=$GREEN; [[ "$doh" != "OK" ]] && c_doh=$GRAY
+             local c_tls=$GREEN; [[ "$tls" != "OK" ]] && c_tls=$GRAY
+             
+             local lat_str="${s_lat_avg}ms"
+             [[ "$s_loss" == "100" ]] && lat_str="DOWN"
+             
+             printf "       %-18s | %-16s | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
+                 "$ip" "$lat_str" "${p53:0:4}" "${p853:0:3}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
+        done
+    done
+    
+    # ==========================
+    # 2. ZONE STATS AGGREGATION
+    # ==========================
+    echo -e "\n${BLUE}${BOLD}2. TESTES DE ZONA (SOA & AXFR)${NC}"
     
     while IFS=';' read -r domain groups _ _ _; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
         domain=$(echo "$domain" | xargs)
         IFS=',' read -ra grp_list <<< "$groups"
         
+        # Zone Aggregate Counters
+        local Z_AXFR_ALLOW=0; local Z_AXFR_DENY=0
+        
+        # Pre-calc aggregates
         for grp in "${grp_list[@]}"; do
-             local srvs=${DNS_GROUPS[$grp]}
-             local axfr_allow_cnt=0
-             local axfr_deny_cnt=0
-             local soa_list=""
-             
-             for srv in $srvs; do
-                  local ax_stat="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
-                  if [[ "$ax_stat" == "ALLOWED" ]]; then axfr_allow_cnt=$((axfr_allow_cnt+1)); 
-                  elif [[ "$ax_stat" == "DENIED" ]]; then axfr_deny_cnt=$((axfr_deny_cnt+1)); fi
-                  
-                  local s_soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
-                  [[ -n "$s_soa" ]] && soa_list+="$s_soa"$'\n'
+             for srv in ${DNS_GROUPS[$grp]}; do
+                  local status="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                  if [[ "$status" == "ALLOWED" ]]; then Z_AXFR_ALLOW=$((Z_AXFR_ALLOW+1));
+                  elif [[ "$status" == "DENIED" ]]; then Z_AXFR_DENY=$((Z_AXFR_DENY+1)); fi
+             done
+        done
+        
+        echo -e "${GRAY}---------------------------------------------------------------${NC}"
+        echo -e "  🌎 ${BOLD}ZONA: $domain${NC} (Total: ${RED}${Z_AXFR_ALLOW} Allowed${NC} / ${GREEN}${Z_AXFR_DENY} Denied${NC})"
+        
+        for grp in "${grp_list[@]}"; do
+             local G_AXFR_ALLOW=0; local G_AXFR_DENY=0
+             for srv in ${DNS_GROUPS[$grp]}; do
+                  local status="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                  if [[ "$status" == "ALLOWED" ]]; then G_AXFR_ALLOW=$((G_AXFR_ALLOW+1));
+                  elif [[ "$status" == "DENIED" ]]; then G_AXFR_DENY=$((G_AXFR_DENY+1)); fi
              done
              
-             # SOA Consistency Check
-             local unique_soas=$(echo -n "$soa_list" | sed '/^$/d' | sort -u)
-             local unique_count=0
-             if [[ -n "$unique_soas" ]]; then
-                 unique_count=$(echo "$unique_soas" | wc -l)
-             fi
-
-             local soa_display="N/A"
-             local c_soa=$RED
+             echo -e "     🏢 ${BOLD}Grupo: $grp${NC} (Allowed: ${RED}${G_AXFR_ALLOW}${NC} / Denied: ${GREEN}${G_AXFR_DENY}${NC})"
              
-             if [[ $unique_count -gt 1 ]]; then
-                 soa_display="DIVERGENT"
-             elif [[ $unique_count -eq 1 ]]; then
-                 soa_display=$(echo -n "$unique_soas" | tr -d '\n')
-                 [[ "$soa_display" =~ ^[0-9]+$ ]] && c_soa=$GREEN
-             fi
-             
-             local axfr_txt="${axfr_deny_cnt} DENIED"
-             local c_axfr=$GREEN
-             if [[ $axfr_allow_cnt -gt 0 ]]; then
-                 axfr_txt="${axfr_allow_cnt} ALLOWED"
-                 c_axfr=$RED
-             fi
-             
-             printf "%-25s | %-15s | ${c_soa}%-20s${NC} | ${c_axfr}%-20s${NC}\n" \
-                 "$domain" "$grp" "$soa_display" "$axfr_txt"
+             # Server Details
+             for srv in ${DNS_GROUPS[$grp]}; do
+                  local status="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                  local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
+                  local c_st=$GREEN; [[ "$status" == "ALLOWED" ]] && c_st=$RED
+                  local c_soa=$GREEN; [[ ! "$soa" =~ ^[0-9]+$ ]] && c_soa=$RED
+                  
+                  printf "       - %-15s : AXFR ${c_st}%-8s${NC} | SOA ${c_soa}%s${NC}\n" "$srv" "$status" "$soa"
+             done
         done
+        
     done < "$FILE_DOMAINS"
     
-    # 3. RECORD STATS
-    echo -e "\n${BLUE}${BOLD}3. CONSISTÊNCIA DE REGISTROS${NC}"
-    printf "%-25s | %-6s | %-10s | %-15s | %-10s\n" "Zona" "Tipo" "Grupo" "Consistência" "Divergências"
-    echo "-----------------------------------------------------------------------------"
-    
-    while IFS=';' read -r domain groups _ record_types _; do
+    # ==========================
+    # 3. RECORD STATS AGGREGATION
+    # ==========================
+    echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Consistência)${NC}"
+
+    while IFS=';' read -r domain groups _ record_types extra_hosts; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+        
         IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
         IFS=',' read -ra grp_list <<< "$groups"
         
-        for rec_type in "${rec_list[@]}"; do
-            rec_type=${rec_type^^}
-            for grp in "${grp_list[@]}"; do
-                 local cons="${STATS_RECORD_CONSISTENCY[$domain|$rec_type|$grp]}"
-                 local div_cnt="${STATS_RECORD_DIV_COUNT[$domain|$rec_type|$grp]}"
-                 
-                 local c_cons=$GREEN
-                 [[ "$cons" == "DIVERGENT" ]] && c_cons=$RED
-                 
-                 # Only print if relevant (skip fully consistent to reduce noise? User asked for all stats)
-                 [[ "$cons" == "CONSISTENT" ]] && cons="OK"
-                 [[ -z "$cons" ]] && cons="N/A"
-                 
-                 local c_div=$GREEN
-                 [[ $div_cnt -gt 0 || "$cons" == "DIVERGENT" ]] && c_div=$RED
-                 
-                 printf "%-25s | %-6s | %-10s | ${c_cons}%-15s${NC} | ${c_div}%-10s${NC}\n" \
-                     "$domain" "$rec_type" "$grp" "$cons" "$div_cnt"
+        # Build Targets (Domain + Extras)
+        IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
+        local targets=("$domain")
+        for h in "${extra_list[@]}"; do [[ -n "$h" ]] && targets+=("$h.$domain"); done
+        
+        for target in "${targets[@]}"; do
+            for rec_type in "${rec_list[@]}"; do
+                rec_type=${rec_type^^}
+                
+                echo -e "${GRAY}---------------------------------------------------------------${NC}"
+                echo -e "  🔍 ${BOLD}RECORD: $target IN $rec_type${NC}"
+                
+                for grp in "${grp_list[@]}"; do
+                     local cons_status="${STATS_RECORD_CONSISTENCY[$target|$rec_type|$grp]}"
+                     local div_count="${STATS_RECORD_DIV_COUNT[$target|$rec_type|$grp]}"
+                     
+                     local c_cons=$GREEN
+                     local cons_lbl="CONSISTENT"
+                     if [[ "$cons_status" == "DIVERGENT" ]]; then 
+                        c_cons=$RED
+                        cons_lbl="DIVERGENT ($div_count variants)"
+                     fi
+                     
+                     echo -e "     🏢 ${BOLD}Grupo: $grp${NC} -> ${c_cons}${cons_lbl}${NC}"
+                     
+                     # Server Details (Result + match indication if we wanted)
+                     for srv in ${DNS_GROUPS[$grp]}; do
+                          local ans="${STATS_RECORD_ANSWER[$target|$rec_type|$grp|$srv]}"
+                          local status="${STATS_RECORD_RES[$target|$rec_type|$grp|$srv]}"
+                          
+                          # Truncate answer
+                          local ans_show="${ans:0:60}"
+                          [[ ${#ans} -gt 60 ]] && ans_show+="..."
+                          
+                          local c_st=$GREEN
+                          [[ "$status" != "NOERROR" ]] && c_st=$RED
+                          
+                          printf "       - %-15s : [${c_st}%-8s${NC}] %s\n" "$srv" "$status" "$ans_show"
+                     done
+                done
             done
         done
     done < "$FILE_DOMAINS"
@@ -2674,12 +2894,51 @@ print_final_terminal_summary() {
      # Use our new function
      generate_hierarchical_stats
      
-     echo -e "\n${BOLD}RESUMO DA EXECUÇÃO${NC}"
-     echo "  Duração Total   : ${duration}s"
-     echo "  Total de Testes : ${total_tests}"
-     echo -e "  Sucesso         : ${GREEN}${SUCCESS_TESTS:-0}${NC}"
-     echo -e "  Falhas          : ${RED}${FAILED_TESTS:-0}${NC}"
-     echo -e "  Divergências    : ${YELLOW}${DIVERGENT_TESTS:-0}${NC}"
+     echo -e "\n${BOLD}======================================================${NC}"
+     echo -e "${BOLD}              RESUMO DA EXECUÇÃO${NC}"
+     echo -e "${BOLD}======================================================${NC}"
+     
+     # Calculate totals for summary
+     local srv_count=${#UNIQUE_SERVERS[@]}
+     local zone_count=0
+     local rec_count=0
+     
+     if [[ -f "$FILE_DOMAINS" ]]; then
+        zone_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
+        
+        # Calculate expected unique records (same logic as run_record_tests)
+        rec_count=$(awk -F';' '!/^#/ && !/^\s*$/ { 
+            n_recs = split($4, a, ",");
+            n_extras = 0;
+            gsub(/[[:space:]]/, "", $5);
+            if (length($5) > 0) n_extras = split($5, b, ",");
+            count += n_recs * (1 + n_extras) 
+        } END { print count }' "$FILE_DOMAINS")
+     fi
+     [[ -z "$rec_count" ]] && rec_count=0
+
+     echo -e "${BLUE}${BOLD}GERAL:${NC}"
+     echo -e "  ⏱️  Duração Total   : ${duration}s"
+     echo -e "  🧪 Total Execuções  : ${total_tests}"
+     echo -e "  🔢 Escopo Testado   : ${srv_count} Servidores | ${zone_count} Zonas | ${rec_count} Registros"
+     
+     echo -e "\n${BLUE}${BOLD}SERVIDORES:${NC}"
+     echo -e "  📡 Conectividade   : ${GREEN}${CNT_PING_OK:-0} OK${NC} / ${RED}${CNT_PING_FAIL:-0} Falhas${NC}"
+     echo -e "  🛡️  Segurança       : DNSSEC[${GREEN}${DNSSEC_SUCCESS:-0}${NC}/${RED}${DNSSEC_FAIL:-0}${NC}] | DoH[${GREEN}${DOH_SUCCESS:-0}${NC}/${RED}${DOH_FAIL:-0}${NC}] | TLS[${GREEN}${TLS_SUCCESS:-0}${NC}/${RED}${TLS_FAIL:-0}${NC}]"
+     
+     echo -e "\n${BLUE}${BOLD}ZONAS:${NC}"
+     # Calcs for Zone Summary if not fully populated in previous steps (using available globals)
+     # SEC_AXFR_RISK = Allowed, SEC_AXFR_OK = Denied
+     echo -e "  🔄 SOA Sync        : ${GREEN}${SOA_SYNC_OK:-0} Consistentes${NC} / ${RED}${SOA_SYNC_FAIL:-0} Divergentes${NC}"
+     echo -e "  🌍 AXFR            : ${GREEN}${SEC_AXFR_OK:-0} Bloqueados${NC} / ${RED}${SEC_AXFR_RISK:-0} Expostos${NC}"
+     
+     echo -e "\n${BLUE}${BOLD}REGISTROS:${NC}"
+     local rec_ok=$((CNT_NOERROR))
+     echo -e "  ✅ Sucessos        : ${GREEN}${CNT_NOERROR:-0} NOERROR${NC}"
+     echo -e "  🚫 Não Encontrados : ${YELLOW}${CNT_NXDOMAIN:-0} NXDOMAIN${NC}"
+     echo -e "  💥 Erros           : ${RED}${CNT_SERVFAIL:-0} SERVFAIL${NC} / ${RED}${CNT_REFUSED:-0} REFUSED${NC}"
+     echo -e "  ⏱️  Timeouts        : ${RED}${CNT_TIMEOUT:-0}${NC}"
+     echo -e "  ⚠️  Inconsistências : ${YELLOW}${DIVERGENT_TESTS:-0}${NC} (Grupos com respostas divergentes)"
      
      # Log to text file
      if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
@@ -2770,6 +3029,9 @@ run_server_tests() {
     declare -gA STATS_SERVER_RECURSION
     declare -gA STATS_SERVER_EDNS
     declare -gA STATS_SERVER_COOKIE
+    declare -gA STATS_SERVER_DNSSEC
+    declare -gA STATS_SERVER_DOH
+    declare -gA STATS_SERVER_TLS
 
     # Identify Unique Servers to Test
     declare -gA UNIQUE_SERVERS
@@ -2832,7 +3094,7 @@ EOF
         
         # Header/Legend for first run (or if verbose) - Simplified for clean output
         if [[ "$HEADER_PRINTED" == "false" ]]; then
-             echo -e "${GRAY}  Legend: [Ping] [Port53] [DoT] [Ver] [Rec] [EDNS] [Cookie]${NC}"
+             echo -e "${GRAY}  Legend: [Ping] [Port53] [DoT] [Ver] [Rec] [EDNS] [Cookie] [DNSSEC] [DoH] [TLS]${NC}"
              HEADER_PRINTED="true"
         fi
         
@@ -2994,15 +3256,55 @@ EOF
                  STATS_SERVER_COOKIE[$ip]="ABSENT"
                  COOKIE_FAIL=$((COOKIE_FAIL+1)); CACHE_COOKIE_STATUS[$ip]="ABSENT"
              fi
-        else
              STATS_SERVER_COOKIE[$ip]="SKIPPED"
              cookie_res_term="${GRAY}SKIP${NC}"
         fi
+        
+        # 1.4 Security & Modern (DNSSEC, DoH, TLS)
+        if [[ "$ENABLE_DNSSEC_CHECK" == "true" ]]; then
+             if check_dnssec_validation "$ip"; then
+                 STATS_SERVER_DNSSEC[$ip]="OK"
+                 DNSSEC_SUCCESS=$((DNSSEC_SUCCESS+1))
+             else
+                 STATS_SERVER_DNSSEC[$ip]="FAIL" 
+                 DNSSEC_FAIL=$((DNSSEC_FAIL+1))
+             fi
+        else STATS_SERVER_DNSSEC[$ip]="SKIP"; fi
+        
+        if [[ "$ENABLE_DOH_CHECK" == "true" ]]; then
+             if check_doh_avail "$ip"; then
+                 STATS_SERVER_DOH[$ip]="OK"
+                 DOH_SUCCESS=$((DOH_SUCCESS+1))
+             else
+                 STATS_SERVER_DOH[$ip]="FAIL"
+                 DOH_FAIL=$((DOH_FAIL+1))
+             fi
+        else STATS_SERVER_DOH[$ip]="SKIP"; fi
+        
+        if [[ "$ENABLE_TLS_CHECK" == "true" ]]; then
+             if check_tls_handshake "$ip"; then
+                 STATS_SERVER_TLS[$ip]="OK"
+                 TLS_SUCCESS=$((TLS_SUCCESS+1))
+             else
+                 STATS_SERVER_TLS[$ip]="FAIL"
+                 TLS_FAIL=$((TLS_FAIL+1))
+             fi
+        else STATS_SERVER_TLS[$ip]="SKIP"; fi
 
         # ADD ROW
         echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
-        echo -e "     Ping:${ping_res_term} | 53:${tcp53_res_term} | 853:${tls853_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term}"
+        # Prepare Output Terms for new checks
+        local dnssec_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && dnssec_term="${GREEN}OK${NC}"
+        [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]] && dnssec_term="${RED}FAIL${NC}"
+        
+        local doh_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && doh_term="${GREEN}OK${NC}"
+        [[ "${STATS_SERVER_DOH[$ip]}" == "FAIL" ]] && doh_term="${RED}FAIL${NC}"
+        
+        local tls_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && tls_term="${GREEN}OK${NC}"
+        [[ "${STATS_SERVER_TLS[$ip]}" == "FAIL" ]] && tls_term="${RED}FAIL${NC}"
+
+        echo -e "     Ping:${ping_res_term} | 53:${tcp53_res_term} | 853:${tls853_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term} | DNSSEC:${dnssec_term} | DoH:${doh_term} | TLS:${tls_term}"
 
         # --- JSON Export (Ping) ---
         if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
@@ -3324,7 +3626,7 @@ EOF
                          
                          # Print buffered lines with [D] appended
                          for line in "${term_output_buffer[@]}"; do
-                             echo -e "${line} ${RED}[⚠️ ]${NC}"
+                             echo -e "${line} ${RED}[Inconsistente]${NC}"
                          done
                     else
                          STATS_RECORD_CONSISTENCY["$target|$rec_type|$grp"]="CONSISTENT"
