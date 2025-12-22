@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.6.49
-# "Output Polish & Group Table Fixes"
+# Versão: 11.7.0
+# "BI-Ready Reports & Modular Core"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.6.49"
+SCRIPT_VERSION="11.7.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -157,19 +157,27 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 HTML_FILE="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.html"
 LOG_FILE_TEXT="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.log"
 LOG_FILE_JSON="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.json"
-LOG_FILE_CSV="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}.csv"
+LOG_FILE_CSV_SRV="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}_servers.csv"
+LOG_FILE_CSV_ZONE="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}_zones.csv"
+LOG_FILE_CSV_REC="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}_records.csv"
 
-# Default Configuration
-VERBOSE_LEVEL=1  # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
-ENABLE_JSON_LOG="false"
+# Default Configuration (Respects Config File)
+# 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
+VERBOSE_LEVEL=${VERBOSE_LEVEL:-1}
+ENABLE_JSON_LOG=${ENABLE_JSON_LOG:-"false"}
 
 # Extra Features Defaults
-ENABLE_EDNS_CHECK="true"
-ENABLE_COOKIE_CHECK="true"
-ENABLE_QNAME_CHECK="true"
-ENABLE_TLS_CHECK="true"
-ENABLE_DOT_CHECK="true"
-ENABLE_DOH_CHECK="true"
+ENABLE_EDNS_CHECK=${ENABLE_EDNS_CHECK:-"true"}
+ENABLE_COOKIE_CHECK=${ENABLE_COOKIE_CHECK:-"true"}
+ENABLE_QNAME_CHECK=${ENABLE_QNAME_CHECK:-"true"}
+ENABLE_TLS_CHECK=${ENABLE_TLS_CHECK:-"true"}
+ENABLE_DOT_CHECK=${ENABLE_DOT_CHECK:-"true"}
+ENABLE_DOH_CHECK=${ENABLE_DOH_CHECK:-"true"}
+
+# Phases Configuration (Default: All True)
+ENABLE_PHASE_SERVER=${ENABLE_PHASE_SERVER:-"true"}
+ENABLE_PHASE_ZONE=${ENABLE_PHASE_ZONE:-"true"}
+ENABLE_PHASE_RECORD=${ENABLE_PHASE_RECORD:-"true"}
 
 init_html_parts() {
     # Generate unique session ID for temp files (PID + Random + Timestamp)
@@ -225,7 +233,9 @@ init_html_parts() {
     
     # Init CSV
     if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
-        echo "Timestamp;Grupo;Servidor;Dominio;Record;Status;Latencia_ms;Detalhes;TCP;DNSSEC;EDNS0;Cookie;TLS;DoT;DoH;QNAME" > "$LOG_FILE_CSV"
+        echo "Timestamp;Server;Groups;PingStatus;Latency;Jitter;Loss;Port53;Port853;Version;Recursion;EDNS;Cookie;DNSSEC;DoH;TLS" > "$LOG_FILE_CSV_SRV"
+        echo "Timestamp;Domain;Server;Group;SOA_Serial;AXFR_Status;DNSSEC_Status" > "$LOG_FILE_CSV_ZONE"
+        echo "Timestamp;Domain;Type;Group;Server;Status;Latency;Answer_Snippet" > "$LOG_FILE_CSV_REC"
     fi
 }
 # ==============================================
@@ -420,59 +430,74 @@ EOF
 }
 
 print_execution_summary() {
-    echo -e "${BLUE}======================================================${NC}"
-    echo -e "${BLUE}       DIAGNÓSTICO DNS - DASHBOARD DE EXECUÇÃO        ${NC}"
-    echo -e "${BLUE}======================================================${NC}"
-    echo -e "${PURPLE}[GERAL]${NC}"
-    echo -e "  🏷️ Versão        : ${YELLOW}v${SCRIPT_VERSION}${NC}"
-    echo -e "  📂 Domínios      : ${YELLOW}$FILE_DOMAINS${NC}"
-    echo -e "  📂 Grupos DNS    : ${YELLOW}$FILE_GROUPS${NC}"
-    echo ""
-    echo -e "${PURPLE}[REDE & PERFORMANCE]${NC}"
-    echo -e "  ⏱️ Timeout Global: ${CYAN}${TIMEOUT}s${NC}"
-    echo -e "  💤 Sleep (Interv): ${CYAN}${SLEEP}s${NC}"
-    echo -e "  🔄 Consistência  : ${YELLOW}${CONSISTENCY_CHECKS} tentativas${NC}"
-    echo -e "  📡 Valida Conexão: ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
-    echo -e "  🏓 Ping Check    : ${CYAN}${ENABLE_PING} (Count: $PING_COUNT, Timeout: ${PING_TIMEOUT}s)${NC}"
-    echo -e "  🔌 TCP Check     : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
-    echo -e "  🔐 DNSSEC Check  : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
+    clear
+    echo -e "${BOLD}======================================================${NC}"
+    echo -e "${BOLD}       DIAGNÓSTICO DNS - DASHBOARD DE EXECUÇÃO        ${NC}"
+    echo -e "${BOLD}======================================================${NC}"
+    
+    echo -e "${BLUE}[1. GERAL]${NC}"
+    echo -e "  🏷️  Versão Script   : v${SCRIPT_VERSION}"
+    echo -e "  📂 Arq. Domínios   : $FILE_DOMAINS"
+    echo -e "  📂 Arq. Grupos     : $FILE_GROUPS"
+    echo -e "  📂 Dir Logs        : $LOG_DIR (Prefix: $LOG_PREFIX)"
+    echo -e "  ⏱️  Timeout Global  : ${TIMEOUT}s"
+    echo -e "  💤 Sleep (Query)   : ${SLEEP}s"
+    echo -e "  📡 Valida Conexão  : ${CYAN}${VALIDATE_CONNECTIVITY}${NC}"
+    echo -e "  🛡️  Limit. Grupos   : ${CYAN}${ONLY_TEST_ACTIVE_GROUPS}${NC} (Active Only)"
+    echo -e "  🎮 Modo Interativo : ${CYAN}${INTERACTIVE_MODE}${NC}"
 
-    echo -e "  🛡️ Version Check : ${CYAN}${CHECK_BIND_VERSION}${NC}"
-    echo -e "  🛡️ AXFR Check    : ${CYAN}${ENABLE_AXFR_CHECK}${NC}"
-    echo -e "  🛡️ Recurse Check : ${CYAN}${ENABLE_RECURSION_CHECK}${NC}"
-    echo -e "  🛡️ SOA Sync Check: ${CYAN}${ENABLE_SOA_SERIAL_CHECK}${NC}"
-    echo -e "  🛡️ Active Groups : ${CYAN}${ONLY_TEST_ACTIVE_GROUPS}${NC}"
-    echo ""
-    echo -e "${PURPLE}[MODERN & SECURITY]${NC}"
-    echo -e "  🛡️ EDNS0 Check   : ${CYAN}${ENABLE_EDNS_CHECK}${NC}"
-    echo -e "  🍪 Cookie Check  : ${CYAN}${ENABLE_COOKIE_CHECK}${NC}"
-    echo -e "  📉 QNAME Min     : ${CYAN}${ENABLE_QNAME_CHECK}${NC}"
-    echo -e "  🔐 TLS Connect   : ${CYAN}${ENABLE_TLS_CHECK}${NC}"
-    echo -e "  🔒 DoT (Tls)     : ${CYAN}${ENABLE_DOT_CHECK}${NC}"
-    echo -e "  🌐 DoH (Https)   : ${CYAN}${ENABLE_DOH_CHECK}${NC}"
-    echo ""
-    echo -e "${PURPLE}[CRITÉRIOS DE DIVERGÊNCIA]${NC}"
-    echo -e "  🔢 Strict IP     : ${CYAN}${STRICT_IP_CHECK}${NC} (True = IP diferente diverge)"
-    echo -e "  🔃 Strict Order  : ${CYAN}${STRICT_ORDER_CHECK}${NC} (True = Ordem diferente diverge)"
-    echo -e "  ⏱️ Strict TTL    : ${CYAN}${STRICT_TTL_CHECK}${NC} (True = TTL diferente diverge)"
-    echo ""
-    echo -e "${PURPLE}[DEBUG & CONTROLE]${NC}"
-    echo -e "  📢 Verbose Mode  : ${CYAN}${VERBOSE}${NC}"
-    echo -e "  📝 Gerar Log TXT : ${CYAN}${ENABLE_LOG_TEXT}${NC}"
-    echo -e "  🛠️ Dig Opts (Iter): ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
-    echo -e "  🛠️ Dig Opts (Rec) : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
-    echo ""
-    echo -e "${PURPLE}[ANÁLISE & VISUALIZAÇÃO]${NC}"
-    echo -e "  ⚠️ Limiar Latência : ${YELLOW}${LATENCY_WARNING_THRESHOLD}ms${NC}"
-    echo -e "  📉 Perda Pcts Max : ${YELLOW}${PING_PACKET_LOSS_LIMIT}%${NC}"
-    echo -e "  📊 Gráficos HTML  : ${CYAN}${ENABLE_CHARTS}${NC}"
-    echo -e "  🎨 Color Output   : ${CYAN}${COLOR_OUTPUT}${NC}"
-    echo ""
-    echo -e "${PURPLE}[SAÍDA]${NC}"
-    echo -e "  📄 Relatório Detalhado: ${GREEN}$HTML_FILE${NC}"
-    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo -e "  📄 Relatório JSON    : ${GREEN}${HTML_FILE%.html}.json${NC}"
-    [[ "$ENABLE_CSV_REPORT" == "true" ]] && echo -e "  📄 Relatório CSV     : ${GREEN}$LOG_FILE_CSV${NC}"
-    [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo -e "  📄 Log Texto     : ${GREEN}$LOG_FILE_TEXT${NC}"
+    echo -e "\n${BLUE}[2. ESCOPO (FASES)]${NC}"
+    echo -e "  1️⃣  Fase Servidor   : ${CYAN}${ENABLE_PHASE_SERVER}${NC}"
+    echo -e "  2️⃣  Fase Zona       : ${CYAN}${ENABLE_PHASE_ZONE}${NC}"
+    echo -e "  3️⃣  Fase Registro   : ${CYAN}${ENABLE_PHASE_RECORD}${NC}"
+
+    if [[ "$ENABLE_PHASE_SERVER" == "true" ]]; then
+        echo -e "\n${PURPLE}[3. DETALHES FASE 1: SERVIDORES]${NC}"
+        echo -e "  🏓 Ping Check      : ${CYAN}${ENABLE_PING}${NC}"
+        [[ "$ENABLE_PING" == "true" ]] && echo -e "     ↳ Count: $PING_COUNT | Timeout: ${PING_TIMEOUT}s | LossLimit: ${PING_PACKET_LOSS_LIMIT}%"
+        echo -e "  🔌 TCP Check       : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
+        echo -e "  🔐 DNSSEC Check    : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
+        echo -e "  🛡️  BIND Version    : ${CYAN}${CHECK_BIND_VERSION}${NC}"
+        echo -e "  🛡️  Recursion Check : ${CYAN}${ENABLE_RECURSION_CHECK}${NC}"
+        echo -e "  🌟 EDNS0 Check     : ${CYAN}${ENABLE_EDNS_CHECK}${NC}"
+        echo -e "  🍪 Cookie Check    : ${CYAN}${ENABLE_COOKIE_CHECK}${NC}"
+        echo -e "  📉 QNAME Min       : ${CYAN}${ENABLE_QNAME_CHECK}${NC}"
+        echo -e "  🔐 TLS Check       : ${CYAN}${ENABLE_TLS_CHECK}${NC}"
+        echo -e "  🔒 DoT Check       : ${CYAN}${ENABLE_DOT_CHECK}${NC}"
+        echo -e "  🌐 DoH Check       : ${CYAN}${ENABLE_DOH_CHECK}${NC}"
+    fi
+
+    if [[ "$ENABLE_PHASE_ZONE" == "true" ]]; then
+        echo -e "\n${PURPLE}[4. DETALHES FASE 2: ZONAS]${NC}"
+        echo -e "  🔄 SOA Serial Sync : ${CYAN}${ENABLE_SOA_SERIAL_CHECK}${NC}"
+        echo -e "  🌍 AXFR Check      : ${CYAN}${ENABLE_AXFR_CHECK}${NC}"
+    fi
+
+    if [[ "$ENABLE_PHASE_RECORD" == "true" ]]; then
+        echo -e "\n${PURPLE}[5. DETALHES FASE 3: REGISTROS]${NC}"
+        echo -e "  🔄 Consistência    : ${CONSISTENCY_CHECKS} queries/servidor"
+        echo -e "  ⚖️  Strict IP       : ${CYAN}${STRICT_IP_CHECK}${NC}"
+        echo -e "  ⚖️  Strict Ordem    : ${CYAN}${STRICT_ORDER_CHECK}${NC}"
+        echo -e "  ⚖️  Strict TTL      : ${CYAN}${STRICT_TTL_CHECK}${NC}"
+    fi
+
+    echo -e "\n${PURPLE}[6. CONFIG AVANÇADA]${NC}"
+    echo -e "  ⚠️  Limiar Latência : ${LATENCY_WARNING_THRESHOLD}ms"
+    echo -e "  🛠️  Dig (Std)       : ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
+    echo -e "  🛠️  Dig (Rec)       : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
+    echo -e "  📢 Verbose All      : ${VERBOSE_LEVEL} (0-3)"
+
+    echo -e "\n${PURPLE}[7. RELATÓRIOS]${NC}"
+    echo -e "  📄 Relatório HTML   : ${GREEN}${ENABLE_HTML_REPORT}${NC} (Charts: ${ENABLE_CHARTS})"
+    echo -e "  📄 Relatório JSON   : ${CYAN}${ENABLE_JSON_REPORT}${NC}"
+    echo -e "  📄 Relatório CSV    : ${CYAN}${ENABLE_CSV_REPORT}${NC}"
+    
+    echo -e "\n${PURPLE}[8. LOGS & SAÍDA]${NC}"
+    echo -e "  📝 Log Texto (.log) : ${CYAN}${ENABLE_LOG_TEXT}${NC}"
+    echo -e "  📝 Log JSON (.json) : ${CYAN}${ENABLE_JSON_LOG}${NC}"
+    echo -e "  🎨 Color Output     : ${COLOR_OUTPUT}"
+    echo -e "  📂 Output Dir       : $LOG_DIR"
+    
     echo -e "${BLUE}======================================================${NC}"
     echo ""
 }
@@ -618,57 +643,84 @@ interactive_configuration() {
     read -r response
     response=${response,,}
     if [[ "$response" == "n" || "$response" == "nao" || "$response" == "não" ]]; then
-        echo -e "\n${BLUE}--- CRITÉRIOS DE DIVERGÊNCIA (TOLERÂNCIA) ---${NC}"
-        echo -e "${GRAY}(Se 'true', qualquer variação é marcada como divergente)${NC}"
-        ask_boolean "Considerar mudança de IP como divergência?" "STRICT_IP_CHECK"
-        ask_boolean "Considerar mudança de Ordem como divergência?" "STRICT_ORDER_CHECK"
-        ask_boolean "Considerar mudança de TTL como divergência?" "STRICT_TTL_CHECK"
         
-        echo -e "\n${BLUE}--- GERAL ---${NC}"
+        # --- 1. GLOBAL CONFIGURATION ---
+        echo -e "\n${BLUE}--- GERAL (GLOBAL) ---${NC}"
         ask_variable "Arquivo de Domínios (CSV)" "FILE_DOMAINS"
         ask_variable "Arquivo de Grupos (CSV)" "FILE_GROUPS"
         ask_variable "Diretório de Logs" "LOG_DIR"
         ask_variable "Prefixo arquivos Log" "LOG_PREFIX"
-        ask_variable "Tentativas por Teste (Consistência)" "CONSISTENCY_CHECKS"
+        
         ask_variable "Timeout Global (segundos)" "TIMEOUT"
         ask_variable "Sleep entre queries (segundos)" "SLEEP"
         ask_boolean "Validar conectividade porta 53?" "VALIDATE_CONNECTIVITY"
-        ask_boolean "Verbose Debug?" "VERBOSE"
-        ask_boolean "Gerar log texto?" "ENABLE_LOG_TEXT"
+        
+        ask_variable "Nível de Verbose log (0-3)?" "VERBOSE_LEVEL"
+        ask_boolean "Gerar log texto (.log)?" "ENABLE_LOG_TEXT"
         ask_boolean "Habilitar Gráficos no HTML?" "ENABLE_CHARTS"
-        ask_boolean "Gerar relatório JSON?" "ENABLE_JSON_REPORT"
+        ask_boolean "Gerar relatório Detalhado HTML?" "ENABLE_HTML_REPORT"
+        ask_boolean "Gerar relatório JSON (Report)?" "ENABLE_JSON_REPORT"
+        ask_boolean "Gerar log JSON? (Raw)" "ENABLE_JSON_LOG"
         ask_boolean "Gerar relatório CSV (Plano)?" "ENABLE_CSV_REPORT"
         
-        echo -e "\n${BLUE}--- TESTES ATIVOS ---${NC}"
-        ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
-        if [[ "$ENABLE_PING" == "true" ]]; then
-             ask_variable "   ↳ Ping Count" "PING_COUNT"
-             ask_variable "   ↳ Ping Timeout (s)" "PING_TIMEOUT"
+        ask_boolean "Testar SOMENTE grupos usados por domínios?" "ONLY_TEST_ACTIVE_GROUPS"
+
+        # --- 2. PHASE SELECTION ---
+        echo -e "\n${BLUE}--- SELEÇÃO DE FASES (ESCOPO) ---${NC}"
+        ask_boolean "Executar FASE 1: Testes de Servidores (Infra/Sec/Modern)?" "ENABLE_PHASE_SERVER"
+        ask_boolean "Executar FASE 2: Testes de Zona (SOA/AXFR/DNSSEC)?" "ENABLE_PHASE_ZONE"
+        ask_boolean "Executar FASE 3: Testes de Registros (Resolução)?" "ENABLE_PHASE_RECORD"
+
+        # --- 3. CONDITIONAL OPTIONS ---
+
+        # FASE 1: SERVIDORES
+        if [[ "$ENABLE_PHASE_SERVER" == "true" ]]; then
+            echo -e "\n${BLUE}--- OPÇÕES FASE 1 (SERVIDORES) ---${NC}"
+            ask_boolean "Ativar Ping ICMP?" "ENABLE_PING"
+            if [[ "$ENABLE_PING" == "true" ]]; then
+                 ask_variable "   ↳ Ping Count" "PING_COUNT"
+                 ask_variable "   ↳ Ping Timeout (s)" "PING_TIMEOUT"
+            fi
+            
+            ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
+            ask_boolean "Ativar Teste DNSSEC (+dnssec validation)?" "ENABLE_DNSSEC_CHECK"
+            
+            ask_boolean "Verificar Versão (BIND Privacy)?" "CHECK_BIND_VERSION"
+            ask_boolean "Verificar Recursão Aberta?" "ENABLE_RECURSION_CHECK"
+            
+            echo -e "${GRAY}   [Modern Standards]${NC}"
+            ask_boolean "   Verificar EDNS0?" "ENABLE_EDNS_CHECK"
+            ask_boolean "   Verificar DNS Cookies?" "ENABLE_COOKIE_CHECK"
+            ask_boolean "   Verificar QNAME Minimization?" "ENABLE_QNAME_CHECK"
+            ask_boolean "   Verificar TLS Connection?" "ENABLE_TLS_CHECK"
+            ask_boolean "   Verificar DoT (DNS over TLS)?" "ENABLE_DOT_CHECK"
+            ask_boolean "   Verificar DoH (DNS over HTTPS)?" "ENABLE_DOH_CHECK"
         fi
-        ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
-        ask_boolean "Ativar Teste DNSSEC (+dnssec)?" "ENABLE_DNSSEC_CHECK"
 
-        ask_boolean "Testar SOMENTE grupos usados?" "ONLY_TEST_ACTIVE_GROUPS"
+        # FASE 2: ZONAS
+        if [[ "$ENABLE_PHASE_ZONE" == "true" ]]; then
+            echo -e "\n${BLUE}--- OPÇÕES FASE 2 (ZONAS) ---${NC}"
+            ask_boolean "Verificar Sincronismo SOA?" "ENABLE_SOA_SERIAL_CHECK"
+            ask_boolean "Verificar Zone Transfer (AXFR)?" "ENABLE_AXFR_CHECK"
+        fi
         
-        echo -e "\n${BLUE}--- SECURITY SCAN ---${NC}"
-        ask_boolean "Verificar Versão (BIND Privacy)?" "CHECK_BIND_VERSION"
-        ask_boolean "Verificar Zone Transfer (AXFR)?" "ENABLE_AXFR_CHECK"
-        ask_boolean "Verificar Recursão Aberta?" "ENABLE_RECURSION_CHECK"
-        ask_boolean "Verificar Sincronismo SOA?" "ENABLE_SOA_SERIAL_CHECK"
-
-        echo -e "\n${BLUE}--- MODERN STANDARDS ---${NC}"
-        ask_boolean "Verificar EDNS0?" "ENABLE_EDNS_CHECK"
-        ask_boolean "Verificar DNS Cookies?" "ENABLE_COOKIE_CHECK"
-        ask_boolean "Verificar QNAME Minimization?" "ENABLE_QNAME_CHECK"
-        ask_boolean "Verificar TLS Connection?" "ENABLE_TLS_CHECK"
-        ask_boolean "Verificar DoT (DNS over TLS)?" "ENABLE_DOT_CHECK"
-        ask_boolean "Verificar DoH (DNS over HTTPS)?" "ENABLE_DOH_CHECK"
+        # FASE 3: REGISTROS
+        if [[ "$ENABLE_PHASE_RECORD" == "true" ]]; then
+            echo -e "\n${BLUE}--- OPÇÕES FASE 3 (REGISTROS) ---${NC}"
+            ask_variable "Tentativas por Teste (Consistência)" "CONSISTENCY_CHECKS"
+            
+            echo -e "\n${BLUE}--- CRITÉRIOS DE DIVERGÊNCIA (TOLERÂNCIA) ---${NC}"
+            echo -e "${GRAY}(Se 'true', qualquer variação é marcada como divergente)${NC}"
+            ask_boolean "Considerar mudança de IP como divergência?" "STRICT_IP_CHECK"
+            ask_boolean "Considerar mudança de Ordem como divergência?" "STRICT_ORDER_CHECK"
+            ask_boolean "Considerar mudança de TTL como divergência?" "STRICT_TTL_CHECK"
+        fi
         
-        echo -e "\n${BLUE}--- OPÇÕES AVANÇADAS (DIG) ---${NC}"
+        # --- 4. ADVANCED & ANALYSIS ---
+        echo -e "\n${BLUE}--- OPÇÕES AVANÇADAS & ANÁLISE ---${NC}"
         ask_variable "Dig Options (Padrão/Iterativo)" "DEFAULT_DIG_OPTIONS"
         ask_variable "Dig Options (Recursivo)" "RECURSIVE_DIG_OPTIONS"
         
-        echo -e "\n${BLUE}--- ANÁLISE & VISUALIZAÇÃO ---${NC}"
         ask_variable "Limiar de Alerta de Latência (ms)" "LATENCY_WARNING_THRESHOLD"
         ask_variable "Limite tolerável de Perda de Pacotes (%)" "PING_PACKET_LOSS_LIMIT"
         ask_boolean "Habilitar Cores no Terminal?" "COLOR_OUTPUT"
@@ -686,7 +738,7 @@ interactive_configuration() {
             if [[ "$CONFIRM_SAVE" == "true" ]]; then
                 save_config_to_file
             else
-                 echo -e "     ${YELLOW}>> Cancelado. As alterações valem apenas para esta execução.${NC}"
+                echo -e "     ${YELLOW}>> Cancelado. As alterações valem apenas para esta execução.${NC}"
             fi
         fi
 
@@ -722,15 +774,21 @@ save_config_to_file() {
     sed -i "s|^SLEEP=.*|SLEEP=$SLEEP|" "$CONFIG_FILE" # Numeric
     
     update_conf_key "VALIDATE_CONNECTIVITY" "$VALIDATE_CONNECTIVITY"
-    update_conf_key "VERBOSE" "$VERBOSE"
+    sed -i "s|^VERBOSE_LEVEL=.*|VERBOSE_LEVEL=$VERBOSE_LEVEL|" "$CONFIG_FILE" # Numeric
+    update_conf_key "ENABLE_JSON_LOG" "$ENABLE_JSON_LOG"
     update_conf_key "ENABLE_LOG_TEXT" "$ENABLE_LOG_TEXT"
     
     # Report Flags
     update_conf_key "ENABLE_CHARTS" "$ENABLE_CHARTS"
+    update_conf_key "ENABLE_HTML_REPORT" "$ENABLE_HTML_REPORT"
     update_conf_key "ENABLE_JSON_REPORT" "$ENABLE_JSON_REPORT"
     update_conf_key "ENABLE_CSV_REPORT" "$ENABLE_CSV_REPORT"
     
     # Tests
+    update_conf_key "ENABLE_PHASE_SERVER" "$ENABLE_PHASE_SERVER"
+    update_conf_key "ENABLE_PHASE_ZONE" "$ENABLE_PHASE_ZONE"
+    update_conf_key "ENABLE_PHASE_RECORD" "$ENABLE_PHASE_RECORD"
+
     sed -i "s|^ENABLE_PING=.*|ENABLE_PING=$ENABLE_PING|" "$CONFIG_FILE"
     if [[ "$ENABLE_PING" == "true" ]]; then
         sed -i "s|^PING_COUNT=.*|PING_COUNT=$PING_COUNT|" "$CONFIG_FILE"
@@ -2412,6 +2470,37 @@ load_dns_groups() {
         IFS=',' read -ra srv_arr <<< "$servers"
         DNS_GROUPS["$name"]="${srv_arr[@]}"; DNS_GROUP_DESC["$name"]="$desc"; DNS_GROUP_TYPE["$name"]="$type"; DNS_GROUP_TIMEOUT["$name"]="$timeout"
     done < "$FILE_GROUPS"
+
+    # Identify Unique Servers to Test (Global Discovery)
+    declare -gA UNIQUE_SERVERS
+    declare -gA SERVER_GROUPS_MAP
+    
+    # Pre-calculate active groups based on domains_tests.csv if filter is on
+    declare -gA ACTIVE_GROUPS_CALC
+    if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" ]]; then
+        # Check if domains file exists first
+        if [[ -f "$FILE_DOMAINS" ]]; then
+            while IFS=';' read -r domain groups _ _ _; do
+                 [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+                 IFS=',' read -ra grp_list <<< "$groups"
+                 for g in "${grp_list[@]}"; do ACTIVE_GROUPS_CALC[$(echo "$g" | tr -d '[:space:]')]=1; done
+            done < "$FILE_DOMAINS"
+        fi
+    else
+        for g in "${!DNS_GROUPS[@]}"; do ACTIVE_GROUPS_CALC[$g]=1; done
+    fi
+
+    for grp in "${!DNS_GROUPS[@]}"; do
+        # Skip if not active
+        [[ -z "${ACTIVE_GROUPS_CALC[$grp]}" ]] && continue
+        
+        for ip in ${DNS_GROUPS[$grp]}; do
+            UNIQUE_SERVERS[$ip]=1
+            # Append group to map
+            if [[ -z "${SERVER_GROUPS_MAP[$ip]}" ]]; then SERVER_GROUPS_MAP[$ip]="$grp"; else SERVER_GROUPS_MAP[$ip]="${SERVER_GROUPS_MAP[$ip]},$grp"; fi
+        done
+    done
+    echo -e "  Identificados ${#UNIQUE_SERVERS[@]} servidores únicos para teste."
 }
 
 
@@ -2456,97 +2545,161 @@ assemble_json() {
     
     JSON_FILE="${HTML_FILE%.html}.json"
     
-    # Helper to clean trailing comma from file content for valid JSON array
-    # Check if files are non-empty before sed to avoid errors or malformed output
-    local dns_data=""; [[ -s "$TEMP_JSON_DNS" ]] && dns_data=$(sed '$ s/,$//' "$TEMP_JSON_DNS")
-    local domain_data=""; [[ -s "$TEMP_JSON_DOMAINS" ]] && domain_data=$(sed '$ s/,$//' "$TEMP_JSON_DOMAINS")
-    local ping_data=""; [[ -s "$TEMP_JSON_Ping" ]] && ping_data=$(sed '$ s/,$//' "$TEMP_JSON_Ping")
-    local sec_data=""; [[ -s "$TEMP_JSON_Sec" ]] && sec_data=$(sed '$ s/,$//' "$TEMP_JSON_Sec")
-    local trace_data=""; [[ -s "$TEMP_JSON_Trace" ]] && trace_data=$(sed '$ s/,$//' "$TEMP_JSON_Trace")
+    # --- BUILD SECTIONS ---
+
+    # 1. SERVERS
+    local json_servers=""
+    if [[ "$ENABLE_PHASE_SERVER" == "true" ]]; then
+       local first=true
+       for ip in "${!UNIQUE_SERVERS[@]}"; do
+           $first || json_servers+=","
+           first=false
+           
+           # Metrics
+           local grps="${SERVER_GROUPS_MAP[$ip]}"
+           local lat="${STATS_SERVER_PING_AVG[$ip]:-0}"
+           local jit="${STATS_SERVER_PING_JITTER[$ip]:-0}"
+           local loss="${STATS_SERVER_PING_LOSS[$ip]:-0}"
+           local status="${STATS_SERVER_PING_STATUS[$ip]:-UNK}"
+           
+           # Caps
+           local p53="${STATS_SERVER_PORT_53[$ip]:-NA}"
+           local rec="${STATS_SERVER_RECURSION[$ip]:-NA}"
+           local dnss="${STATS_SERVER_DNSSEC[$ip]:-NA}"
+           local doh="${STATS_SERVER_DOH[$ip]:-NA}"
+           local tls="${STATS_SERVER_TLS[$ip]:-NA}"
+           
+           json_servers+="{
+             \"ip\": \"$ip\",
+             \"groups\": \"$grps\",
+             \"ping\": { \"status\": \"$status\", \"latency\": $lat, \"jitter\": $jit, \"loss\": $loss },
+             \"capabilities\": {
+                 \"port53\": \"$p53\",
+                 \"recursion\": \"$rec\",
+                 \"dnssec\": \"$dnss\",
+                 \"doh\": \"$doh\",
+                 \"tls\": \"$tls\"
+             }
+           }"
+       done
+    fi
     
-    # Build complete JSON
+    # 2. ZONES
+    local json_zones=""
+    if [[ "$ENABLE_PHASE_ZONE" == "true" ]]; then
+        local first_z=true
+        while IFS=';' read -r domain groups _ _ _; do
+             [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+             domain=$(echo "$domain" | xargs)
+             
+             $first_z || json_zones+=","
+             first_z=false
+             
+             IFS=',' read -ra grp_list <<< "$groups"
+             local zone_servers_json=""
+             local first_s=true
+             
+             for grp in "${grp_list[@]}"; do
+                  for srv in ${DNS_GROUPS[$grp]}; do
+                       $first_s || zone_servers_json+=","
+                       first_s=false
+                       local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
+                       local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                       zone_servers_json+="{ \"server\": \"$srv\", \"group\": \"$grp\", \"soa\": \"$soa\", \"axfr\": \"$axfr\" }"
+                  done
+             done
+             
+             json_zones+="{
+               \"domain\": \"$domain\",
+               \"results\": [ $zone_servers_json ]
+             }"
+        done < "$FILE_DOMAINS"
+    fi
+
+    # 3. RECORDS
+    local json_records=""
+    if [[ "$ENABLE_PHASE_RECORD" == "true" ]]; then
+         local first_r=true
+         # We need to iterate stats keys or reconstruct from domains file. 
+         # Reconstructing logic similar to report gen is safer for order.
+          while IFS=';' read -r domain groups test_types record_types extra_hosts; do
+             [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+             IFS=',' read -ra rec_list <<< "$(echo "$record_types" | tr -d '[:space:]')"
+             IFS=',' read -ra grp_list <<< "$groups"
+             IFS=',' read -ra extra_list <<< "$(echo "$extra_hosts" | tr -d '[:space:]')"
+             local targets=("$domain")
+             for h in "${extra_list[@]}"; do [[ -n "$h" ]] && targets+=("$h.$domain"); done
+             
+             for target in "${targets[@]}"; do
+                 for rec_type in "${rec_list[@]}"; do
+                     rec_type=${rec_type^^}
+                     
+                     $first_r || json_records+=","
+                     first_r=false
+                     
+                     local rec_results_json=""
+                     local first_rr=true
+                     local consistent="CONSISTENT"
+                     
+                     # Check Consistency first
+                     # (Logic simplified: checking stored consistency flag)
+                     # But consistency is stored per Group. We aggregate blindly here.
+                     
+                     for grp in "${grp_list[@]}"; do
+                         for srv in ${DNS_GROUPS[$grp]}; do
+                             $first_rr || rec_results_json+=","
+                             first_rr=false
+                             local st="${STATS_RECORD_RES[$target|$rec_type|$grp|$srv]}"
+                             local ans="${STATS_RECORD_ANSWER[$target|$rec_type|$grp|$srv]}"
+                             # Escape json
+                             ans=$(echo "$ans" | sed 's/"/\\"/g' | sed 's/\\/\\\\/g')
+                             rec_results_json+="{ \"server\": \"$srv\", \"group\": \"$grp\", \"status\": \"$st\", \"answer\": \"$ans\" }"
+                         done
+                     done
+                     
+                     json_records+="{
+                       \"target\": \"$target\",
+                       \"type\": \"$rec_type\",
+                       \"results\": [ $rec_results_json ]
+                     }"
+                 done
+             done
+          done < "$FILE_DOMAINS"
+    fi
+
+    # Build Final JSON
     cat > "$JSON_FILE" << EOF
 {
   "meta": {
     "script_version": "$SCRIPT_VERSION",
     "timestamp_start": "$START_TIME_HUMAN",
-    "timestamp_end": "$END_TIME_HUMAN",
     "duration_seconds": $TOTAL_DURATION,
     "user": "$USER",
     "hostname": "$HOSTNAME"
   },
   "config": {
-    "domains_file": "$FILE_DOMAINS",
-    "groups_file": "$FILE_GROUPS",
-    "timeout": $TIMEOUT,
-    "consistency_checks": $CONSISTENCY_CHECKS,
-    "strict_mode": {
-      "ip": $STRICT_IP_CHECK,
-      "order": $STRICT_ORDER_CHECK,
-      "ttl": $STRICT_TTL_CHECK
+    "phases": {
+       "server": $ENABLE_PHASE_SERVER,
+       "zone": $ENABLE_PHASE_ZONE,
+       "record": $ENABLE_PHASE_RECORD
     }
   },
-  "statistics": {
-    "general": {
-    "domains": $domain_count,
-    "groups": $group_count,
-    "unique_servers": $server_count,
-    "total_queries": $TOTAL_DNS_QUERY_COUNT,
-    "total_tests": $TOTAL_TESTS,
-    "success_rate": $p_succ,
-    "latency_avg_ms": "$avg_lat",
-    "success": $SUCCESS_TESTS,
-    "warnings": $WARNING_TESTS,
-    "failures": $FAILED_TESTS,
-    "divergences": $DIVERGENT_TESTS,
-    "tcp_checks": { "ok": $TCP_SUCCESS, "fail": $TCP_FAIL },
-    "dnssec_checks": { "ok": $DNSSEC_SUCCESS, "absent": $DNSSEC_ABSENT, "fail": $DNSSEC_FAIL },
-    "total_sleep_seconds": $TOTAL_SLEEP_TIME,
-    "total_pings_sent": $TOTAL_PING_SENT,
-    "soa_sync": { "ok": $SOA_SYNC_OK, "fail": $SOA_SYNC_FAIL },
+  "summary": {
+    "executions": {
+       "server_tests": $((CNT_TESTS_SRV + 0)),
+       "zone_tests": $((CNT_TESTS_ZONE + 0)),
+       "record_tests": $((CNT_TESTS_REC + 0))
+    },
     "counters": {
-      "noerror": $CNT_NOERROR,
-      "nxdomain": $CNT_NXDOMAIN,
-      "servfail": $CNT_SERVFAIL,
-      "refused": $CNT_REFUSED,
-      "timeout": $CNT_TIMEOUT,
-      "noanswer": $CNT_NOANSWER,
-      "noanswer": $CNT_NOANSWER,
-      "network_error": $CNT_NETWORK_ERROR
-    },
-    "modern_features": {
-       "edns": {"ok": $EDNS_SUCCESS, "fail": $EDNS_FAIL},
-       "cookie": {"ok": $COOKIE_SUCCESS, "fail": $COOKIE_FAIL},
-       "qname": {"ok": $QNAME_SUCCESS, "fail": $QNAME_FAIL, "skip": $QNAME_SKIP},
-       "tls": {"ok": $TLS_SUCCESS, "fail": $TLS_FAIL},
-       "dot": {"ok": $DOT_SUCCESS, "fail": $DOT_FAIL},
-       "doh": {"ok": $DOH_SUCCESS, "fail": $DOH_FAIL}
+       "success": $((SUCCESS_TESTS + 0)),
+       "failure": $((FAILED_TESTS + 0)),
+       "divergent": $((DIVERGENT_TESTS + 0))
     }
-    },
-    "per_record_type": { $json_rec_stats },
-    "per_group": { $json_grp_stats }
   },
-  "domain_status": [
-    $domain_data
-  ],
-  "results": [
-    $dns_data
-  ],
-  "ping_results": [
-    $ping_data
-  ],
-  "traceroute_results": [
-    $trace_data
-  ],
-  "security_scan": {
-    "summary": {
-       "privacy_hidden": $SEC_HIDDEN, "privacy_revealed": $SEC_REVEALED,
-       "axfr_denied": $SEC_AXFR_OK, "axfr_allowed": $SEC_AXFR_RISK,
-       "recursion_closed": $SEC_REC_OK, "recursion_open": $SEC_REC_RISK
-    },
-    "details": [
-      $sec_data
-    ]
+  "data": {
+     "servers": [ $json_servers ],
+     "zones": [ $json_zones ],
+     "records": [ $json_records ]
   }
 }
 EOF
@@ -2562,146 +2715,143 @@ generate_hierarchical_stats() {
     # ==========================
     # 1. SERVER STATS AGGREGATION
     # ==========================
-    echo -e "\n${BLUE}${BOLD}1. TESTES DE SERVIDORES (Infraestrutura & Capabilities)${NC}"
-    
-    # Pre-Calculation for Aggregates (Ping/Jitter/Loss are numeric)
-    local G_LAT_MIN=999999; local G_LAT_MAX=0; local G_LAT_SUM=0; local G_LAT_CNT=0
-    local G_JIT_MIN=999999; local G_JIT_MAX=0; local G_JIT_SUM=0; local G_JIT_CNT=0
-    local G_LOSS_SUM=0; local G_LOSS_CNT=0
-    
-    # Capability Counters (Global)
-    local G_P53_OPEN=0; local G_P53_CLOSED=0; local G_P53_FILT=0
-    local G_P853_OK=0;  local G_P853_FAIL=0
-    local G_REC_OPEN=0; local G_REC_CLOSED=0
-    local G_EDNS_OK=0;  local G_EDNS_FAIL=0
-    local G_COOKIE_OK=0; local G_COOKIE_NO=0; local G_COOKIE_FAIL=0
-    local G_VER_HIDDEN=0; local G_VER_REVEALED=0
-    local G_DNSSEC_OK=0; local G_DNSSEC_FAIL=0
-    local G_DOH_OK=0; local G_DOH_FAIL=0
-    local G_TLS_OK=0; local G_TLS_FAIL=0
+    if [[ "$ENABLE_PHASE_SERVER" == "true" ]]; then
+        echo -e "\n${BLUE}${BOLD}1. TESTES DE SERVIDORES (Infraestrutura & Capabilities)${NC}"
+        
+        # Pre-Calculation for Aggregates (Ping/Jitter/Loss are numeric)
+        local G_LAT_MIN=999999; local G_LAT_MAX=0; local G_LAT_SUM=0; local G_LAT_CNT=0
+        local G_JIT_MIN=999999; local G_JIT_MAX=0; local G_JIT_SUM=0; local G_JIT_CNT=0
+        local G_LOSS_SUM=0; local G_LOSS_CNT=0
+        
+        # Capability Counters (Global)
+        local G_P53_OPEN=0; local G_P53_CLOSED=0; local G_P53_FILT=0
+        local G_P853_OK=0;  local G_P853_FAIL=0
+        local G_REC_OPEN=0; local G_REC_CLOSED=0
+        local G_EDNS_OK=0;  local G_EDNS_FAIL=0
+        local G_COOKIE_OK=0; local G_COOKIE_NO=0; local G_COOKIE_FAIL=0
+        local G_VER_HIDDEN=0; local G_VER_REVEALED=0
+        local G_DNSSEC_OK=0; local G_DNSSEC_FAIL=0
+        local G_DOH_OK=0; local G_DOH_FAIL=0
+        local G_TLS_OK=0; local G_TLS_FAIL=0
 
-    # Group Stats Storage
-    local -A GRP_LAT_MIN; local -A GRP_LAT_MAX; local -A GRP_LAT_SUM; local -A GRP_LAT_CNT
-    local -A GRP_JIT_MIN; local -A GRP_JIT_MAX; local -A GRP_JIT_SUM; local -A GRP_JIT_CNT
-    local -A GRP_LOSS_SUM; local -A GRP_LOSS_CNT
-    
-    local -A GRP_P53_OPEN; local -A GRP_P53_CLOSED; local -A GRP_P53_FILT
-    local -A GRP_REC_OPEN; local -A GRP_REC_CLOSED
-    local -A GRP_EDNS_OK;  local -A GRP_EDNS_FAIL
-    local -A GRP_DNSSEC_OK; local -A GRP_DNSSEC_FAIL
-    local -A GRP_DOH_OK; local -A GRP_DOH_FAIL
-    local -A GRP_P53_OPEN; local -A GRP_P53_CLOSED; local -A GRP_P53_FILT
-    local -A GRP_REC_OPEN; local -A GRP_REC_CLOSED
-    local -A GRP_EDNS_OK;  local -A GRP_EDNS_FAIL
-    local -A GRP_DNSSEC_OK; local -A GRP_DNSSEC_FAIL
-    local -A GRP_DOH_OK; local -A GRP_DOH_FAIL
-    local -A GRP_TLS_OK; local -A GRP_TLS_FAIL
-    
-    # Ping Counters
-    local G_PING_OK=0; local G_PING_SLOW=0; local G_PING_FAIL=0; local G_PING_DOWN=0
-    local -A GRP_PING_OK; local -A GRP_PING_SLOW
-    local -A GRP_PING_FAIL; local -A GRP_PING_DOWN
-    
-    local -A GROUPS_SEEN
+        # Group Stats Storage
+        local -A GRP_LAT_MIN; local -A GRP_LAT_MAX; local -A GRP_LAT_SUM; local -A GRP_LAT_CNT
+        local -A GRP_JIT_MIN; local -A GRP_JIT_MAX; local -A GRP_JIT_SUM; local -A GRP_JIT_CNT
+        local -A GRP_LOSS_SUM; local -A GRP_LOSS_CNT
+        
+        local -A GRP_P53_OPEN; local -A GRP_P53_CLOSED; local -A GRP_P53_FILT
+        local -A GRP_REC_OPEN; local -A GRP_REC_CLOSED
+        local -A GRP_EDNS_OK;  local -A GRP_EDNS_FAIL
+        local -A GRP_DNSSEC_OK; local -A GRP_DNSSEC_FAIL
+        local -A GRP_DOH_OK; local -A GRP_DOH_FAIL
+        local -A GRP_TLS_OK; local -A GRP_TLS_FAIL
+        
+        # Ping Counters
+        local G_PING_OK=0; local G_PING_SLOW=0; local G_PING_FAIL=0; local G_PING_DOWN=0
+        local -A GRP_PING_OK; local -A GRP_PING_SLOW
+        local -A GRP_PING_FAIL; local -A GRP_PING_DOWN
+        
+        local -A GROUPS_SEEN
 
-    # Iterate all servers to populate stats
-    for ip in "${!UNIQUE_SERVERS[@]}"; do
-        local grps="${SERVER_GROUPS_MAP[$ip]}"
-        
-        # Numeric Metrics
-        local lat_min="${STATS_SERVER_PING_MIN[$ip]}"; [[ -z "$lat_min" ]] && lat_min=0
-        local lat_avg="${STATS_SERVER_PING_AVG[$ip]}"; [[ -z "$lat_avg" ]] && lat_avg=0
-        local lat_max="${STATS_SERVER_PING_MAX[$ip]}"; [[ -z "$lat_max" ]] && lat_max=0
-        local jit="${STATS_SERVER_PING_JITTER[$ip]}";  [[ -z "$jit" ]] && jit=0
-        local loss="${STATS_SERVER_PING_LOSS[$ip]}";   [[ -z "$loss" ]] && loss=0
-        
-        # Ping Status Counters (Fix: Ensure p_stat is defined)
-        local p_stat="${STATS_SERVER_PING_STATUS[$ip]}"
-        if [[ -z "$p_stat" || "$p_stat" == "-" ]]; then
-             # Re-calc similar to display logic for consistency
-             if [[ "$loss" == "100" ]]; then p_stat="DOWN"
-             elif [[ "$loss" != "-" && $(echo "$loss > $PING_PACKET_LOSS_LIMIT" | bc -l 2>/dev/null) -eq 1 ]]; then p_stat="FAIL"
-             elif [[ "$loss" != "-" ]]; then p_stat="OK"; fi
-        fi
-        
-        if [[ "$p_stat" == "OK" ]]; then G_PING_OK=$((G_PING_OK+1));
-        elif [[ "$p_stat" == "SLOW" ]]; then G_PING_SLOW=$((G_PING_SLOW+1));
-        elif [[ "$p_stat" == "FAIL" ]]; then G_PING_FAIL=$((G_PING_FAIL+1));
-        elif [[ "$p_stat" == "DOWN" ]]; then G_PING_DOWN=$((G_PING_DOWN+1)); fi
-        
-        # Capability Metrics
-        local p53="${STATS_SERVER_PORT_53[$ip]}"
-        local p853="${STATS_SERVER_PORT_853[$ip]}"
-        local rec="${STATS_SERVER_RECURSION[$ip]}"
-        local edns="${STATS_SERVER_EDNS[$ip]}"
-        local cookie="${STATS_SERVER_COOKIE[$ip]}"
-        local ver="${STATS_SERVER_VERSION[$ip]}"
-        local dnssec="${STATS_SERVER_DNSSEC[$ip]}"
-        local doh="${STATS_SERVER_DOH[$ip]}"
-        local tls="${STATS_SERVER_TLS[$ip]}"
-
-        # Global Aggregates (Safely using awk -v)
-        G_LOSS_SUM=$(awk -v s="$G_LOSS_SUM" -v v="$loss" 'BEGIN {print s+v}')
-        G_LOSS_CNT=$((G_LOSS_CNT + 1))
-        
-        if (( $(echo "$lat_avg > 0" | bc -l) )); then
-             if (( $(echo "$lat_min < $G_LAT_MIN" | bc -l) )); then G_LAT_MIN=$lat_min; fi
-             if (( $(echo "$lat_max > $G_LAT_MAX" | bc -l) )); then G_LAT_MAX=$lat_max; fi
-             G_LAT_SUM=$(awk -v s="$G_LAT_SUM" -v v="$lat_avg" 'BEGIN {print s+v}')
-             G_LAT_CNT=$((G_LAT_CNT + 1))
-             
-             if (( $(echo "$jit < $G_JIT_MIN" | bc -l) )); then G_JIT_MIN=$jit; fi
-             if (( $(echo "$jit > $G_JIT_MAX" | bc -l) )); then G_JIT_MAX=$jit; fi
-             G_JIT_SUM=$(awk -v s="$G_JIT_SUM" -v v="$jit" 'BEGIN {print s+v}')
-             G_JIT_CNT=$((G_JIT_CNT + 1))
-        fi
-        
-        # Global Capabilities
-        if [[ "$p53" == "OPEN" ]]; then G_P53_OPEN=$((G_P53_OPEN+1));
-        elif [[ "$p53" == "CLOSED" ]]; then G_P53_CLOSED=$((G_P53_CLOSED+1));
-        else G_P53_FILT=$((G_P53_FILT+1)); fi
-        
-        if [[ "$p853" == "OK" ]]; then G_P853_OK=$((G_P853_OK+1)); else G_P853_FAIL=$((G_P853_FAIL+1)); fi
-        if [[ "$rec" == "OPEN" ]]; then G_REC_OPEN=$((G_REC_OPEN+1)); else G_REC_CLOSED=$((G_REC_CLOSED+1)); fi
-        if [[ "$edns" == "OK" ]]; then G_EDNS_OK=$((G_EDNS_OK+1)); else G_EDNS_FAIL=$((G_EDNS_FAIL+1)); fi
-        
-        if [[ "$cookie" == "OK" ]]; then G_COOKIE_OK=$((G_COOKIE_OK+1));
-        elif [[ "$cookie" == "NO" ]]; then G_COOKIE_NO=$((G_COOKIE_NO+1));
-        else G_COOKIE_FAIL=$((G_COOKIE_FAIL+1)); fi
-        
-        
-        if [[ "$ver" == "HIDDEN" ]]; then G_VER_HIDDEN=$((G_VER_HIDDEN+1)); else G_VER_REVEALED=$((G_VER_REVEALED+1)); fi
-        
-        if [[ "$dnssec" == "OK" ]]; then G_DNSSEC_OK=$((G_DNSSEC_OK+1)); else G_DNSSEC_FAIL=$((G_DNSSEC_FAIL+1)); fi
-        if [[ "$doh" == "OK" ]]; then G_DOH_OK=$((G_DOH_OK+1)); else G_DOH_FAIL=$((G_DOH_FAIL+1)); fi
-        if [[ "$tls" == "OK" ]]; then G_TLS_OK=$((G_TLS_OK+1)); else G_TLS_FAIL=$((G_TLS_FAIL+1)); fi
-        
-        # Group Aggregates
-        IFS=',' read -ra grp_list <<< "$grps"
-        for g in "${grp_list[@]}"; do
-            GROUPS_SEEN[$g]=1
+        # Iterate all servers to populate stats
+        for ip in "${!UNIQUE_SERVERS[@]}"; do
+            local grps="${SERVER_GROUPS_MAP[$ip]}"
             
-            # Initialize numeric if empty
-            [[ -z "${GRP_LAT_MIN[$g]}" ]] && GRP_LAT_MIN[$g]=999999
-            [[ -z "${GRP_LAT_MAX[$g]}" ]] && GRP_LAT_MAX[$g]=0
-            [[ -z "${GRP_JIT_MIN[$g]}" ]] && GRP_JIT_MIN[$g]=999999
-            [[ -z "${GRP_JIT_MAX[$g]}" ]] && GRP_JIT_MAX[$g]=0
-
-            GRP_LOSS_SUM[$g]=$(awk -v s="${GRP_LOSS_SUM[$g]:-0}" -v v="$loss" 'BEGIN {print s+v}')
-            GRP_LOSS_CNT[$g]=$(( ${GRP_LOSS_CNT[$g]:-0} + 1 ))
+            # Numeric Metrics
+            local lat_min="${STATS_SERVER_PING_MIN[$ip]}"; [[ -z "$lat_min" ]] && lat_min=0
+            local lat_avg="${STATS_SERVER_PING_AVG[$ip]}"; [[ -z "$lat_avg" ]] && lat_avg=0
+            local lat_max="${STATS_SERVER_PING_MAX[$ip]}"; [[ -z "$lat_max" ]] && lat_max=0
+            local jit="${STATS_SERVER_PING_JITTER[$ip]}";  [[ -z "$jit" ]] && jit=0
+            local loss="${STATS_SERVER_PING_LOSS[$ip]}";   [[ -z "$loss" ]] && loss=0
             
-            # Numeric
-            if (( $(echo "$lat_avg > 0" | bc -l) )); then
-                 if (( $(echo "$lat_min < ${GRP_LAT_MIN[$g]}" | bc -l) )); then GRP_LAT_MIN[$g]=$lat_min; fi
-                 if (( $(echo "$lat_max > ${GRP_LAT_MAX[$g]}" | bc -l) )); then GRP_LAT_MAX[$g]=$lat_max; fi
-                 GRP_LAT_SUM[$g]=$(awk -v s="${GRP_LAT_SUM[$g]:-0}" -v v="$lat_avg" 'BEGIN {print s+v}')
-                 GRP_LAT_CNT[$g]=$(( ${GRP_LAT_CNT[$g]:-0} + 1 ))
-
-                 if (( $(echo "$jit < ${GRP_JIT_MIN[$g]}" | bc -l) )); then GRP_JIT_MIN[$g]=$jit; fi
-                 if (( $(echo "$jit > ${GRP_JIT_MAX[$g]}" | bc -l) )); then GRP_JIT_MAX[$g]=$jit; fi
-                 GRP_JIT_SUM[$g]=$(awk -v s="${GRP_JIT_SUM[$g]:-0}" -v v="$jit" 'BEGIN {print s+v}')
-                 GRP_JIT_CNT[$g]=$(( ${GRP_JIT_CNT[$g]:-0} + 1 ))
+            # Global Aggregates (Latency)
+            if [[ "$lat_avg" != "0" ]]; then
+                G_LAT_SUM=$(echo "$G_LAT_SUM + $lat_avg" | bc)
+                G_LAT_CNT=$((G_LAT_CNT + 1))
+                if (( $(echo "$lat_avg < $G_LAT_MIN" | bc -l) )); then G_LAT_MIN=$lat_avg; fi
+                if (( $(echo "$lat_avg > $G_LAT_MAX" | bc -l) )); then G_LAT_MAX=$lat_avg; fi
             fi
+             
+            # Ping Status Counters
+            local p_stat="${STATS_SERVER_PING_STATUS[$ip]}"
+            if [[ -z "$p_stat" || "$p_stat" == "-" ]]; then
+                 if [[ "$loss" == "100" ]]; then p_stat="DOWN"
+                 elif [[ "$loss" != "-" && $(echo "$loss > $PING_PACKET_LOSS_LIMIT" | bc -l 2>/dev/null) -eq 1 ]]; then p_stat="FAIL"
+                 elif [[ "$loss" != "-" ]]; then p_stat="OK"; fi
+            fi
+            
+            if [[ "$p_stat" == "OK" ]]; then G_PING_OK=$((G_PING_OK+1));
+            elif [[ "$p_stat" == "SLOW" ]]; then G_PING_SLOW=$((G_PING_SLOW+1));
+            elif [[ "$p_stat" == "FAIL" ]]; then G_PING_FAIL=$((G_PING_FAIL+1));
+            elif [[ "$p_stat" == "DOWN" ]]; then G_PING_DOWN=$((G_PING_DOWN+1)); fi
+            
+            # Capability Metrics
+            local p53="${STATS_SERVER_PORT_53[$ip]}"
+            local p853="${STATS_SERVER_PORT_853[$ip]}"
+            local rec="${STATS_SERVER_RECURSION[$ip]}"
+            local edns="${STATS_SERVER_EDNS[$ip]}"
+            local cookie="${STATS_SERVER_COOKIE[$ip]}"
+            local ver="${STATS_SERVER_VERSION[$ip]}"
+            local dnssec="${STATS_SERVER_DNSSEC[$ip]}"
+            local doh="${STATS_SERVER_DOH[$ip]}"
+            local tls="${STATS_SERVER_TLS[$ip]}"
+
+            # Global Counts
+            [[ "$p53" == "OPEN" ]] && G_P53_OPEN=$((G_P53_OPEN + 1))
+            [[ "$p53" == "CLOSED" ]] && G_P53_CLOSED=$((G_P53_CLOSED + 1))
+            [[ "$p53" == "FILTERED" ]] && G_P53_FILT=$((G_P53_FILT + 1))
+
+            [[ "$p853" == "OK" ]] && G_P853_OK=$((G_P853_OK + 1))
+            [[ "$p853" == "refused" || "$p853" == "timeout" ]] && G_P853_FAIL=$((G_P853_FAIL + 1))
+
+            [[ "$rec" == "OPEN" ]] && G_REC_OPEN=$((G_REC_OPEN + 1))
+            [[ "$rec" == "CLOSED" ]] && G_REC_CLOSED=$((G_REC_CLOSED + 1))
+
+            [[ "$edns" == "OK" ]] && G_EDNS_OK=$((G_EDNS_OK + 1))
+            [[ "$edns" == "FAIL" ]] && G_EDNS_FAIL=$((G_EDNS_FAIL + 1))
+
+            [[ "$cookie" == "OK" ]] && G_COOKIE_OK=$((G_COOKIE_OK + 1))
+            [[ "$cookie" == "NO" ]] && G_COOKIE_NO=$((G_COOKIE_NO + 1))
+            [[ "$cookie" == "FAIL" ]] && G_COOKIE_FAIL=$((G_COOKIE_FAIL + 1))
+
+            [[ "$ver" == "HIDDEN" ]] && G_VER_HIDDEN=$((G_VER_HIDDEN + 1))
+            [[ "$ver" == "REVEALED" ]] && G_VER_REVEALED=$((G_VER_REVEALED + 1))
+            
+            [[ "$dnssec" == "OK" ]] && G_DNSSEC_OK=$((G_DNSSEC_OK + 1))
+            [[ "$dnssec" == "FAIL" ]] && G_DNSSEC_FAIL=$((G_DNSSEC_FAIL + 1))
+            
+            [[ "$doh" == "OK" ]] && G_DOH_OK=$((G_DOH_OK + 1))
+            [[ "$doh" != "OK" && "$doh" != "SKIP" ]] && G_DOH_FAIL=$((G_DOH_FAIL + 1))
+            
+            [[ "$tls" == "OK" ]] && G_TLS_OK=$((G_TLS_OK + 1))
+            [[ "$tls" != "OK" && "$tls" != "SKIP" ]] && G_TLS_FAIL=$((G_TLS_FAIL + 1))
+
+            # Group Iteration
+            IFS=',' read -ra GRPS <<< "$grps"
+            for g in "${GRPS[@]}"; do
+                GROUPS_SEEN[$g]=1
+                
+                # Initialize numeric if empty
+                [[ -z "${GRP_LAT_MIN[$g]}" ]] && GRP_LAT_MIN[$g]=999999
+                [[ -z "${GRP_LAT_MAX[$g]}" ]] && GRP_LAT_MAX[$g]=0
+                [[ -z "${GRP_JIT_MIN[$g]}" ]] && GRP_JIT_MIN[$g]=999999
+                [[ -z "${GRP_JIT_MAX[$g]}" ]] && GRP_JIT_MAX[$g]=0
+
+                GRP_LOSS_SUM[$g]=$(awk -v s="${GRP_LOSS_SUM[$g]:-0}" -v v="$loss" 'BEGIN {print s+v}')
+                GRP_LOSS_CNT[$g]=$(( ${GRP_LOSS_CNT[$g]:-0} + 1 ))
+                
+                # Numeric
+                if (( $(echo "$lat_avg > 0" | bc -l) )); then
+                     if (( $(echo "$lat_min < ${GRP_LAT_MIN[$g]}" | bc -l) )); then GRP_LAT_MIN[$g]=$lat_min; fi
+                     if (( $(echo "$lat_max > ${GRP_LAT_MAX[$g]}" | bc -l) )); then GRP_LAT_MAX[$g]=$lat_max; fi
+                     GRP_LAT_SUM[$g]=$(awk -v s="${GRP_LAT_SUM[$g]:-0}" -v v="$lat_avg" 'BEGIN {print s+v}')
+                     GRP_LAT_CNT[$g]=$(( ${GRP_LAT_CNT[$g]:-0} + 1 ))
+
+                     if (( $(echo "$jit < ${GRP_JIT_MIN[$g]}" | bc -l) )); then GRP_JIT_MIN[$g]=$jit; fi
+                     if (( $(echo "$jit > ${GRP_JIT_MAX[$g]}" | bc -l) )); then GRP_JIT_MAX[$g]=$jit; fi
+                     GRP_JIT_SUM[$g]=$(awk -v s="${GRP_JIT_SUM[$g]:-0}" -v v="$jit" 'BEGIN {print s+v}')
+                     GRP_JIT_CNT[$g]=$(( ${GRP_JIT_CNT[$g]:-0} + 1 ))
+                fi
             
             # Capabilities Group
             if [[ "$p53" == "OPEN" ]]; then GRP_P53_OPEN[$g]=$(( ${GRP_P53_OPEN[$g]:-0} + 1 ));
@@ -2834,74 +2984,71 @@ generate_hierarchical_stats() {
         done
     done
     
+    elif [[ "$ENABLE_PHASE_SERVER" == "false" ]]; then
+        echo -e "\n${GRAY}   [Fase 1 desabilitada: Estatísticas de servidor ignoradas]${NC}"
+    fi
+    
     # ==========================
     # 2. ZONE STATS AGGREGATION
     # ==========================
-    echo -e "\n${BLUE}${BOLD}2. TESTES DE ZONA (SOA & AXFR)${NC}"
-    
-    # Header (Widths adjusted to match colorized rows: 30 | 29 | 15 | 29 | 15 )
-    # Note: Row placeholders are larger due to ANSI codes. 
-    # Let's align visually. 
-    # ZONE: 30
-    # SOA CONSENSUS: 20 (Header) vs 29 (Row - 9 for color) -> Real width ~13. So 20 is enough space visually.
-    # SOA SERIAL: 15 (Header) vs 15 (Row)
-    # AXFR: 20 (Header) vs 29 (Row - 9 for color) -> Real width ~18. So 20 is enough space.
-    # DNSSEC: 15 (Header) vs 15 (Row)
-    
-    printf "  %-30s | %-20s | %-16s | %-20s | %-15s\n" "ZONA" "SOA CONSENSUS" "SOA SERIAL" "AXFR SECURITY" "DNSSEC"
-    echo -e "  ${GRAY}-----------------------------------------------------------------------------------------------------------------${NC}"
+    if [[ "$ENABLE_PHASE_ZONE" == "true" ]]; then
+        echo -e "\n${BLUE}${BOLD}2. TESTES DE ZONA (SOA & AXFR)${NC}"
+        
+        # Header (Widths adjusted to match colorized rows: 30 | 29 | 15 | 29 | 15 )
+        printf "  %-30s | %-20s | %-16s | %-20s | %-15s\n" "ZONA" "SOA CONSENSUS" "SOA SERIAL" "AXFR SECURITY" "DNSSEC"
+        echo -e "  ${GRAY}-----------------------------------------------------------------------------------------------------------------${NC}"
 
-    # Global Summary Counters (Reset)
-    declare -g CNT_ZONES_OK=0
-    declare -g CNT_ZONES_DIV=0
+        # Global Summary Counters (Reset)
+        declare -g CNT_ZONES_OK=0
+        declare -g CNT_ZONES_DIV=0
 
-    while IFS=';' read -r domain groups _ _ _; do
-        [[ "$domain" =~ ^# || -z "$domain" ]] && continue
-        domain=$(echo "$domain" | xargs)
-        IFS=',' read -ra grp_list <<< "$groups"
-        
-        # 1. SOA Analysis
-        local soa_serials=()
-        local soa_consistent=true
-        local first_soa=""
-        
-        # Collect all SOA serials for this domain
-        for grp in "${grp_list[@]}"; do
-             for srv in ${DNS_GROUPS[$grp]}; do
-                  local s_soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
-                  if [[ -z "$first_soa" ]]; then first_soa="$s_soa"; fi
-                  if [[ "$s_soa" != "$first_soa" ]]; then soa_consistent=false; fi
-             done
-        done
-        
-        local soa_display="${GREEN}✅ SYNC${NC}"
-        local soa_val="${GREEN}${first_soa}${NC}"
-        
-        # Check for error values in consistent result
-        if [[ "$first_soa" == "TIMEOUT" || "$first_soa" == "ERR" || "$first_soa" == "N/A" ]]; then
-             soa_val="${RED}${first_soa}${NC}"
-        fi
-        
-        if [[ "$soa_consistent" == "false" ]]; then
-             soa_display="${RED}⚠️ DIVERGENT${NC}"
-             soa_val="${YELLOW}MIXED${NC}"
-             CNT_ZONES_DIV=$((CNT_ZONES_DIV+1))
-        else
-             CNT_ZONES_OK=$((CNT_ZONES_OK+1))
-        fi
-        
-        # 2. AXFR & DNSSEC Analysis
-        local axfr_allowed_count=0
-        local axfr_total_count=0
-        
-        local dnssec_signed_count=0
-        local dnssec_total_count=0
-        
-        for grp in "${grp_list[@]}"; do
-             for srv in ${DNS_GROUPS[$grp]}; do
-                  local status="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
-                  axfr_total_count=$((axfr_total_count+1))
-                  if [[ "$status" == "ALLOWED" ]]; then axfr_allowed_count=$((axfr_allowed_count+1)); fi
+        while IFS=';' read -r domain groups _ _ _; do
+            [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+            domain=$(echo "$domain" | xargs)
+            IFS=',' read -ra grp_list <<< "$groups"
+            
+            # 1. SOA Analysis
+            local soa_serials=()
+            local soa_consistent=true
+            local first_soa=""
+            
+            # Collect all SOA serials for this domain
+            for grp in "${grp_list[@]}"; do
+                 for srv in ${DNS_GROUPS[$grp]}; do
+                      local s_soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
+                      if [[ -z "$first_soa" ]]; then first_soa="$s_soa"; fi
+                      if [[ "$s_soa" != "$first_soa" ]]; then soa_consistent=false; fi
+                 done
+            done
+            
+            local soa_display="${GREEN}✅ SYNC${NC}"
+            local soa_val="${GREEN}${first_soa}${NC}"
+            
+            # Check for error values in consistent result
+            if [[ "$first_soa" == "TIMEOUT" || "$first_soa" == "ERR" || "$first_soa" == "N/A" ]]; then
+                 soa_val="${RED}${first_soa}${NC}"
+            fi
+            
+            if [[ "$soa_consistent" == "false" ]]; then
+                 soa_display="${RED}⚠️ DIVERGENT${NC}"
+                 soa_val="${YELLOW}MIXED${NC}"
+                 CNT_ZONES_DIV=$((CNT_ZONES_DIV+1))
+            else
+                 CNT_ZONES_OK=$((CNT_ZONES_OK+1))
+            fi
+            
+            # 2. AXFR & DNSSEC Analysis
+            local axfr_allowed_count=0
+            local axfr_total_count=0
+            
+            local dnssec_signed_count=0
+            local dnssec_total_count=0
+            
+            for grp in "${grp_list[@]}"; do
+                 for srv in ${DNS_GROUPS[$grp]}; do
+                      local status="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                      axfr_total_count=$((axfr_total_count+1))
+                      if [[ "$status" == "ALLOWED" ]]; then axfr_allowed_count=$((axfr_allowed_count+1)); fi
                   
                   local d_sig="${STATS_ZONE_DNSSEC[$domain|$grp|$srv]}"
                   dnssec_total_count=$((dnssec_total_count+1))
@@ -2967,24 +3114,30 @@ generate_hierarchical_stats() {
         fi
 
         
-    done <<< "$sorted_domains"
+    done < "$FILE_DOMAINS"
     
+    # Close Phase 2 Block
+    elif [[ "$ENABLE_PHASE_ZONE" == "false" ]]; then
+        echo -e "\n${GRAY}   [Fase 2 desabilitada: Estatísticas de zona ignoradas]${NC}"
+    fi
+
     # ==========================
     # 3. RECORD STATS AGGREGATION
     # ==========================
-    echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Resolução & Consistência)${NC}"
-    
-    # Header
-    printf "  %-30s | %-6s | %-16s | %-24s | %-40s\n" "RECORD" "TYPE" "STATUS" "CONSISTENCY" "ANSWERS"
-    echo -e "  ${GRAY}------------------------------------------------------------------------------------------------------------------------------------${NC}"
+    if [[ "$ENABLE_PHASE_RECORD" == "true" ]]; then
+        echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Resolução & Consistência)${NC}"
+        
+        # Header
+        printf "  %-30s | %-6s | %-16s | %-24s | %-40s\n" "RECORD" "TYPE" "STATUS" "CONSISTENCY" "ANSWERS"
+        echo -e "  ${GRAY}------------------------------------------------------------------------------------------------------------------------------------${NC}"
 
-    # Global Summary Counters (Reset)
-    declare -g CNT_REC_FULL_OK=0
-    declare -g CNT_REC_PARTIAL=0
-    declare -g CNT_REC_FAIL=0
-    declare -g CNT_REC_NXDOMAIN=0
-    declare -g CNT_REC_CONSISTENT=0
-    declare -g CNT_REC_DIVERGENT=0
+        # Global Summary Counters (Reset)
+        declare -g CNT_REC_FULL_OK=0
+        declare -g CNT_REC_PARTIAL=0
+        declare -g CNT_REC_FAIL=0
+        declare -g CNT_REC_NXDOMAIN=0
+        declare -g CNT_REC_CONSISTENT=0
+        declare -g CNT_REC_DIVERGENT=0
 
     while IFS=';' read -r domain groups test_types record_types extra_hosts; do
         [[ "$domain" =~ ^# || -z "$domain" ]] && continue
@@ -3091,6 +3244,10 @@ generate_hierarchical_stats() {
         done
     done <<< "$sorted_domains"
     echo ""
+
+    elif [[ "$ENABLE_PHASE_RECORD" == "false" ]]; then
+        echo -e "\n${GRAY}   [Fase 3 desabilitada: Estatísticas de registros ignoradas]${NC}"
+    fi
 }
 
 print_final_terminal_summary() {
@@ -3243,33 +3400,7 @@ run_server_tests() {
     declare -gA STATS_SERVER_DOH
     declare -gA STATS_SERVER_TLS
 
-    # Identify Unique Servers to Test
-    declare -gA UNIQUE_SERVERS
-    declare -gA SERVER_GROUPS_MAP
-    
-    # Pre-calculate active groups based on domains_tests.csv if filter is on
-    declare -gA ACTIVE_GROUPS_CALC
-    if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" ]]; then
-        while IFS=';' read -r domain groups _ _ _; do
-             [[ "$domain" =~ ^# || -z "$domain" ]] && continue
-             IFS=',' read -ra grp_list <<< "$groups"
-             for g in "${grp_list[@]}"; do ACTIVE_GROUPS_CALC[$(echo "$g" | tr -d '[:space:]')]=1; done
-        done < "$FILE_DOMAINS"
-    else
-        for g in "${!DNS_GROUPS[@]}"; do ACTIVE_GROUPS_CALC[$g]=1; done
-    fi
 
-    for grp in "${!DNS_GROUPS[@]}"; do
-        [[ -z "${ACTIVE_GROUPS_CALC[$grp]}" ]] && continue
-        
-        for ip in ${DNS_GROUPS[$grp]}; do
-            UNIQUE_SERVERS[$ip]=1
-            # Append group to map
-            if [[ -z "${SERVER_GROUPS_MAP[$ip]}" ]]; then SERVER_GROUPS_MAP[$ip]="$grp"; else SERVER_GROUPS_MAP[$ip]="${SERVER_GROUPS_MAP[$ip]},$grp"; fi
-        done
-    done
-    
-    echo -e "  Identificados ${#UNIQUE_SERVERS[@]} servidores únicos para teste."
     
     # START SERVER HTML SECTION
     cat >> "$TEMP_SECTION_SERVER" << EOF
@@ -3565,6 +3696,12 @@ EOF
         # ADD ROW
         echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
+        # CSV Export Server
+        if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
+            local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
+            echo "$csv_ts;$ip;$grps;${STATS_SERVER_PING_STATUS[$ip]};${STATS_SERVER_PING_AVG[$ip]};${STATS_SERVER_PING_JITTER[$ip]};${STATS_SERVER_PING_LOSS[$ip]};${STATS_SERVER_PORT_53[$ip]};${STATS_SERVER_PORT_853[$ip]};${STATS_SERVER_VERSION[$ip]};${STATS_SERVER_RECURSION[$ip]};${STATS_SERVER_EDNS[$ip]};${STATS_SERVER_COOKIE[$ip]};${STATS_SERVER_DNSSEC[$ip]};${STATS_SERVER_DOH[$ip]};${STATS_SERVER_TLS[$ip]}" >> "$LOG_FILE_CSV_SRV"
+        fi
+        
         # Prepare Output Terms for new checks
         local dnssec_term="${GRAY}SKIP${NC}"
         if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then dnssec_term="${GREEN}OK${NC}"; fi
@@ -3756,6 +3893,14 @@ EOF
                  
                  echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${SERVER_AXFR[$srv]}</td><td>${sig_html}</td></tr>" >> "$TEMP_SECTION_ZONE"
                  
+                 # CSV Export Zone
+                 if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
+                      local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
+                      # Clean AXFR status (remove html tags)
+                      local clean_axfr=$(echo "${SERVER_AXFR[$srv]}" | sed 's/<[^>]*>//g')
+                      echo "$csv_ts;$domain;$srv;$grp;$serial;$clean_axfr;$sig_status" >> "$LOG_FILE_CSV_ZONE"
+                 fi
+                 
                  # Term Output
                  local term_soa="$serial"
                  [[ "$serial" == "$first_serial" ]] && term_soa="${GREEN}$serial${NC}" || term_soa="${RED}$serial${NC}"
@@ -3938,8 +4083,11 @@ EOF
                              local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
                              local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
                              [[ -z "$dur" ]] && dur=0
-                             # Timestamp;Grupo;Servidor;Dominio;Record;Status;Latencia_ms;Detail;TCP;SEC;EDNS;COOKIE;TLS;DOT;DOH;QNAME
-                             echo "$csv_ts;$grp;$srv;$target;$rec_type;$status;$dur;Phase3-Record;${CACHE_TCP_STATUS[$srv]};${CACHE_SEC_STATUS[$srv]};${CACHE_EDNS_STATUS[$srv]};${CACHE_COOKIE_STATUS[$srv]};${CACHE_TLS_STATUS[$srv]};;;;" >> "$LOG_FILE_CSV"
+                             
+                             # Clean answer snippet (remove newlines/special chars)
+                             local clean_ans=$(echo "${answer_data}" | tr -d '\n\r;' | cut -c1-100)
+                             
+                             echo "$csv_ts;$target;$rec_type;$grp;$srv;$status;$dur;$clean_ans" >> "$LOG_FILE_CSV_REC"
                          fi
                          
                          # --- JSON EXPORT (Restored) ---
@@ -4043,13 +4191,19 @@ main() {
     load_dns_groups
     
     # 1. SERVER Phase
-    run_server_tests
+    if [[ "$ENABLE_PHASE_SERVER" == "true" ]]; then
+        run_server_tests
+    fi
     
     # 2. ZONE Phase
-    run_zone_tests
+    if [[ "$ENABLE_PHASE_ZONE" == "true" ]]; then
+        run_zone_tests
+    fi
     
     # 3. RECORD Phase
-    run_record_tests
+    if [[ "$ENABLE_PHASE_RECORD" == "true" ]]; then
+        run_record_tests
+    fi
     
     # LEGACY CALLS REMOVED 
     # process_tests; run_ping_diagnostics; run_trace_diagnostics; run_security_diagnostics
@@ -4071,7 +4225,11 @@ main() {
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
     echo "Relatório HTML: $HTML_FILE"
     [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo "Relatório JSON: $LOG_FILE_JSON"
-    [[ "$ENABLE_CSV_REPORT" == "true" ]] && echo "Relatório CSV : $LOG_FILE_CSV"
+    if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
+        echo "Relatório CSV (Srv) : $LOG_FILE_CSV_SRV"
+        echo "Relatório CSV (Zone): $LOG_FILE_CSV_ZONE"
+        echo "Relatório CSV (Rec) : $LOG_FILE_CSV_REC"
+    fi
     [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Log Texto     : $LOG_FILE_TEXT"
     [[ "$ENABLE_JSON_LOG" == "true" ]] && echo "Log JSON      : $LOG_FILE_JSON"
 }

@@ -1,0 +1,366 @@
+{
+  "meta": {
+    "script_version": "11.7.0",
+    "timestamp_start": "21/12/2025 22:30:09",
+    "duration_seconds": 277,
+    "user": "flashbsb",
+    "hostname": "debian02"
+  },
+  "config": {
+    "phases": {
+       "server": true,
+       "zone": true,
+       "record": true
+    }
+  },
+  "summary": {
+    "executions": {
+       "server_tests": 189,
+       "zone_tests": 93,
+       "record_tests": 87
+    },
+    "counters": {
+       "success": 87,
+       "failure": 0,
+       "divergent": 5
+    }
+  },
+  "data": {
+     "servers": [ {
+             "ip": "192.203.230.10",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "OK", "latency": 16.769, "jitter": 2.581, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "198.41.0.4",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 165.586, "jitter": 2.919, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "208.67.220.220",
+             "groups": "OPENDNS",
+             "ping": { "status": "OK", "latency": 27.431, "jitter": 2.122, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "8.8.4.4",
+             "groups": "GOOGLE",
+             "ping": { "status": "OK", "latency": 26.023, "jitter": 1.570, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "1.1.1.1",
+             "groups": "CLOUDFLARE",
+             "ping": { "status": "OK", "latency": 19.573, "jitter": 10.425, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "198.97.190.53",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "OK", "latency": 54.600, "jitter": 2.151, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "192.36.148.17",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 183.074, "jitter": 2.959, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "9.9.9.9",
+             "groups": "QUAD9",
+             "ping": { "status": "OK", "latency": 15.017, "jitter": 2.811, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "192.112.36.4",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "DOWN", "latency": 0, "jitter": 0, "loss": 100 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "8.8.8.8",
+             "groups": "GOOGLE",
+             "ping": { "status": "OK", "latency": 33.769, "jitter": 1.309, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "192.58.128.30",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 162.006, "jitter": 2.375, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "199.9.14.201",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 178.029, "jitter": 1.919, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "193.0.14.129",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 220.725, "jitter": 7.334, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "192.5.5.241",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "OK", "latency": 15.310, "jitter": 0.970, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "208.67.222.222",
+             "groups": "OPENDNS",
+             "ping": { "status": "OK", "latency": 28.451, "jitter": 1.242, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "202.12.27.33",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "OK", "latency": 39.824, "jitter": 0.943, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "199.7.83.42",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "OK", "latency": 53.589, "jitter": 2.230, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "199.7.91.13",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 153.677, "jitter": 1.021, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           },{
+             "ip": "1.0.0.1",
+             "groups": "CLOUDFLARE",
+             "ping": { "status": "OK", "latency": 11.513, "jitter": 2.946, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "149.112.112.112",
+             "groups": "QUAD9",
+             "ping": { "status": "OK", "latency": 11.161, "jitter": 1.374, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "OPEN",
+                 "dnssec": "OK",
+                 "doh": "OK",
+                 "tls": "OK"
+             }
+           },{
+             "ip": "192.33.4.12",
+             "groups": "ROOT_SERVERS",
+             "ping": { "status": "SLOW", "latency": 140.857, "jitter": 0.501, "loss": 0 },
+             "capabilities": {
+                 "port53": "OPEN",
+                 "recursion": "CLOSED",
+                 "dnssec": "NA",
+                 "doh": "FAIL",
+                 "tls": "FAIL"
+             }
+           } ],
+     "zones": [ {
+               "domain": "google.com",
+               "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "soa": "847066381", "axfr": "DENIED" },{ "server": "8.8.4.4", "group": "GOOGLE", "soa": "847364220", "axfr": "DENIED" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "soa": "847066381", "axfr": "DENIED" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "soa": "847066381", "axfr": "DENIED" } ]
+             },{
+               "domain": "wikipedia.org",
+               "results": [ { "server": "9.9.9.9", "group": "QUAD9", "soa": "2025120109", "axfr": "DENIED" },{ "server": "149.112.112.112", "group": "QUAD9", "soa": "2025120109", "axfr": "DENIED" },{ "server": "208.67.222.222", "group": "OPENDNS", "soa": "2025120109", "axfr": "DENIED" },{ "server": "208.67.220.220", "group": "OPENDNS", "soa": "2025120109", "axfr": "DENIED" } ]
+             },{
+               "domain": "cisco.com",
+               "results": [ { "server": "208.67.222.222", "group": "OPENDNS", "soa": "1149507", "axfr": "DENIED" },{ "server": "208.67.220.220", "group": "OPENDNS", "soa": "1149511", "axfr": "DENIED" } ]
+             },{
+               "domain": "ietf.org",
+               "results": [ { "server": "198.41.0.4", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "199.9.14.201", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.33.4.12", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "199.7.91.13", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.203.230.10", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.5.5.241", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.112.36.4", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "198.97.190.53", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.36.148.17", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.58.128.30", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "193.0.14.129", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "199.7.83.42", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "202.12.27.33", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" } ]
+             },{
+               "domain": "example.com",
+               "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "soa": "2391652032", "axfr": "DENIED" },{ "server": "8.8.4.4", "group": "GOOGLE", "soa": "2391652032", "axfr": "DENIED" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "soa": "2391652032", "axfr": "DENIED" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "soa": "2391652032", "axfr": "DENIED" },{ "server": "9.9.9.9", "group": "QUAD9", "soa": "2391652032", "axfr": "DENIED" },{ "server": "149.112.112.112", "group": "QUAD9", "soa": "2391652032", "axfr": "DENIED" } ]
+             },{
+               "domain": "fail-test.local",
+               "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "8.8.4.4", "group": "GOOGLE", "soa": "TIMEOUT", "axfr": "DENIED" } ]
+             } ],
+     "records": [ {
+                       "target": "google.com",
+                       "type": "A",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "142.251.132.238" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "142.251.132.238" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.110" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.110" } ]
+                     },{
+                       "target": "google.com",
+                       "type": "AAAA",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:811::200e" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80f::200e" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:800::200e" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:800::200e" } ]
+                     },{
+                       "target": "google.com",
+                       "type": "TXT",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all" } ]
+                     },{
+                       "target": "www.google.com",
+                       "type": "A",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "172.217.172.4" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "172.217.172.4" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.251.150.119 142.251.151.119 142.251.152.119 142.251.153.119 142.251.154.119 142.251.155.119 142.251.156.119 142.251.157.119" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "172.217.30.100" } ]
+                     },{
+                       "target": "www.google.com",
+                       "type": "AAAA",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:816::2004" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80e::2004" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:847::2004" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:847::2004" } ]
+                     },{
+                       "target": "www.google.com",
+                       "type": "TXT",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "" } ]
+                     },{
+                       "target": "mail.google.com",
+                       "type": "A",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.78.165" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.78.165" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.101" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.219.197" } ]
+                     },{
+                       "target": "mail.google.com",
+                       "type": "AAAA",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80e::2005" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80e::2005" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:816::2005" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:800::2005" } ]
+                     },{
+                       "target": "mail.google.com",
+                       "type": "TXT",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY" } ]
+                     },{
+                       "target": "wikipedia.org",
+                       "type": "A",
+                       "results": [ { "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "195.200.68.224" },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "195.200.68.224" },{ "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "195.200.68.224" },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "195.200.68.224" } ]
+                     },{
+                       "target": "wikipedia.org",
+                       "type": "SOA",
+                       "results": [ { "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120109 43200 7200 1209600 3600" },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120109 43200 7200 1209600 3600" },{ "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120109 43200 7200 1209600 3600" },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120109 43200 7200 1209600 3600" } ]
+                     },{
+                       "target": "pt.wikipedia.org",
+                       "type": "A",
+                       "results": [ { "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." },{ "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." } ]
+                     },{
+                       "target": "pt.wikipedia.org",
+                       "type": "SOA",
+                       "results": [ { "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" },{ "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" } ]
+                     },{
+                       "target": "en.wikipedia.org",
+                       "type": "A",
+                       "results": [ { "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." },{ "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "195.200.68.224 dyna.wikimedia.org." } ]
+                     },{
+                       "target": "en.wikipedia.org",
+                       "type": "SOA",
+                       "results": [ { "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" },{ "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "dyna.wikimedia.org. ns0.wikimedia.org. hostmaster.wikimedia.org. 2025120115 43200 7200 1209600 600" } ]
+                     },{
+                       "target": "cisco.com",
+                       "type": "MX",
+                       "results": [ { "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "10 alln-mx-01.cisco.com. 20 rcdn-mx-01.cisco.com. 30 aer-mx-01.cisco.com." },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "10 alln-mx-01.cisco.com. 20 rcdn-mx-01.cisco.com. 30 aer-mx-01.cisco.com." } ]
+                     },{
+                       "target": "cisco.com",
+                       "type": "TXT",
+                       "results": [ { "server": "208.67.222.222", "group": "OPENDNS", "status": "NOERROR", "answer": "926723159-3188410 airtable-verification=18787f2dc47697bb547e871772aba0be airtable-verification=4114c0f710cfc430d841e55ed7ed920d airtable-verification=606530d538d1833c5fc724117ca5409a airtable-verification=8bf444fd0fad14a3aae2681cb7d68641 apple-domain-verification=qOInipPgso3W8cmK asv=ac90e11808e87cfbf8768e69819b1aca bfefecbd-d5df-4b3a-b0dd-54bf5c72e698 docusign=5e18de8e-36d0-4a8e-8e88-b7803423fa2f docusign=95052c5f-a421-4594-9227-02ad2d86dfbe fastly-domain-delegation-z9slsbDdX0-368365-2021-05-14 flexera-domain-verification-nsbtshbvpbsmbnzh jamf-site-verification=0mwRCzzRvk_HiKjmiqR3Lw MS=ms35724259 OSSRH-97236 pendo-domain-verification=Ad800_b0VJCaE7Ued9Ug3pIQ_V4 QuoVadis=94d4ae74-ecd5-4a33-975e-a0d7f546c801 SFMC-o7HX74BQ79k7glpt_qjlF2vmZO9DpqLtYxKLwg87 v=spf1 redirect=spfa._spf.cisco.com ZOOM_verify_Gf6CaEdJ5aKGvjcUrZRkiA" },{ "server": "208.67.220.220", "group": "OPENDNS", "status": "NOERROR", "answer": "926723159-3188410 airtable-verification=18787f2dc47697bb547e871772aba0be airtable-verification=4114c0f710cfc430d841e55ed7ed920d airtable-verification=606530d538d1833c5fc724117ca5409a airtable-verification=8bf444fd0fad14a3aae2681cb7d68641 apple-domain-verification=qOInipPgso3W8cmK asv=ac90e11808e87cfbf8768e69819b1aca bfefecbd-d5df-4b3a-b0dd-54bf5c72e698 docusign=5e18de8e-36d0-4a8e-8e88-b7803423fa2f docusign=95052c5f-a421-4594-9227-02ad2d86dfbe fastly-domain-delegation-z9slsbDdX0-368365-2021-05-14 flexera-domain-verification-nsbtshbvpbsmbnzh jamf-site-verification=0mwRCzzRvk_HiKjmiqR3Lw MS=ms35724259 OSSRH-97236 pendo-domain-verification=Ad800_b0VJCaE7Ued9Ug3pIQ_V4 QuoVadis=94d4ae74-ecd5-4a33-975e-a0d7f546c801 SFMC-o7HX74BQ79k7glpt_qjlF2vmZO9DpqLtYxKLwg87 v=spf1 redirect=spfa._spf.cisco.com ZOOM_verify_Gf6CaEdJ5aKGvjcUrZRkiA" } ]
+                     },{
+                       "target": "ietf.org",
+                       "type": "NS",
+                       "results": [ { "server": "198.41.0.4", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "199.9.14.201", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "192.33.4.12", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "199.7.91.13", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "192.203.230.10", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "192.5.5.241", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "192.112.36.4", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "198.97.190.53", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "192.36.148.17", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "192.58.128.30", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "193.0.14.129", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "199.7.83.42", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" },{ "server": "202.12.27.33", "group": "ROOT_SERVERS", "status": "NOERROR", "answer": "" } ]
+                     },{
+                       "target": "example.com",
+                       "type": "A",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "104.18.26.120 104.18.27.120" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "104.18.26.120 104.18.27.120" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "104.18.26.120 104.18.27.120" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "104.18.26.120 104.18.27.120" },{ "server": "9.9.9.9", "group": "QUAD9", "status": "NOERROR", "answer": "104.18.26.120 104.18.27.120" },{ "server": "149.112.112.112", "group": "QUAD9", "status": "NOERROR", "answer": "104.18.26.120 104.18.27.120" } ]
+                     },{
+                       "target": "fail-test.local",
+                       "type": "A",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NXDOMAIN", "answer": "STATUS:NXDOMAIN" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NXDOMAIN", "answer": "STATUS:NXDOMAIN" } ]
+                     },{
+                       "target": "#EstedevegerarNXDOMAINparatestaroalertaamarelo.fail-test.local",
+                       "type": "A",
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NXDOMAIN", "answer": "STATUS:NXDOMAIN" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NXDOMAIN", "answer": "STATUS:NXDOMAIN" } ]
+                     } ]
+  }
+}
