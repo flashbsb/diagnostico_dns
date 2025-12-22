@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.7.0
-# "BI-Ready Reports & Modular Core"
+# Versão: 11.10.0
+# "HTML Stability & Log Fixes"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.7.0"
+SCRIPT_VERSION="11.10.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -1098,52 +1098,67 @@ cat > "$TEMP_HEADER" << EOF
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 40px;
+            padding: 30px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
         
         h1 {
             font-size: 1.8rem;
-            font-weight: 700;
+            font-weight: 800;
             margin: 0;
-            color: var(--text-primary);
+            color: #fff;
             display: flex;
             align-items: center;
             gap: 12px;
+            letter-spacing: -0.025em;
         }
         h1 small {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-            background: var(--bg-card);
-            padding: 4px 8px;
-            border-radius: 6px;
+            font-size: 0.8rem;
+            color: var(--accent-primary);
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         h2 {
             font-size: 1.25rem;
-            margin-top: 40px;
-            margin-bottom: 15px;
+            margin-top: 50px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            color: var(--text-primary);
-            border-left: 4px solid var(--accent-primary);
-            padding-left: 10px;
+            gap: 12px;
+            color: #fff;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        h2::before {
+            content: '';
+            display: block;
+            width: 8px;
+            height: 24px;
+            background: var(--accent-primary);
+            border-radius: 4px;
         }
 
         /* --- Dashboard Cards --- */
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            gap: 20px;
             margin-bottom: 30px;
         }
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 24px;
             display: flex;
             flex-direction: column;
@@ -1152,7 +1167,7 @@ cat > "$TEMP_HEADER" << EOF
             justify-content: center;
             position: relative;
             overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             min-height: 120px;
         }
         .card::before {
@@ -1163,100 +1178,69 @@ cat > "$TEMP_HEADER" << EOF
             width: 100%;
             height: 4px;
             background: var(--card-accent, #64748b);
+            opacity: 0.8;
         }
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            border-color: var(--bg-card-hover);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border-color: var(--card-accent, var(--bg-card-hover));
         }
         .card-num {
             font-size: 2.5rem;
-            font-weight: 700;
+            font-weight: 800;
             line-height: 1;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
         }
         .card-label {
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.1em;
             color: var(--text-secondary);
             font-weight: 600;
         }
         
-        .st-total .card-num { color: var(--accent-primary); }
-        .st-ok .card-num { color: var(--accent-success); }
-        .st-warn .card-num { color: var(--accent-warning); }
-        .st-fail .card-num { color: var(--accent-danger); }
-        .st-div .card-num { color: var(--accent-divergent); }
-
-        /* --- Nested Details Structure --- */
+        /* --- Details & Summary --- */
         details {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin-bottom: 10px;
+            border-radius: 12px;
+            margin-bottom: 16px;
             overflow: hidden;
             transition: all 0.2s ease;
         }
+        details[open] { border-color: var(--text-secondary); }
         
-        /* Domain Level (Level 1) */
-        details.domain-level {
-            border-left: 4px solid var(--accent-primary);
-        }
-        details.domain-level[open] {
-            margin-bottom: 20px;
-        }
-        details.domain-level > summary {
+        details > summary {
             background: var(--bg-card);
-            padding: 15px 20px;
-            font-size: 1.1rem;
+            padding: 18px 24px;
+            font-size: 1rem;
             font-weight: 600;
             color: var(--text-primary);
-        }
-        details.domain-level > summary:hover {
-            background: var(--bg-card-hover);
-        }
-
-        /* Group Level (Level 2) */
-        details.group-level {
-            margin: 10px 20px;
-            background: rgba(0,0,0,0.2);
-            border: 1px solid var(--border-color);
-        }
-        details.group-level > summary {
-            padding: 10px 15px;
-            font-size: 0.95rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-        details.group-level > summary:hover {
-            color: var(--text-primary);
-            background: rgba(255,255,255,0.03);
-        }
-
-        summary {
             cursor: pointer;
             list-style: none;
             display: flex;
             align-items: center;
             justify-content: space-between;
             user-select: none;
+            transition: background 0.2s;
         }
+        details > summary:hover { background: var(--bg-card-hover); }
         summary::-webkit-details-marker { display: none; }
         summary::after {
-            content: '+';
-            font-size: 1.2rem;
-            color: var(--text-secondary);
+            content: '+'; 
+            font-size: 1.4rem; 
+            color: var(--text-secondary); 
             font-weight: 300;
-            margin-left: 10px;
+            transition: transform 0.2s; 
         }
-        details[open] > summary::after { content: '−'; }
+        details[open] > summary::after { transform: rotate(45deg); }
 
         /* --- Tables --- */
         .table-responsive {
             width: 100%;
             overflow-x: auto;
-            border-top: 1px solid var(--border-color);
+            background: #162032; /* Slightly darker than card */
         }
         table {
             width: 100%;
@@ -1264,146 +1248,81 @@ cat > "$TEMP_HEADER" << EOF
             font-size: 0.9rem;
         }
         th, td {
-            padding: 12px 15px;
+            padding: 16px 20px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
         }
         th {
-            background: rgba(0,0,0,0.3);
+            background: rgba(15, 23, 42, 0.5);
             color: var(--text-secondary);
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.05em;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            white-space: nowrap;
         }
         td {
-            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: #e2e8f0;
         }
-        tr:hover td {
-            background: rgba(255,255,255,0.02);
-        }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) { background: rgba(255,255,255,0.015); } /* Zebra Striping */
+        tr:hover td { background: rgba(255,255,255,0.03); }
         
         /* --- Badges & Status --- */
         .badge {
             display: inline-flex;
             align-items: center;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
             font-family: system-ui, -apple-system, sans-serif;
             text-transform: uppercase;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
         }
-        .badge-type { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
-        .badge.consistent { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
         
-        .badge-mini {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            text-align: center;
-            line-height: 16px;
-            border-radius: 4px;
-            font-size: 9px;
-            font-weight: bold;
-            margin-right: 3px;
-            color: #0f172a;
-            vertical-align: middle;
-            cursor: help;
-        }
-        .badge-mini.success { background-color: var(--accent-success); }
-        .badge-mini.fail { background-color: var(--accent-danger); color: #fff; }
-        .badge-mini.neutral { background-color: var(--text-secondary); opacity: 0.5; color: #000; }
-                
-        .status-cell { font-weight: 600; display: flex; align-items: center; gap: 8px; text-decoration: none; transition: opacity 0.2s; }
-        .status-cell:hover { opacity: 0.8; }
+        .status-cell { font-weight: 600; display: flex; align-items: center; gap: 8px; text-decoration: none; }
         .st-ok { color: var(--accent-success); }
         .st-warn { color: var(--accent-warning); }
         .st-fail { color: var(--accent-danger); }
         .st-div { color: var(--accent-divergent); }
         
-        /* Aliases for script usage */
-        .status-ok { color: var(--accent-success) !important; }
-        .status-warn { color: var(--accent-warning) !important; } /* Warning alias */
-        .status-warning { color: var(--accent-warning) !important; }
-        .status-fail { color: var(--accent-danger) !important; }
-        .status-divergent { color: var(--accent-divergent) !important; }
-        .status-neutral { color: var(--text-secondary) !important; }
-        .time-val { font-size: 0.8em; color: var(--text-secondary); font-weight: 400; opacity: 0.7; }
+        .status-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .status-warning, .status-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.2); }
+        .status-fail { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .status-divergent { background: rgba(217, 70, 239, 0.15); color: #e879f9; border: 1px solid rgba(217, 70, 239, 0.2); }
+        .status-neutral, .status-skipped { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
 
         /* --- Modal & Logs --- */
         .modal {
             display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
+            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
         }
         .modal-content {
-            background-color: var(--bg-card); margin: 5vh auto; padding: 0;
-            border: 1px solid var(--border-color); width: 90%; max-width: 1200px;
-            border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            display: flex; flex-direction: column; max-height: 90vh;
+            background-color: #0f172a; margin: 4vh auto; padding: 0;
+            border: 1px solid var(--border-color); width: 90%; max-width: 1000px;
+            border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; max-height: 92vh;
+            overflow: hidden;
         }
         .modal-header {
-            padding: 20px; border-bottom: 1px solid var(--border-color);
+            padding: 20px 30px; border-bottom: 1px solid var(--border-color); background: #1e293b;
             display: flex; justify-content: space-between; align-items: center;
         }
         .modal-body {
-            padding: 0; overflow-y: auto; flex: 1;
-            background: #000;
+            padding: 0; overflow-y: auto; flex: 1; background: #0b1120;
         }
         pre {
-            margin: 0; padding: 20px; color: #e5e5e5; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; line-height: 1.6;
+            margin: 0; padding: 25px; color: #cbd5e1; 
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
+            font-size: 0.85rem; line-height: 1.7;
             white-space: pre-wrap; word-break: break-all;
         }
-
-        /* --- New Modal Styles for Rich Info --- */
+        
+        /* Modal Info Styles */
         .modal-info-content {
-            padding: 30px;
-            color: var(--text-primary);
-            font-family: system-ui, -apple-system, sans-serif;
-            line-height: 1.6;
-            font-size: 1rem;
-            background: linear-gradient(to bottom right, var(--bg-card), rgba(0,0,0,0.5));
-        }
-        .modal-info-content strong { color: #fff; font-weight: 600; }
-        .modal-info-content b { color: #fff; font-weight: 600; }
-        
-        .modal-log-content {
-            padding: 0;
-            background: #000;
-            font-family: monospace;
-        }
-        
-        .info-header {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .info-icon {
-            font-size: 2rem;
-            background: rgba(255,255,255,0.05);
-            width: 50px; height: 50px;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 12px;
-        }
-        .info-title {
-            font-size: 1.4rem;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: #fff;
-        }
-        .info-body p { margin-bottom: 15px; color: #cbd5e1; }
-        .info-meta {
-            margin-top: 25px;
-            padding: 15px;
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            color: #93c5fd;
         }
         
         /* --- Controls & Utilities --- */
@@ -1513,77 +1432,107 @@ EOF
 }
 
 generate_executive_summary() {
-    # Calculate Risk Score
-    local sec_risk_count=$((SEC_REVEALED + SEC_AXFR_RISK + SEC_REC_RISK + DNSSEC_FAIL))
-    
+    # --- STATISTICS ---
     local domain_count=0
     [[ -f "$FILE_DOMAINS" ]] && domain_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
-    local group_count=${#ACTIVE_GROUPS[@]}
-    declare -A _uniq_srv_html
-    for g in "${!ACTIVE_GROUPS[@]}"; do
-        for ip in ${DNS_GROUPS[$g]}; do _uniq_srv_html[$ip]=1; done
-    done
-    local server_count=${#_uniq_srv_html[@]}
-    local avg_lat="N/A"
-    local avg_lat_suffix=""
+    
+    # Calculate unique servers
+    local server_count=0
+    [[ -n "${!UNIQUE_SERVERS[@]}" ]] && server_count=${#UNIQUE_SERVERS[@]}
+    
+    # --- GRADING LOGIC ---
+    local grade="A"
+    local grade_color="var(--accent-success)"
+    local grade_text="EXCELENTE"
+    
+    # Criteria
+    local ratio_fail=0
+    if [[ $TOTAL_TESTS -gt 0 ]]; then
+        # Calculate failure percentage (int)
+        ratio_fail=$(( (FAILED_TESTS * 100) / TOTAL_TESTS ))
+    fi
+    local security_issues=$((SEC_REVEALED + SEC_AXFR_RISK + SEC_REC_RISK + DNSSEC_FAIL))
+    local stability_issues=$((DIVERGENT_TESTS + AVG_JITTER_HIGH_COUNT)) # Conceptual jitter high count, using Divergence for now
+    
+    if [[ $ratio_fail -ge 10 ]]; then
+        grade="C"; grade_color="var(--accent-danger)"; grade_text="CRÍTICO"
+    elif [[ $ratio_fail -gt 0 || $security_issues -gt 0 ]]; then
+        grade="B"; grade_color="var(--accent-warning)"; grade_text="ATENÇÃO"
+    fi
+    
+    if [[ $SUCCESS_TESTS -eq 0 && $TOTAL_TESTS -gt 0 ]]; then grade="F"; grade_color="#ef4444"; grade_text="FALHA TOTAL"; fi
+    if [[ $TOTAL_TESTS -eq 0 ]]; then grade="-"; grade_color="#64748b"; grade_text="SEM DADOS"; fi
+
+    # --- LATENCY ---
+    local avg_lat="-"
+    local suffix_lat=""
     if [[ $TOTAL_LATENCY_COUNT -gt 0 ]]; then
-        local calc_val
-        calc_val=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
-        if [[ "$calc_val" =~ ^[0-9]+$ ]]; then
-            avg_lat="$calc_val"
-            avg_lat_suffix="<small style=\"font-size:0.4em;\">ms</small>"
-        fi
+        local val=$(awk "BEGIN {printf \"%.0f\", $TOTAL_LATENCY_SUM / $TOTAL_LATENCY_COUNT}")
+        [[ "$val" =~ ^[0-9]+$ ]] && { avg_lat="$val"; suffix_lat="<small>ms</small>"; }
     fi
 
 cat > "$TEMP_STATS" << EOF
-        <h2>📊 Resumo Executivo</h2>
-        <!-- General Inventory Row -->
-        <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('DOMÍNIOS', 'Total de domínios únicos carregados do arquivo de entrada.<br><br><b>Fonte:</b> $FILE_DOMAINS')">
-                <span class="card-num">${domain_count}</span>
-                <span class="card-label">Domínios</span>
-            </div>
-             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('GRUPOS DNS', 'Total de grupos de servidores configurados para teste.<br><br><b>Fonte:</b> $FILE_GROUPS')">
-                <span class="card-num">${group_count}</span>
-                <span class="card-label">Grupos DNS</span>
-            </div>
-             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('SERVIDORES', 'Total de endereços IP únicos testados nesta execução.<br>Inclui todos os servidores listados nos grupos ativos.')">
-                <span class="card-num">${server_count}</span>
-                <span class="card-label">Servidores</span>
-            </div>
-            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('LATÊNCIA MÉDIA', 'Média de tempo de resposta (RTT) de todos os servidores.<br><br><b>Cálculo:</b> Soma de todos os RTTs / Total de respostas / Total de servidores.<br>Valores altos podem indicar congestionamento de rede ou servidores distantes.')">
-                <span class="card-num">${avg_lat}${avg_lat_suffix}</span>
-                <span class="card-label">Latência Média</span>
-            </div>
-            
-            <!-- Risk Card -->
-            <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RISCO DE SEGURANÇA', 'Contagem acumulada de falhas de segurança detectadas.<br><br><b>Inclui:</b><br>- Versão Revelada<br>- AXFR Permitido<br>- Recursão Aberta<br>- DNSSEC Falho<br><br>Meta: <b>0</b>')">
-                <span class="card-num" style="color: ${sec_risk_count:+"var(--accent-danger)"};">${sec_risk_count}</span>
-                <span class="card-label">Risco de Segurança</span>
-            </div>
-            
-            <!-- Divergence Card -->
-            <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('SERVIDORES INCONSISTENTES', 'Número de testes onde houve divergência de resposta (IP, Ordem ou TTL) entre tentativas consecutivas no mesmo servidor.<br><br>Indica instabilidade ou má configuração de balanceamento.')">
-                <span class="card-num" style="color: ${DIVERGENT_TESTS:+"var(--accent-divergent)"};">${DIVERGENT_TESTS}</span>
-                <span class="card-label">Inconsistências</span>
-            </div>
+        <div style="margin-top:20px;"></div>
+        
+        <!-- EXECUTIVE HERO SECTION -->
+        <div style="display:grid; grid-template-columns: 250px 1fr; gap:20px; margin-bottom:30px;">
+             <!-- GRADE CARD -->
+             <div class="card" style="--card-accent: ${grade_color}; background: linear-gradient(145deg, var(--bg-card) 0%, rgba(255,255,255,0.03) 100%);">
+                 <div style="font-size:0.9rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px;">Diagnóstico Geral</div>
+                 <div style="font-size:5rem; font-weight:800; line-height:1; color:${grade_color}; text-shadow: 0 4px 20px rgba(0,0,0,0.3);">${grade}</div>
+                 <div style="font-size:1.2rem; font-weight:600; color:#fff; margin-top:5px; padding: 4px 12px; border-radius:12px; background:rgba(255,255,255,0.1);">${grade_text}</div>
+             </div>
+             
+             <!-- KPI GRID -->
+             <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px;">
+                 <div class="card" style="--card-accent: #3b82f6;">
+                     <span class="card-num">${server_count}</span>
+                     <span class="card-label">Servidores Ativos</span>
+                     <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:5px;">Infraestrutura Identificada</span>
+                 </div>
+                 <div class="card" style="--card-accent: ${avg_lat_suffix:+"#eab308"};">
+                     <span class="card-num">${avg_lat}${suffix_lat}</span>
+                     <span class="card-label">Latência Média</span>
+                     <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:5px;">Performance Global</span>
+                 </div>
+                  <div class="card" style="--card-accent: ${security_issues:+"var(--accent-danger)"};">
+                     <div style="display:flex; align-items:baseline; gap:5px;">
+                         <span class="card-num" style="color:${security_issues:+"var(--accent-danger)"};">${security_issues}</span>
+                     </div>
+                     <span class="card-label">Riscos de Segurança</span>
+                     <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:5px;">Versão, AXFR, Recursão</span>
+                 </div>
+                 
+                 <div class="card" style="--card-accent: #10b981;">
+                     <span class="card-num">${domain_count}</span>
+                     <span class="card-label">Domínios</span>
+                 </div>
+                  <div class="card" style="--card-accent: #8b5cf6;">
+                     <span class="card-num">${CNT_TESTS_ZONE:-0}</span>
+                     <span class="card-label">Zonas Testadas</span>
+                 </div>
+                  <div class="card" style="--card-accent: #ec4899;">
+                     <span class="card-num">${CNT_TESTS_REC:-0}</span>
+                     <span class="card-label">Registros Testados</span>
+                 </div>
+             </div>
         </div>
 EOF
-    
+
     if [[ "$ENABLE_CHARTS" == "true" ]]; then
          cat >> "$TEMP_STATS" << EOF
-        <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; margin-bottom: 40px;">
              <!-- Overview Chart Container -->
-             <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-primary); align-items: center; justify-content: center;">
-                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Visão Geral de Execução</h3>
-                 <div style="position: relative; height: 300px; width: 100%;">
+             <div class="card" style="min-height: 350px; --card-accent: var(--accent-primary); padding:20px;">
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; border:none; padding:0;">Visão Geral de Execução</h3>
+                 <div style="position: relative; height: 300px; width: 100%; margin-top:15px;">
                     <canvas id="chartOverview"></canvas>
                  </div>
              </div>
              <!-- Latency Chart Container -->
-             <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-warning); align-items: center; justify-content: center;">
-                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Top Latência (Médias)</h3>
-                 <div style="position: relative; height: 300px; width: 100%;">
+             <div class="card" style="min-height: 350px; --card-accent: var(--accent-warning); padding:20px;">
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; border:none; padding:0;">Top Latência (Médias)</h3>
+                 <div style="position: relative; height: 300px; width: 100%; margin-top:15px;">
                     <canvas id="chartLatency"></canvas>
                  </div>
              </div>
@@ -1953,6 +1902,28 @@ EOF
 
 
 generate_charts_script() {
+    # Prepare Arrays from Memory
+    local lat_js=""
+    local count_lat=0
+    # Create temp file for sorting latency
+    local tmp_lat_sort="$LOG_OUTPUT_DIR/lat_sort.tmp"
+    > "$tmp_lat_sort"
+    
+    for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+        local val=${STATS_SERVER_PING_AVG[$ip]}
+        # Handle decimal comma/dot
+        val=$(echo "$val" | tr ',' '.')
+        if [[ "$val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+             echo "$ip $val" >> "$tmp_lat_sort"
+        fi
+    done
+    
+    # Sort by latency desc (Top 10)
+    sort -k2 -nr "$tmp_lat_sort" | head -n 12 | while read -r srv lat; do
+         lat_js+="latencyLabels.push('$srv'); latencyData.push($lat);"
+    done
+    rm -f "$tmp_lat_sort"
+
     cat << EOF
     <script>
         // Chart Configuration
@@ -1962,127 +1933,42 @@ generate_charts_script() {
 
         const ctxOverview = document.getElementById('chartOverview');
         const ctxLatency = document.getElementById('chartLatency');
-        const ctxSecurity = document.getElementById('chartSecurity');
-        const ctxServices = document.getElementById('chartServices');
 
-        let overviewChart;
-
-        function initOverviewChart(type) {
-            if (overviewChart) overviewChart.destroy();
-            
-            if (ctxOverview) {
-                overviewChart = new Chart(ctxOverview, {
-                    type: type,
-                    data: {
-                        labels: ['Sucesso ($SUCCESS_TESTS)', 'Alertas ($WARNING_TESTS)', 'Falhas ($FAILED_TESTS)', 'Divergências ($DIVERGENT_TESTS)'],
-                        datasets: [{
-                            data: [$SUCCESS_TESTS, $WARNING_TESTS, $FAILED_TESTS, $DIVERGENT_TESTS],
-                            backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#d946ef'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { 
-                                position: 'bottom',
-                                labels: { color: '#cbd5e1', padding: 20, font: { size: 11 } }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        let label = context.label || '';
-                                        let value = context.parsed;
-                                        let total = context.chart._metasets[context.datasetIndex].total;
-                                        let percentage = ((value / total) * 100).toFixed(1) + '%';
-                                        return label.split(' ')[0] + ': ' + value + ' (' + percentage + ')';
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        }
-
-        // Initialize with default type
-        initOverviewChart('doughnut');
-
-        // Toggle Function
-        window.updateChartType = function(id, type) {
-            if (id === 'chartOverview') {
-                initOverviewChart(type);
-            }
-        };
-
-        // Latency Chart
-        const latencyLabels = [];
-        const latencyData = [];
-
-EOF
-
-    # Fix Latency Extraction: Strip HTML tags and handle decimals
-    if [[ -f "$TEMP_PING" ]]; then
-         sed "s/<\/td><td[^>]*>/|/g" "$TEMP_PING" | awk -F'|' '/<tr><td>/ { 
-             server=$2; gsub(/<[^>]*>/, "", server); # Strip HTML tags
-             val=$5; sub(/ms.*/, "", val); sub(/<.*/, "", val);
-             # Clean any non-numeric except dot
-             gsub(/[^0-9.]/, "", val);
-             if (val ~ /^[0-9]+(\.[0-9]+)?$/) print server " " val 
-         }' | sort -k2 -nr | head -n 12 | while read -r srv lat; do
-             echo "        latencyLabels.push('$srv');"
-             echo "        latencyData.push($lat);"
-         done
-    fi
-
-        # Traceroute Chart Data Extraction
-        echo "        const traceLabels = [];"
-        echo "        const traceData = [];"
-    if [[ -f "$TEMP_TRACE" ]]; then
-         sed "s/<\/td><td[^>]*>/|/g" "$TEMP_TRACE" | awk -F'|' '/<tr><td>/ {
-             server=$2; gsub(/<[^>]*>/, "", server);
-             hops=$3; gsub(/<[^>]*>/, "", hops); gsub(/[^0-9]/, "", hops);
-             if (hops ~ /^[0-9]+$/) print server " " hops
-         }' | head -n 20 | while read -r srv hops; do
-             echo "        traceLabels.push('$srv');"
-             echo "        traceData.push($hops);"
-         done
-    fi
-
-cat << EOF
-        const colorPalette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
-
-        if (ctxLatency && latencyData.length > 0) {
-            new Chart(ctxLatency, {
-                type: 'bar',
+        // 1. OVERVIEW CHART (Global Counters)
+        if (ctxOverview) {
+            new Chart(ctxOverview, {
+                type: 'doughnut',
                 data: {
-                    labels: latencyLabels,
+                    labels: ['Sucesso ($SUCCESS_TESTS)', 'Falhas ($FAILED_TESTS)', 'Divergências ($DIVERGENT_TESTS)'],
                     datasets: [{
-                        label: 'Latência (ms)',
-                        data: latencyData,
-                        backgroundColor: colorPalette,
-                        borderRadius: 4,
-                        barThickness: 15
+                        data: [$SUCCESS_TESTS, $FAILED_TESTS, $DIVERGENT_TESTS],
+                        backgroundColor: ['#10b981', '#ef4444', '#d946ef'],
+                        borderWidth: 0,
+                        hoverOffset: 4
                     }]
                 },
                 options: {
-                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                         x: { beginAtZero: true, grid: { color: '#334155', drawBorder: false } },
-                         y: { grid: { display: false } }
-                    },
-                     plugins: { legend: { display: false } }
+                    cutout: '65%',
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#cbd5e1', font: { size: 12 } } },
+                        title: { display: false }
+                    }
                 }
             });
         }
 
-        // Detailed Latency Chart for ICMP Section
-        const ctxLatencyDetail = document.getElementById('chartLatencyDetail');
-        if (ctxLatencyDetail && latencyData.length > 0) {
-            new Chart(ctxLatencyDetail, {
+        // 2. LATENCY CHART (Top 10 Slowest or All)
+        const latencyLabels = [];
+        const latencyData = [];
+        
+        $lat_js
+
+        const colorPalette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+        if (ctxLatency && latencyData.length > 0) {
+            new Chart(ctxLatency, {
                 type: 'bar',
                 data: {
                     labels: latencyLabels,
@@ -2394,6 +2280,11 @@ EOF
     generate_help_html
     cat "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" >> "$target_file"
 
+    # Append Hidden Details (Modals)
+    if [[ -f "$TEMP_DETAILS" ]]; then
+        cat "$TEMP_DETAILS" >> "$target_file"
+    fi
+
     cat >> "$target_file" << EOF
 </body>
 </html>
@@ -2508,6 +2399,16 @@ load_dns_groups() {
 
 
 
+
+log_tech_details() {
+    local id=$1
+    local title=$2
+    local content=$3
+    # Sanitize content for HTML
+    local safe_out=$(echo "$content" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    echo "<div id=\"${id}_content\" style=\"display:none\"><pre>$safe_out</pre></div>" >> "$TEMP_DETAILS"
+    echo "<div id=\"${id}_title\" style=\"display:none\">${title}</div>" >> "$TEMP_DETAILS"
+}
 
 check_tcp_dns() {
     local host=$1
@@ -3561,14 +3462,20 @@ EOF
 
         # 1.2 Attributes (Version, Recursion)
         if [[ "$CHECK_BIND_VERSION" == "true" ]]; then 
-             local out_ver=$(dig +short @$ip version.bind chaos txt +time=$TIMEOUT)
+             local cmd_ver="dig @$ip version.bind chaos txt +time=$TIMEOUT"
+             local out_ver_full=$($cmd_ver 2>&1)
+             # Extract short version for logic
+             local out_ver=$(echo "$out_ver_full" | grep "TXT" | grep "version.bind" | awk -F'"' '{print $2}')
+             
+             log_tech_details "ver_$ip" "Bind Version Check: $ip" "$out_ver_full"
+             
              if [[ -z "$out_ver" || "$out_ver" == "" ]]; then 
-                 ver_res_html="<span class='badge status-ok'>HIDDEN</span>"
+                 ver_res_html="<span class='badge status-ok' style='cursor:pointer' onclick=\"showLog('ver_$ip')\">HIDDEN</span>"
                  ver_res_term="${GREEN}HIDDEN${NC}"
                  STATS_SERVER_VERSION[$ip]="HIDDEN"
                  SEC_HIDDEN=$((SEC_HIDDEN+1))
              else 
-                 ver_res_html="<span class='badge status-fail' title='$out_ver'>REVEA.</span>"
+                 ver_res_html="<span class='badge status-fail' style='cursor:pointer' onclick=\"showLog('ver_$ip')\" title='$out_ver'>REVEA.</span>"
                  ver_res_term="${RED}REVEALED${NC}"
                  STATS_SERVER_VERSION[$ip]="REVEALED"
                  SEC_REVEALED=$((SEC_REVEALED+1))
@@ -3579,19 +3486,22 @@ EOF
         fi
         
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
-             local out_rec=$(dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1)
+             local cmd_rec="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
+             local out_rec=$($cmd_rec 2>&1)
+             log_tech_details "rec_$ip" "Recursion Check: $ip" "$out_rec"
+
              if echo "$out_rec" | grep -q "status: REFUSED" || echo "$out_rec" | grep -q "recursion requested but not available"; then
-                 rec_res_html="<span class='badge status-ok'>CLOSED</span>"
+                 rec_res_html="<span class='badge status-ok' style='cursor:pointer' onclick=\"showLog('rec_$ip')\">CLOSED</span>"
                  rec_res_term="${GREEN}CLOSED${NC}"
                  STATS_SERVER_RECURSION[$ip]="CLOSED"
                  SEC_REC_OK=$((SEC_REC_OK+1))
              elif echo "$out_rec" | grep -q "status: NOERROR"; then
-                 rec_res_html="<span class='badge status-fail'>OPEN</span>"
+                 rec_res_html="<span class='badge status-fail' style='cursor:pointer' onclick=\"showLog('rec_$ip')\">OPEN</span>"
                  rec_res_term="${RED}OPEN${NC}"
                  STATS_SERVER_RECURSION[$ip]="OPEN"
                  SEC_REC_RISK=$((SEC_REC_RISK+1))
              else
-                 rec_res_html="<span class='badge status-warn'>UNK</span>"
+                 rec_res_html="<span class='badge status-warn' style='cursor:pointer' onclick=\"showLog('rec_$ip')\">UNK</span>"
                  rec_res_term="${YELLOW}UNK${NC}"
                  STATS_SERVER_RECURSION[$ip]="UNKNOWN"
              fi

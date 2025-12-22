@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório DNS v11.7.0 - 20251221_223009</title>
+    <title>Relatório DNS v11.10.0 - 20251221_233138</title>
     <style>
         :root {
             --bg-body: #0f172a;
@@ -39,52 +39,67 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 40px;
+            padding: 30px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
         
         h1 {
             font-size: 1.8rem;
-            font-weight: 700;
+            font-weight: 800;
             margin: 0;
-            color: var(--text-primary);
+            color: #fff;
             display: flex;
             align-items: center;
             gap: 12px;
+            letter-spacing: -0.025em;
         }
         h1 small {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-            background: var(--bg-card);
-            padding: 4px 8px;
-            border-radius: 6px;
+            font-size: 0.8rem;
+            color: var(--accent-primary);
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         h2 {
             font-size: 1.25rem;
-            margin-top: 40px;
-            margin-bottom: 15px;
+            margin-top: 50px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            color: var(--text-primary);
-            border-left: 4px solid var(--accent-primary);
-            padding-left: 10px;
+            gap: 12px;
+            color: #fff;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        h2::before {
+            content: '';
+            display: block;
+            width: 8px;
+            height: 24px;
+            background: var(--accent-primary);
+            border-radius: 4px;
         }
 
         /* --- Dashboard Cards --- */
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            gap: 20px;
             margin-bottom: 30px;
         }
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 24px;
             display: flex;
             flex-direction: column;
@@ -93,7 +108,7 @@
             justify-content: center;
             position: relative;
             overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             min-height: 120px;
         }
         .card::before {
@@ -104,100 +119,69 @@
             width: 100%;
             height: 4px;
             background: var(--card-accent, #64748b);
+            opacity: 0.8;
         }
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            border-color: var(--bg-card-hover);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border-color: var(--card-accent, var(--bg-card-hover));
         }
         .card-num {
             font-size: 2.5rem;
-            font-weight: 700;
+            font-weight: 800;
             line-height: 1;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
         }
         .card-label {
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.1em;
             color: var(--text-secondary);
             font-weight: 600;
         }
         
-        .st-total .card-num { color: var(--accent-primary); }
-        .st-ok .card-num { color: var(--accent-success); }
-        .st-warn .card-num { color: var(--accent-warning); }
-        .st-fail .card-num { color: var(--accent-danger); }
-        .st-div .card-num { color: var(--accent-divergent); }
-
-        /* --- Nested Details Structure --- */
+        /* --- Details & Summary --- */
         details {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin-bottom: 10px;
+            border-radius: 12px;
+            margin-bottom: 16px;
             overflow: hidden;
             transition: all 0.2s ease;
         }
+        details[open] { border-color: var(--text-secondary); }
         
-        /* Domain Level (Level 1) */
-        details.domain-level {
-            border-left: 4px solid var(--accent-primary);
-        }
-        details.domain-level[open] {
-            margin-bottom: 20px;
-        }
-        details.domain-level > summary {
+        details > summary {
             background: var(--bg-card);
-            padding: 15px 20px;
-            font-size: 1.1rem;
+            padding: 18px 24px;
+            font-size: 1rem;
             font-weight: 600;
             color: var(--text-primary);
-        }
-        details.domain-level > summary:hover {
-            background: var(--bg-card-hover);
-        }
-
-        /* Group Level (Level 2) */
-        details.group-level {
-            margin: 10px 20px;
-            background: rgba(0,0,0,0.2);
-            border: 1px solid var(--border-color);
-        }
-        details.group-level > summary {
-            padding: 10px 15px;
-            font-size: 0.95rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-        details.group-level > summary:hover {
-            color: var(--text-primary);
-            background: rgba(255,255,255,0.03);
-        }
-
-        summary {
             cursor: pointer;
             list-style: none;
             display: flex;
             align-items: center;
             justify-content: space-between;
             user-select: none;
+            transition: background 0.2s;
         }
+        details > summary:hover { background: var(--bg-card-hover); }
         summary::-webkit-details-marker { display: none; }
         summary::after {
-            content: '+';
-            font-size: 1.2rem;
-            color: var(--text-secondary);
+            content: '+'; 
+            font-size: 1.4rem; 
+            color: var(--text-secondary); 
             font-weight: 300;
-            margin-left: 10px;
+            transition: transform 0.2s; 
         }
-        details[open] > summary::after { content: '−'; }
+        details[open] > summary::after { transform: rotate(45deg); }
 
         /* --- Tables --- */
         .table-responsive {
             width: 100%;
             overflow-x: auto;
-            border-top: 1px solid var(--border-color);
+            background: #162032; /* Slightly darker than card */
         }
         table {
             width: 100%;
@@ -205,146 +189,81 @@
             font-size: 0.9rem;
         }
         th, td {
-            padding: 12px 15px;
+            padding: 16px 20px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
         }
         th {
-            background: rgba(0,0,0,0.3);
+            background: rgba(15, 23, 42, 0.5);
             color: var(--text-secondary);
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.05em;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            white-space: nowrap;
         }
         td {
-            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: #e2e8f0;
         }
-        tr:hover td {
-            background: rgba(255,255,255,0.02);
-        }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) { background: rgba(255,255,255,0.015); } /* Zebra Striping */
+        tr:hover td { background: rgba(255,255,255,0.03); }
         
         /* --- Badges & Status --- */
         .badge {
             display: inline-flex;
             align-items: center;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
             font-family: system-ui, -apple-system, sans-serif;
             text-transform: uppercase;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
         }
-        .badge-type { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
-        .badge.consistent { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
         
-        .badge-mini {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            text-align: center;
-            line-height: 16px;
-            border-radius: 4px;
-            font-size: 9px;
-            font-weight: bold;
-            margin-right: 3px;
-            color: #0f172a;
-            vertical-align: middle;
-            cursor: help;
-        }
-        .badge-mini.success { background-color: var(--accent-success); }
-        .badge-mini.fail { background-color: var(--accent-danger); color: #fff; }
-        .badge-mini.neutral { background-color: var(--text-secondary); opacity: 0.5; color: #000; }
-                
-        .status-cell { font-weight: 600; display: flex; align-items: center; gap: 8px; text-decoration: none; transition: opacity 0.2s; }
-        .status-cell:hover { opacity: 0.8; }
+        .status-cell { font-weight: 600; display: flex; align-items: center; gap: 8px; text-decoration: none; }
         .st-ok { color: var(--accent-success); }
         .st-warn { color: var(--accent-warning); }
         .st-fail { color: var(--accent-danger); }
         .st-div { color: var(--accent-divergent); }
         
-        /* Aliases for script usage */
-        .status-ok { color: var(--accent-success) !important; }
-        .status-warn { color: var(--accent-warning) !important; } /* Warning alias */
-        .status-warning { color: var(--accent-warning) !important; }
-        .status-fail { color: var(--accent-danger) !important; }
-        .status-divergent { color: var(--accent-divergent) !important; }
-        .status-neutral { color: var(--text-secondary) !important; }
-        .time-val { font-size: 0.8em; color: var(--text-secondary); font-weight: 400; opacity: 0.7; }
+        .status-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .status-warning, .status-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.2); }
+        .status-fail { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .status-divergent { background: rgba(217, 70, 239, 0.15); color: #e879f9; border: 1px solid rgba(217, 70, 239, 0.2); }
+        .status-neutral, .status-skipped { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
 
         /* --- Modal & Logs --- */
         .modal {
             display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
+            background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
         }
         .modal-content {
-            background-color: var(--bg-card); margin: 5vh auto; padding: 0;
-            border: 1px solid var(--border-color); width: 90%; max-width: 1200px;
-            border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            display: flex; flex-direction: column; max-height: 90vh;
+            background-color: #0f172a; margin: 4vh auto; padding: 0;
+            border: 1px solid var(--border-color); width: 90%; max-width: 1000px;
+            border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; max-height: 92vh;
+            overflow: hidden;
         }
         .modal-header {
-            padding: 20px; border-bottom: 1px solid var(--border-color);
+            padding: 20px 30px; border-bottom: 1px solid var(--border-color); background: #1e293b;
             display: flex; justify-content: space-between; align-items: center;
         }
         .modal-body {
-            padding: 0; overflow-y: auto; flex: 1;
-            background: #000;
+            padding: 0; overflow-y: auto; flex: 1; background: #0b1120;
         }
         pre {
-            margin: 0; padding: 20px; color: #e5e5e5; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; line-height: 1.6;
+            margin: 0; padding: 25px; color: #cbd5e1; 
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
+            font-size: 0.85rem; line-height: 1.7;
             white-space: pre-wrap; word-break: break-all;
         }
-
-        /* --- New Modal Styles for Rich Info --- */
+        
+        /* Modal Info Styles */
         .modal-info-content {
-            padding: 30px;
-            color: var(--text-primary);
-            font-family: system-ui, -apple-system, sans-serif;
-            line-height: 1.6;
-            font-size: 1rem;
-            background: linear-gradient(to bottom right, var(--bg-card), rgba(0,0,0,0.5));
-        }
-        .modal-info-content strong { color: #fff; font-weight: 600; }
-        .modal-info-content b { color: #fff; font-weight: 600; }
-        
-        .modal-log-content {
-            padding: 0;
-            background: #000;
-            font-family: monospace;
-        }
-        
-        .info-header {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .info-icon {
-            font-size: 2rem;
-            background: rgba(255,255,255,0.05);
-            width: 50px; height: 50px;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 12px;
-        }
-        .info-title {
-            font-size: 1.4rem;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: #fff;
-        }
-        .info-body p { margin-bottom: 15px; color: #cbd5e1; }
-        .info-meta {
-            margin-top: 25px;
-            padding: 15px;
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            color: #93c5fd;
         }
         
         /* --- Controls & Utilities --- */
@@ -414,10 +333,10 @@
         <header>
             <h1>
                 🔍 Diagnóstico DNS
-                <small>v11.7.0</small>
+                <small>v11.10.0</small>
             </h1>
             <div style="text-align: right; color: var(--text-secondary); font-size: 0.9rem;">
-                <div>Executado em: <strong>20251221_223009</strong></div>
+                <div>Executado em: <strong>20251221_233138</strong></div>
                 <div style="font-size: 0.8em; margin-top:4px;">Tempo Total: <span id="total_time_placeholder">...</span></div>
             </div>
         </header>
@@ -468,50 +387,63 @@
         // Reuse existing closeModal function or ensure it exists in main JS
         // (Assuming main structure has closeModal logic, but we should ensure compatibility)
     </script>
-        <h2>📊 Resumo Executivo</h2>
-        <!-- General Inventory Row -->
-        <div class="dashboard" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('DOMÍNIOS', 'Total de domínios únicos carregados do arquivo de entrada.<br><br><b>Fonte:</b> /home/flashbsb/diagnostico_dns/domains_tests.csv')">
-                <span class="card-num">6</span>
-                <span class="card-label">Domínios</span>
-            </div>
-             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('GRUPOS DNS', 'Total de grupos de servidores configurados para teste.<br><br><b>Fonte:</b> /home/flashbsb/diagnostico_dns/dns_groups.csv')">
-                <span class="card-num">0</span>
-                <span class="card-label">Grupos DNS</span>
-            </div>
-             <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('SERVIDORES', 'Total de endereços IP únicos testados nesta execução.<br>Inclui todos os servidores listados nos grupos ativos.')">
-                <span class="card-num">0</span>
-                <span class="card-label">Servidores</span>
-            </div>
-            <div class="card" style="--card-accent: #64748b; cursor:pointer;" onclick="showInfoModal('LATÊNCIA MÉDIA', 'Média de tempo de resposta (RTT) de todos os servidores.<br><br><b>Cálculo:</b> Soma de todos os RTTs / Total de respostas / Total de servidores.<br>Valores altos podem indicar congestionamento de rede ou servidores distantes.')">
-                <span class="card-num">N/A</span>
-                <span class="card-label">Latência Média</span>
-            </div>
-            
-            <!-- Risk Card -->
-            <div class="card" style="--card-accent: var(--accent-danger); cursor:pointer;" onclick="showInfoModal('RISCO DE SEGURANÇA', 'Contagem acumulada de falhas de segurança detectadas.<br><br><b>Inclui:</b><br>- Versão Revelada<br>- AXFR Permitido<br>- Recursão Aberta<br>- DNSSEC Falho<br><br>Meta: <b>0</b>')">
-                <span class="card-num" style="color: var(--accent-danger);">22</span>
-                <span class="card-label">Risco de Segurança</span>
-            </div>
-            
-            <!-- Divergence Card -->
-            <div class="card" style="--card-accent: var(--accent-divergent); cursor:pointer;" onclick="showInfoModal('SERVIDORES INCONSISTENTES', 'Número de testes onde houve divergência de resposta (IP, Ordem ou TTL) entre tentativas consecutivas no mesmo servidor.<br><br>Indica instabilidade ou má configuração de balanceamento.')">
-                <span class="card-num" style="color: var(--accent-divergent);">5</span>
-                <span class="card-label">Inconsistências</span>
-            </div>
+        <div style="margin-top:20px;"></div>
+        
+        <!-- EXECUTIVE HERO SECTION -->
+        <div style="display:grid; grid-template-columns: 250px 1fr; gap:20px; margin-bottom:30px;">
+             <!-- GRADE CARD -->
+             <div class="card" style="--card-accent: #64748b; background: linear-gradient(145deg, var(--bg-card) 0%, rgba(255,255,255,0.03) 100%);">
+                 <div style="font-size:0.9rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px;">Diagnóstico Geral</div>
+                 <div style="font-size:5rem; font-weight:800; line-height:1; color:#64748b; text-shadow: 0 4px 20px rgba(0,0,0,0.3);">-</div>
+                 <div style="font-size:1.2rem; font-weight:600; color:#fff; margin-top:5px; padding: 4px 12px; border-radius:12px; background:rgba(255,255,255,0.1);">SEM DADOS</div>
+             </div>
+             
+             <!-- KPI GRID -->
+             <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px;">
+                 <div class="card" style="--card-accent: #3b82f6;">
+                     <span class="card-num">21</span>
+                     <span class="card-label">Servidores Ativos</span>
+                     <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:5px;">Infraestrutura Identificada</span>
+                 </div>
+                 <div class="card" style="--card-accent: ;">
+                     <span class="card-num">-</span>
+                     <span class="card-label">Latência Média</span>
+                     <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:5px;">Performance Global</span>
+                 </div>
+                  <div class="card" style="--card-accent: var(--accent-danger);">
+                     <div style="display:flex; align-items:baseline; gap:5px;">
+                         <span class="card-num" style="color:var(--accent-danger);">22</span>
+                     </div>
+                     <span class="card-label">Riscos de Segurança</span>
+                     <span style="font-size:0.75rem; color:var(--text-secondary); margin-top:5px;">Versão, AXFR, Recursão</span>
+                 </div>
+                 
+                 <div class="card" style="--card-accent: #10b981;">
+                     <span class="card-num">6</span>
+                     <span class="card-label">Domínios</span>
+                 </div>
+                  <div class="card" style="--card-accent: #8b5cf6;">
+                     <span class="card-num">93</span>
+                     <span class="card-label">Zonas Testadas</span>
+                 </div>
+                  <div class="card" style="--card-accent: #ec4899;">
+                     <span class="card-num">87</span>
+                     <span class="card-label">Registros Testados</span>
+                 </div>
+             </div>
         </div>
-        <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; margin-bottom: 40px;">
              <!-- Overview Chart Container -->
-             <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-primary); align-items: center; justify-content: center;">
-                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Visão Geral de Execução</h3>
-                 <div style="position: relative; height: 300px; width: 100%;">
+             <div class="card" style="min-height: 350px; --card-accent: var(--accent-primary); padding:20px;">
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; border:none; padding:0;">Visão Geral de Execução</h3>
+                 <div style="position: relative; height: 300px; width: 100%; margin-top:15px;">
                     <canvas id="chartOverview"></canvas>
                  </div>
              </div>
              <!-- Latency Chart Container -->
-             <div class="card" style="flex: 1; min-height: 350px; --card-accent: var(--accent-warning); align-items: center; justify-content: center;">
-                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:1rem; margin-bottom:10px;">Top Latência (Médias)</h3>
-                 <div style="position: relative; height: 300px; width: 100%;">
+             <div class="card" style="min-height: 350px; --card-accent: var(--accent-warning); padding:20px;">
+                 <h3 style="margin-top:0; color:var(--text-secondary); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; border:none; padding:0;">Top Latência (Médias)</h3>
+                 <div style="position: relative; height: 300px; width: 100%; margin-top:15px;">
                     <canvas id="chartLatency"></canvas>
                  </div>
              </div>
@@ -538,27 +470,41 @@
                 </tr>
             </thead>
             <tbody>
-<tr><td>192.203.230.10</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>16.769ms / ±2.581 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"2025.12.2"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>198.41.0.4</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (165.586ms)</span></td><td>165.586ms / ±2.919 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"ATLAS"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>208.67.220.220</td><td>OPENDNS</td><td><span class='badge status-ok'>OK</span></td><td>27.431ms / ±2.122 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>8.8.4.4</td><td>GOOGLE</td><td><span class='badge status-ok'>OK</span></td><td>26.023ms / ±1.570 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>1.1.1.1</td><td>CLOUDFLARE</td><td><span class='badge status-ok'>OK</span></td><td>19.573ms / ±10.425 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>198.97.190.53</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>54.600ms / ±2.151 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"NSD 4.x"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>192.36.148.17</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (183.074ms)</span></td><td>183.074ms / ±2.959 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"contact info@netnod.se"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>9.9.9.9</td><td>QUAD9</td><td><span class='badge status-ok'>OK</span></td><td>15.017ms / ±2.811 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail' title='"Q9-P-7.6"'>REVEA.</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>192.112.36.4</td><td>ROOT_SERVERS</td><td><span class='badge status-fail'>100% LOSS</span></td><td>-</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>8.8.8.8</td><td>GOOGLE</td><td><span class='badge status-ok'>OK</span></td><td>33.769ms / ±1.309 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>192.58.128.30</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (162.006ms)</span></td><td>162.006ms / ±2.375 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"NSD"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>199.9.14.201</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (178.029ms)</span></td><td>178.029ms / ±1.919 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail' title='"knot 3.x"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>193.0.14.129</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (220.725ms)</span></td><td>220.725ms / ±7.334 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"BIND"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>192.5.5.241</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>15.310ms / ±0.970 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"2025.12.2"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>208.67.222.222</td><td>OPENDNS</td><td><span class='badge status-ok'>OK</span></td><td>28.451ms / ±1.242 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>202.12.27.33</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>39.824ms / ±0.943 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"9.16"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>199.7.83.42</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>53.589ms / ±2.230 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"NSD 4"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>199.7.91.13</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (153.677ms)</span></td><td>153.677ms / ±1.021 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"NSD 4"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
-<tr><td>1.0.0.1</td><td>CLOUDFLARE</td><td><span class='badge status-ok'>OK</span></td><td>11.513ms / ±2.946 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>HIDDEN</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>149.112.112.112</td><td>QUAD9</td><td><span class='badge status-ok'>OK</span></td><td>11.161ms / ±1.374 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail' title='"Q9-P-7.6"'>REVEA.</span></td><td><span class='badge status-fail'>OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
-<tr><td>192.33.4.12</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (140.857ms)</span></td><td>140.857ms / ±0.501 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' title='"c-root"'>REVEA.</span></td><td><span class='badge status-ok'>CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>192.203.230.10</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>14.767ms / ±2.683 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_192.203.230.10')" title='
+2025.12.2'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_192.203.230.10')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>198.41.0.4</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (163.731ms)</span></td><td>163.731ms / ±3.083 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_198.41.0.4')" title='
+ATLAS'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_198.41.0.4')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>208.67.220.220</td><td>OPENDNS</td><td><span class='badge status-ok'>OK</span></td><td>26.269ms / ±1.976 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_208.67.220.220')">HIDDEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_208.67.220.220')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>8.8.4.4</td><td>GOOGLE</td><td><span class='badge status-ok'>OK</span></td><td>26.909ms / ±1.853 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_8.8.4.4')">HIDDEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_8.8.4.4')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>1.1.1.1</td><td>CLOUDFLARE</td><td><span class='badge status-ok'>OK</span></td><td>18.244ms / ±4.147 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_1.1.1.1')">HIDDEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_1.1.1.1')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>198.97.190.53</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>53.318ms / ±3.431 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_198.97.190.53')" title='
+NSD 4.x'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_198.97.190.53')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>192.36.148.17</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (187.562ms)</span></td><td>187.562ms / ±5.600 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_192.36.148.17')" title='
+contact info@netnod.se'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_192.36.148.17')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>9.9.9.9</td><td>QUAD9</td><td><span class='badge status-ok'>OK</span></td><td>18.271ms / ±7.189 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_9.9.9.9')" title='
+Q9-P-7.6'>REVEA.</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_9.9.9.9')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>192.112.36.4</td><td>ROOT_SERVERS</td><td><span class='badge status-fail'>100% LOSS</span></td><td>-</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_192.112.36.4')">HIDDEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_192.112.36.4')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>8.8.8.8</td><td>GOOGLE</td><td><span class='badge status-ok'>OK</span></td><td>32.926ms / ±1.462 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_8.8.8.8')">HIDDEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_8.8.8.8')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>192.58.128.30</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (158.959ms)</span></td><td>158.959ms / ±1.858 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_192.58.128.30')" title='
+NSD'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_192.58.128.30')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>199.9.14.201</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (179.507ms)</span></td><td>179.507ms / ±1.668 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_199.9.14.201')" title='
+knot 3.x'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_199.9.14.201')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>193.0.14.129</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (215.374ms)</span></td><td>215.374ms / ±1.436 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_193.0.14.129')" title='
+BIND'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_193.0.14.129')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>192.5.5.241</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>16.647ms / ±5.101 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_192.5.5.241')" title='
+2025.12.2'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_192.5.5.241')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>208.67.222.222</td><td>OPENDNS</td><td><span class='badge status-ok'>OK</span></td><td>37.615ms / ±5.422 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_208.67.222.222')">HIDDEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_208.67.222.222')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>202.12.27.33</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>37.201ms / ±3.178 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_202.12.27.33')" title='
+9.16'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_202.12.27.33')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>199.7.83.42</td><td>ROOT_SERVERS</td><td><span class='badge status-ok'>OK</span></td><td>58.921ms / ±8.348 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_199.7.83.42')" title='
+NSD 4'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_199.7.83.42')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>199.7.91.13</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (154.876ms)</span></td><td>154.876ms / ±2.259 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_199.7.91.13')" title='
+NSD 4'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_199.7.91.13')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
+<tr><td>1.0.0.1</td><td>CLOUDFLARE</td><td><span class='badge status-ok'>OK</span></td><td>13.021ms / ±3.606 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('ver_1.0.0.1')">HIDDEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_1.0.0.1')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>149.112.112.112</td><td>QUAD9</td><td><span class='badge status-ok'>OK</span></td><td>16.147ms / ±1.026 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_149.112.112.112')" title='
+Q9-U-7.6'>REVEA.</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('rec_149.112.112.112')">OPEN</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-neutral'>NO</span></td><td><span class='badge status-ok'>VALIDATING</span></td><td><span class='badge status-ok'>AVAILABLE</span></td><td><span class='badge status-ok'>OK</span></td></tr>
+<tr><td>192.33.4.12</td><td>ROOT_SERVERS</td><td><span class='badge status-warn'>SLOW (138.521ms)</span></td><td>138.521ms / ±1.973 / 0%</td><td><span class='badge status-ok'>OPEN</span></td><td><span class='badge status-fail'>CLOSED</span></td><td><span class='badge status-fail' style='cursor:pointer' onclick="showLog('ver_192.33.4.12')" title='
+c-root'>REVEA.</span></td><td><span class='badge status-ok' style='cursor:pointer' onclick="showLog('rec_192.33.4.12')">CLOSED</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge status-ok'>OK</span></td><td><span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span></td><td><span class='badge status-fail'>FAIL</span></td><td><span class='badge status-fail'>FAIL</span></td></tr>
 </tbody></table></div></div>
     <div style="margin-top: 50px;">
         <h2>🌎 Saúde das Zonas (Consistência & Segurança)</h2>
@@ -575,16 +521,16 @@
                 </tr>
             </thead>
             <tbody>
-<tr><td>google.com</td><td>GOOGLE</td><td>8.8.8.8</td><td><span class='badge status-ok' title='Synced'>847066381</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
-<tr><td>google.com</td><td>GOOGLE</td><td>8.8.4.4</td><td><span class='badge status-fail' title='Divergent'>847364220</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
+<tr><td>google.com</td><td>GOOGLE</td><td>8.8.8.8</td><td><span class='badge status-ok' title='Synced'>847364220</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
+<tr><td>google.com</td><td>GOOGLE</td><td>8.8.4.4</td><td><span class='badge status-ok' title='Synced'>847364220</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>google.com</td><td>CLOUDFLARE</td><td>1.1.1.1</td><td><span class='badge status-ok' title='Synced'>847066381</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>google.com</td><td>CLOUDFLARE</td><td>1.0.0.1</td><td><span class='badge status-ok' title='Synced'>847066381</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>wikipedia.org</td><td>QUAD9</td><td>9.9.9.9</td><td><span class='badge status-ok' title='Synced'>2025120109</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>wikipedia.org</td><td>QUAD9</td><td>149.112.112.112</td><td><span class='badge status-ok' title='Synced'>2025120109</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>wikipedia.org</td><td>OPENDNS</td><td>208.67.222.222</td><td><span class='badge status-ok' title='Synced'>2025120109</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>wikipedia.org</td><td>OPENDNS</td><td>208.67.220.220</td><td><span class='badge status-ok' title='Synced'>2025120109</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
-<tr><td>cisco.com</td><td>OPENDNS</td><td>208.67.222.222</td><td><span class='badge status-ok' title='Synced'>1149507</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
-<tr><td>cisco.com</td><td>OPENDNS</td><td>208.67.220.220</td><td><span class='badge status-fail' title='Divergent'>1149511</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
+<tr><td>cisco.com</td><td>OPENDNS</td><td>208.67.222.222</td><td><span class='badge status-ok' title='Synced'>1149519</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
+<tr><td>cisco.com</td><td>OPENDNS</td><td>208.67.220.220</td><td><span class='badge status-ok' title='Synced'>1149519</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>ietf.org</td><td>ROOT_SERVERS</td><td>198.41.0.4</td><td><span class='badge neutral'>TIMEOUT</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>ietf.org</td><td>ROOT_SERVERS</td><td>199.9.14.201</td><td><span class='badge neutral'>TIMEOUT</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
 <tr><td>ietf.org</td><td>ROOT_SERVERS</td><td>192.33.4.12</td><td><span class='badge neutral'>TIMEOUT</span></td><td><span class='badge status-ok'>DENIED</span></td><td><span class='badge neutral'>UNSIGNED</span></td></tr>
@@ -620,22 +566,22 @@
                 </tr>
             </thead>
             <tbody>
-<tr><td>google.com</td><td>A</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 142.251.132.238'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 142.251.132.238'>8.8.4.4: OK</span> </td></tr>
-<tr><td>google.com</td><td>A</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 142.250.78.110'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 142.250.78.110'>1.0.0.1: OK</span> </td></tr>
+<tr><td>google.com</td><td>A</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 172.217.172.14'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 172.217.162.206'>8.8.4.4: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
+<tr><td>google.com</td><td>A</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 172.217.172.142'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 172.217.172.142'>1.0.0.1: OK</span> </td></tr>
 <tr><td>google.com</td><td>AAAA</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 2800:3f0:4004:811::200e'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 2800:3f0:4004:80f::200e'>8.8.4.4: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
 <tr><td>google.com</td><td>AAAA</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 2800:3f0:4001:800::200e'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 2800:3f0:4001:800::200e'>1.0.0.1: OK</span> </td></tr>
 <tr><td>google.com</td><td>TXT</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all'>8.8.4.4: OK</span> </td></tr>
 <tr><td>google.com</td><td>TXT</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: apple-domain-verification=30afIBcvSuDV2PLX cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e docusign=1b0a6754-49b1-4db5-8540-d2c12664b289 facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95 globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8= google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0 google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB onetrust-domain-verification=de01ed21f2fa4d8781cbc3ffb89cf4ef v=spf1 include:_spf.google.com ~all'>1.0.0.1: OK</span> </td></tr>
-<tr><td>www.google.com</td><td>A</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 172.217.172.4'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 172.217.172.4'>8.8.4.4: OK</span> </td></tr>
-<tr><td>www.google.com</td><td>A</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 142.251.150.119 142.251.151.119 142.251.152.119 142.251.153.119 142.251.154.119 142.251.155.119 142.251.156.119 142.251.157.119'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 172.217.30.100'>1.0.0.1: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
-<tr><td>www.google.com</td><td>AAAA</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 2800:3f0:4004:816::2004'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 2800:3f0:4004:80e::2004'>8.8.4.4: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
+<tr><td>www.google.com</td><td>A</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 142.250.219.36'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 142.250.219.36'>8.8.4.4: OK</span> </td></tr>
+<tr><td>www.google.com</td><td>A</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 172.217.30.100'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 172.217.30.100'>1.0.0.1: OK</span> </td></tr>
+<tr><td>www.google.com</td><td>AAAA</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 2800:3f0:4004:813::2004'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 2800:3f0:4004:813::2004'>8.8.4.4: OK</span> </td></tr>
 <tr><td>www.google.com</td><td>AAAA</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 2800:3f0:4001:847::2004'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 2800:3f0:4001:847::2004'>1.0.0.1: OK</span> </td></tr>
 <tr><td>www.google.com</td><td>TXT</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: Status: NOERROR'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: Status: NOERROR'>8.8.4.4: OK</span> </td></tr>
 <tr><td>www.google.com</td><td>TXT</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: Status: NOERROR'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: Status: NOERROR'>1.0.0.1: OK</span> </td></tr>
-<tr><td>mail.google.com</td><td>A</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 142.250.78.165'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 142.250.78.165'>8.8.4.4: OK</span> </td></tr>
-<tr><td>mail.google.com</td><td>A</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 142.250.78.101'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 142.250.219.197'>1.0.0.1: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
-<tr><td>mail.google.com</td><td>AAAA</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 2800:3f0:4004:80e::2005'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 2800:3f0:4004:80e::2005'>8.8.4.4: OK</span> </td></tr>
-<tr><td>mail.google.com</td><td>AAAA</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 2800:3f0:4001:816::2005'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 2800:3f0:4001:800::2005'>1.0.0.1: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
+<tr><td>mail.google.com</td><td>A</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 142.250.218.229'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 142.251.132.37'>8.8.4.4: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
+<tr><td>mail.google.com</td><td>A</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 142.250.219.197'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 142.250.78.101'>1.0.0.1: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
+<tr><td>mail.google.com</td><td>AAAA</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: 2800:3f0:4004:80f::2005'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: 2800:3f0:4004:812::2005'>8.8.4.4: OK</span> <span class='badge status-fail' style='margin-left:10px;'>DIVERGENT (2)</span></td></tr>
+<tr><td>mail.google.com</td><td>AAAA</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: 2800:3f0:4001:816::2005'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: 2800:3f0:4001:816::2005'>1.0.0.1: OK</span> </td></tr>
 <tr><td>mail.google.com</td><td>TXT</td><td>GOOGLE</td><td><span class='badge status-ok' title='8.8.8.8: google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY'>8.8.8.8: OK</span> <span class='badge status-ok' title='8.8.4.4: google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY'>8.8.4.4: OK</span> </td></tr>
 <tr><td>mail.google.com</td><td>TXT</td><td>CLOUDFLARE</td><td><span class='badge status-ok' title='1.1.1.1: google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY'>1.1.1.1: OK</span> <span class='badge status-ok' title='1.0.0.1: google-site-verification=PncXpRKRCAlDAdlesTtNFf6k9TvgxgcRfojdaKkEACY'>1.0.0.1: OK</span> </td></tr>
 <tr><td>wikipedia.org</td><td>A</td><td>QUAD9</td><td><span class='badge status-ok' title='9.9.9.9: 195.200.68.224'>9.9.9.9: OK</span> <span class='badge status-ok' title='149.112.112.112: 195.200.68.224'>149.112.112.112: OK</span> </td></tr>
@@ -673,7 +619,7 @@
                 
                 <hr style="border: 0; border-top: 1px solid #ffcc02; margin: 15px 0;">
                 
-                <strong>🧐 CRITÉRIOS DE DIVERGÊNCIA ATIVOS (v11.7.0):</strong><br>
+                <strong>🧐 CRITÉRIOS DE DIVERGÊNCIA ATIVOS (v11.10.0):</strong><br>
                 Além dos erros padrões, este relatório aplicou as seguintes regras de consistência (3 tentativas):
                 <div class="criteria-legend">
                     <div class="criteria-item">Strict IP Check: <span class="crit-false">false</span> (True = Requer mesmo IP sempre)</div>
@@ -700,7 +646,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td>Versão do Script</td><td>v11.7.0</td><td>Identificação da release utilizada.</td></tr>
+                        <tr><td>Versão do Script</td><td>v11.10.0</td><td>Identificação da release utilizada.</td></tr>
                         <tr><td>Prefixo Log</td><td>dnsdiag</td><td>Prefixo para geração de arquivos.</td></tr>
                         <tr><td>Timeout Global</td><td>4s</td><td>Tempo máximo de espera por resposta do DNS.</td></tr>
                         <tr><td>Sleep (Intervalo)</td><td>0.01s</td><td>Pausa entre tentativas consecutivas (consistency check).</td></tr>
@@ -898,5 +844,1498 @@
   <span style='color:#94a3b8'>TIMEOUT/ERROR</span>       = Erro de Rede (Inconclusivo)</pre>
             </div>
         </details>
+<div id="port53_192.203.230.10_content" style="display:none"><pre>e.root-servers.net [192.203.230.10] 53 (domain) open</pre></div>
+<div id="port53_192.203.230.10_title" style="display:none">TCP Check | 192.203.230.10:53</div>
+<div id="port853_192.203.230.10_content" style="display:none"><pre></pre></div>
+<div id="port853_192.203.230.10_title" style="display:none">TCP Check | 192.203.230.10:853</div>
+<div id="ver_192.203.230.10_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.203.230.10 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 3743
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		60	CH	TXT	"2025.12.2"
+
+;; Query time: 11 msec
+;; SERVER: 192.203.230.10#53(192.203.230.10) (UDP)
+;; WHEN: Sun Dec 21 23:31:45 -03 2025
+;; MSG SIZE  rcvd: 63</pre></div>
+<div id="ver_192.203.230.10_title" style="display:none">Bind Version Check: 192.203.230.10</div>
+<div id="rec_192.203.230.10_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.203.230.10 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 18512
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1472
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 11 msec
+;; SERVER: 192.203.230.10#53(192.203.230.10) (UDP)
+;; WHEN: Sun Dec 21 23:31:45 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_192.203.230.10_title" style="display:none">Recursion Check: 192.203.230.10</div>
+<div id="port53_198.41.0.4_content" style="display:none"><pre>a.root-servers.net [198.41.0.4] 53 (domain) open</pre></div>
+<div id="port53_198.41.0.4_title" style="display:none">TCP Check | 198.41.0.4:53</div>
+<div id="port853_198.41.0.4_content" style="display:none"><pre></pre></div>
+<div id="port853_198.41.0.4_title" style="display:none">TCP Check | 198.41.0.4:853</div>
+<div id="ver_198.41.0.4_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @198.41.0.4 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 17631
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"ATLAS"
+
+;; Query time: 199 msec
+;; SERVER: 198.41.0.4#53(198.41.0.4) (UDP)
+;; WHEN: Sun Dec 21 23:31:57 -03 2025
+;; MSG SIZE  rcvd: 59</pre></div>
+<div id="ver_198.41.0.4_title" style="display:none">Bind Version Check: 198.41.0.4</div>
+<div id="rec_198.41.0.4_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @198.41.0.4 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 62772
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+
+;; Query time: 155 msec
+;; SERVER: 198.41.0.4#53(198.41.0.4) (UDP)
+;; WHEN: Sun Dec 21 23:31:57 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_198.41.0.4_title" style="display:none">Recursion Check: 198.41.0.4</div>
+<div id="port53_208.67.220.220_content" style="display:none"><pre>dns.sse.cisco.com [208.67.220.220] 53 (domain) open</pre></div>
+<div id="port53_208.67.220.220_title" style="display:none">TCP Check | 208.67.220.220:53</div>
+<div id="port853_208.67.220.220_content" style="display:none"><pre>dns.sse.cisco.com [208.67.220.220] 853 (domain-s) open</pre></div>
+<div id="port853_208.67.220.220_title" style="display:none">TCP Check | 208.67.220.220:853</div>
+<div id="ver_208.67.220.220_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @208.67.220.220 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: REFUSED, id: 20658
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 35 msec
+;; SERVER: 208.67.220.220#53(208.67.220.220) (UDP)
+;; WHEN: Sun Dec 21 23:32:05 -03 2025
+;; MSG SIZE  rcvd: 30</pre></div>
+<div id="ver_208.67.220.220_title" style="display:none">Bind Version Check: 208.67.220.220</div>
+<div id="rec_208.67.220.220_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @208.67.220.220 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 14530
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1410
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		300	IN	A	172.217.172.14
+
+;; Query time: 95 msec
+;; SERVER: 208.67.220.220#53(208.67.220.220) (UDP)
+;; WHEN: Sun Dec 21 23:32:05 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_208.67.220.220_title" style="display:none">Recursion Check: 208.67.220.220</div>
+<div id="port53_8.8.4.4_content" style="display:none"><pre>dns.google [8.8.4.4] 53 (domain) open</pre></div>
+<div id="port53_8.8.4.4_title" style="display:none">TCP Check | 8.8.4.4:53</div>
+<div id="port853_8.8.4.4_content" style="display:none"><pre>dns.google [8.8.4.4] 853 (domain-s) open</pre></div>
+<div id="port853_8.8.4.4_title" style="display:none">TCP Check | 8.8.4.4:853</div>
+<div id="ver_8.8.4.4_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @8.8.4.4 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: SERVFAIL, id: 15682
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 39 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4) (UDP)
+;; WHEN: Sun Dec 21 23:32:08 -03 2025
+;; MSG SIZE  rcvd: 41</pre></div>
+<div id="ver_8.8.4.4_title" style="display:none">Bind Version Check: 8.8.4.4</div>
+<div id="rec_8.8.4.4_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @8.8.4.4 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 64126
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		167	IN	A	142.251.129.238
+
+;; Query time: 35 msec
+;; SERVER: 8.8.4.4#53(8.8.4.4) (UDP)
+;; WHEN: Sun Dec 21 23:32:08 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_8.8.4.4_title" style="display:none">Recursion Check: 8.8.4.4</div>
+<div id="port53_1.1.1.1_content" style="display:none"><pre>one.one.one.one [1.1.1.1] 53 (domain) open</pre></div>
+<div id="port53_1.1.1.1_title" style="display:none">TCP Check | 1.1.1.1:53</div>
+<div id="port853_1.1.1.1_content" style="display:none"><pre>one.one.one.one [1.1.1.1] 853 (domain-s) open</pre></div>
+<div id="port853_1.1.1.1_title" style="display:none">TCP Check | 1.1.1.1:853</div>
+<div id="ver_1.1.1.1_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @1.1.1.1 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: REFUSED, id: 21143
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 19 msec
+;; SERVER: 1.1.1.1#53(1.1.1.1) (UDP)
+;; WHEN: Sun Dec 21 23:32:12 -03 2025
+;; MSG SIZE  rcvd: 41</pre></div>
+<div id="ver_1.1.1.1_title" style="display:none">Bind Version Check: 1.1.1.1</div>
+<div id="rec_1.1.1.1_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @1.1.1.1 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 44538
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		93	IN	A	142.251.132.46
+
+;; Query time: 11 msec
+;; SERVER: 1.1.1.1#53(1.1.1.1) (UDP)
+;; WHEN: Sun Dec 21 23:32:12 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_1.1.1.1_title" style="display:none">Recursion Check: 1.1.1.1</div>
+<div id="port53_198.97.190.53_content" style="display:none"><pre>h.root-servers.net [198.97.190.53] 53 (domain) open</pre></div>
+<div id="port53_198.97.190.53_title" style="display:none">TCP Check | 198.97.190.53:53</div>
+<div id="port853_198.97.190.53_content" style="display:none"><pre></pre></div>
+<div id="port853_198.97.190.53_title" style="display:none">TCP Check | 198.97.190.53:853</div>
+<div id="ver_198.97.190.53_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @198.97.190.53 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 40384
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"NSD 4.x"
+
+;; Query time: 59 msec
+;; SERVER: 198.97.190.53#53(198.97.190.53) (UDP)
+;; WHEN: Sun Dec 21 23:32:19 -03 2025
+;; MSG SIZE  rcvd: 61</pre></div>
+<div id="ver_198.97.190.53_title" style="display:none">Bind Version Check: 198.97.190.53</div>
+<div id="rec_198.97.190.53_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @198.97.190.53 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 54404
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 55 msec
+;; SERVER: 198.97.190.53#53(198.97.190.53) (UDP)
+;; WHEN: Sun Dec 21 23:32:19 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_198.97.190.53_title" style="display:none">Recursion Check: 198.97.190.53</div>
+<div id="port53_192.36.148.17_content" style="display:none"><pre>i.root-servers.net [192.36.148.17] 53 (domain) open</pre></div>
+<div id="port53_192.36.148.17_title" style="display:none">TCP Check | 192.36.148.17:53</div>
+<div id="port853_192.36.148.17_content" style="display:none"><pre></pre></div>
+<div id="port853_192.36.148.17_title" style="display:none">TCP Check | 192.36.148.17:853</div>
+<div id="ver_192.36.148.17_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.36.148.17 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 15439
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: a04b8d8dac7482f8010000006948adbf7731c2bf28cc68ad (good)
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"contact info@netnod.se"
+
+;; Query time: 187 msec
+;; SERVER: 192.36.148.17#53(192.36.148.17) (UDP)
+;; WHEN: Sun Dec 21 23:32:31 -03 2025
+;; MSG SIZE  rcvd: 104</pre></div>
+<div id="ver_192.36.148.17_title" style="display:none">Bind Version Check: 192.36.148.17</div>
+<div id="rec_192.36.148.17_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.36.148.17 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 23381
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: 88f93163e2c0d410010000006948adc0a3f2b94dfcd4ab36 (good)
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+
+;; Query time: 179 msec
+;; SERVER: 192.36.148.17#53(192.36.148.17) (UDP)
+;; WHEN: Sun Dec 21 23:32:32 -03 2025
+;; MSG SIZE  rcvd: 863</pre></div>
+<div id="rec_192.36.148.17_title" style="display:none">Recursion Check: 192.36.148.17</div>
+<div id="port53_9.9.9.9_content" style="display:none"><pre>dns9.quad9.net [9.9.9.9] 53 (domain) open</pre></div>
+<div id="port53_9.9.9.9_title" style="display:none">TCP Check | 9.9.9.9:53</div>
+<div id="port853_9.9.9.9_content" style="display:none"><pre>dns9.quad9.net [9.9.9.9] 853 (domain-s) open</pre></div>
+<div id="port853_9.9.9.9_title" style="display:none">TCP Check | 9.9.9.9:853</div>
+<div id="ver_9.9.9.9_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @9.9.9.9 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 7739
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		84264	CH	TXT	"Q9-P-7.6"
+
+;; Query time: 11 msec
+;; SERVER: 9.9.9.9#53(9.9.9.9) (UDP)
+;; WHEN: Sun Dec 21 23:32:40 -03 2025
+;; MSG SIZE  rcvd: 62</pre></div>
+<div id="ver_9.9.9.9_title" style="display:none">Bind Version Check: 9.9.9.9</div>
+<div id="rec_9.9.9.9_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @9.9.9.9 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 54118
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		156	IN	A	172.217.162.238
+
+;; Query time: 15 msec
+;; SERVER: 9.9.9.9#53(9.9.9.9) (UDP)
+;; WHEN: Sun Dec 21 23:32:40 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_9.9.9.9_title" style="display:none">Recursion Check: 9.9.9.9</div>
+<div id="port53_192.112.36.4_content" style="display:none"><pre>G.ROOT-SERVERS.NET [192.112.36.4] 53 (domain) open</pre></div>
+<div id="port53_192.112.36.4_title" style="display:none">TCP Check | 192.112.36.4:53</div>
+<div id="port853_192.112.36.4_content" style="display:none"><pre></pre></div>
+<div id="port853_192.112.36.4_title" style="display:none">TCP Check | 192.112.36.4:853</div>
+<div id="ver_192.112.36.4_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.112.36.4 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: REFUSED, id: 18011
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: 8987b7e5f9b3d555010000006948add3ee9e418a8d60b2ff (good)
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 199 msec
+;; SERVER: 192.112.36.4#53(192.112.36.4) (UDP)
+;; WHEN: Sun Dec 21 23:32:52 -03 2025
+;; MSG SIZE  rcvd: 69</pre></div>
+<div id="ver_192.112.36.4_title" style="display:none">Bind Version Check: 192.112.36.4</div>
+<div id="rec_192.112.36.4_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.112.36.4 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 11029
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: 00571be6a7bf1419010000006948add4799d09ac06393b60 (good)
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+
+;; Query time: 191 msec
+;; SERVER: 192.112.36.4#53(192.112.36.4) (UDP)
+;; WHEN: Sun Dec 21 23:32:52 -03 2025
+;; MSG SIZE  rcvd: 863</pre></div>
+<div id="rec_192.112.36.4_title" style="display:none">Recursion Check: 192.112.36.4</div>
+<div id="port53_8.8.8.8_content" style="display:none"><pre>dns.google [8.8.8.8] 53 (domain) open</pre></div>
+<div id="port53_8.8.8.8_title" style="display:none">TCP Check | 8.8.8.8:53</div>
+<div id="port853_8.8.8.8_content" style="display:none"><pre>dns.google [8.8.8.8] 853 (domain-s) open</pre></div>
+<div id="port853_8.8.8.8_title" style="display:none">TCP Check | 8.8.8.8:853</div>
+<div id="ver_8.8.8.8_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @8.8.8.8 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: SERVFAIL, id: 24180
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 31 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8) (UDP)
+;; WHEN: Sun Dec 21 23:32:59 -03 2025
+;; MSG SIZE  rcvd: 41</pre></div>
+<div id="ver_8.8.8.8_title" style="display:none">Bind Version Check: 8.8.8.8</div>
+<div id="rec_8.8.8.8_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @8.8.8.8 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 44183
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		207	IN	A	142.250.219.142
+
+;; Query time: 39 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8) (UDP)
+;; WHEN: Sun Dec 21 23:32:59 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_8.8.8.8_title" style="display:none">Recursion Check: 8.8.8.8</div>
+<div id="port53_192.58.128.30_content" style="display:none"><pre>j.root-servers.net [192.58.128.30] 53 (domain) open</pre></div>
+<div id="port53_192.58.128.30_title" style="display:none">TCP Check | 192.58.128.30:53</div>
+<div id="port853_192.58.128.30_content" style="display:none"><pre></pre></div>
+<div id="port853_192.58.128.30_title" style="display:none">TCP Check | 192.58.128.30:853</div>
+<div id="ver_192.58.128.30_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.58.128.30 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 59154
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1472
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"NSD"
+
+;; Query time: 159 msec
+;; SERVER: 192.58.128.30#53(192.58.128.30) (UDP)
+;; WHEN: Sun Dec 21 23:33:07 -03 2025
+;; MSG SIZE  rcvd: 57</pre></div>
+<div id="ver_192.58.128.30_title" style="display:none">Bind Version Check: 192.58.128.30</div>
+<div id="rec_192.58.128.30_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.58.128.30 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 336
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1472
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 167 msec
+;; SERVER: 192.58.128.30#53(192.58.128.30) (UDP)
+;; WHEN: Sun Dec 21 23:33:07 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_192.58.128.30_title" style="display:none">Recursion Check: 192.58.128.30</div>
+<div id="port53_199.9.14.201_content" style="display:none"><pre>b-2017.b.root-servers.org [199.9.14.201] 53 (domain) open</pre></div>
+<div id="port53_199.9.14.201_title" style="display:none">TCP Check | 199.9.14.201:53</div>
+<div id="port853_199.9.14.201_content" style="display:none"><pre>b-2017.b.root-servers.org [199.9.14.201] 853 (domain-s) open</pre></div>
+<div id="port853_199.9.14.201_title" style="display:none">TCP Check | 199.9.14.201:853</div>
+<div id="ver_199.9.14.201_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @199.9.14.201 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 33938
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"knot 3.x"
+
+;; Query time: 187 msec
+;; SERVER: 199.9.14.201#53(199.9.14.201) (UDP)
+;; WHEN: Sun Dec 21 23:33:16 -03 2025
+;; MSG SIZE  rcvd: 62</pre></div>
+<div id="ver_199.9.14.201_title" style="display:none">Bind Version Check: 199.9.14.201</div>
+<div id="rec_199.9.14.201_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @199.9.14.201 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 6362
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 179 msec
+;; SERVER: 199.9.14.201#53(199.9.14.201) (UDP)
+;; WHEN: Sun Dec 21 23:33:16 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_199.9.14.201_title" style="display:none">Recursion Check: 199.9.14.201</div>
+<div id="port53_193.0.14.129_content" style="display:none"><pre>k.root-servers.net [193.0.14.129] 53 (domain) open</pre></div>
+<div id="port53_193.0.14.129_title" style="display:none">TCP Check | 193.0.14.129:53</div>
+<div id="port853_193.0.14.129_content" style="display:none"><pre></pre></div>
+<div id="port853_193.0.14.129_title" style="display:none">TCP Check | 193.0.14.129:853</div>
+<div id="ver_193.0.14.129_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @193.0.14.129 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 26365
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"BIND"
+
+;; Query time: 223 msec
+;; SERVER: 193.0.14.129#53(193.0.14.129) (UDP)
+;; WHEN: Sun Dec 21 23:33:27 -03 2025
+;; MSG SIZE  rcvd: 58</pre></div>
+<div id="ver_193.0.14.129_title" style="display:none">Bind Version Check: 193.0.14.129</div>
+<div id="rec_193.0.14.129_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @193.0.14.129 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 56579
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 215 msec
+;; SERVER: 193.0.14.129#53(193.0.14.129) (UDP)
+;; WHEN: Sun Dec 21 23:33:27 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_193.0.14.129_title" style="display:none">Recursion Check: 193.0.14.129</div>
+<div id="port53_192.5.5.241_content" style="display:none"><pre>f.root-servers.net [192.5.5.241] 53 (domain) open</pre></div>
+<div id="port53_192.5.5.241_title" style="display:none">TCP Check | 192.5.5.241:53</div>
+<div id="port853_192.5.5.241_content" style="display:none"><pre></pre></div>
+<div id="port853_192.5.5.241_title" style="display:none">TCP Check | 192.5.5.241:853</div>
+<div id="ver_192.5.5.241_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.5.5.241 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 18137
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		60	CH	TXT	"2025.12.2"
+
+;; Query time: 15 msec
+;; SERVER: 192.5.5.241#53(192.5.5.241) (UDP)
+;; WHEN: Sun Dec 21 23:33:40 -03 2025
+;; MSG SIZE  rcvd: 63</pre></div>
+<div id="ver_192.5.5.241_title" style="display:none">Bind Version Check: 192.5.5.241</div>
+<div id="rec_192.5.5.241_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.5.5.241 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 42908
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1472
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 15 msec
+;; SERVER: 192.5.5.241#53(192.5.5.241) (UDP)
+;; WHEN: Sun Dec 21 23:33:40 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_192.5.5.241_title" style="display:none">Recursion Check: 192.5.5.241</div>
+<div id="port53_208.67.222.222_content" style="display:none"><pre>dns.umbrella.com [208.67.222.222] 53 (domain) open</pre></div>
+<div id="port53_208.67.222.222_title" style="display:none">TCP Check | 208.67.222.222:53</div>
+<div id="port853_208.67.222.222_content" style="display:none"><pre>dns.opendns.com [208.67.222.222] 853 (domain-s) open</pre></div>
+<div id="port853_208.67.222.222_title" style="display:none">TCP Check | 208.67.222.222:853</div>
+<div id="ver_208.67.222.222_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @208.67.222.222 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: REFUSED, id: 53313
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 35 msec
+;; SERVER: 208.67.222.222#53(208.67.222.222) (UDP)
+;; WHEN: Sun Dec 21 23:33:48 -03 2025
+;; MSG SIZE  rcvd: 30</pre></div>
+<div id="ver_208.67.222.222_title" style="display:none">Bind Version Check: 208.67.222.222</div>
+<div id="rec_208.67.222.222_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @208.67.222.222 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 61287
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1410
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		300	IN	A	172.217.172.14
+
+;; Query time: 99 msec
+;; SERVER: 208.67.222.222#53(208.67.222.222) (UDP)
+;; WHEN: Sun Dec 21 23:33:48 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_208.67.222.222_title" style="display:none">Recursion Check: 208.67.222.222</div>
+<div id="port53_202.12.27.33_content" style="display:none"><pre>m.root-servers.net [202.12.27.33] 53 (domain) open</pre></div>
+<div id="port53_202.12.27.33_title" style="display:none">TCP Check | 202.12.27.33:53</div>
+<div id="port853_202.12.27.33_content" style="display:none"><pre></pre></div>
+<div id="port853_202.12.27.33_title" style="display:none">TCP Check | 202.12.27.33:853</div>
+<div id="ver_202.12.27.33_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @202.12.27.33 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 30946
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"9.16"
+
+;; Query time: 51 msec
+;; SERVER: 202.12.27.33#53(202.12.27.33) (UDP)
+;; WHEN: Sun Dec 21 23:33:55 -03 2025
+;; MSG SIZE  rcvd: 58</pre></div>
+<div id="ver_202.12.27.33_title" style="display:none">Bind Version Check: 202.12.27.33</div>
+<div id="rec_202.12.27.33_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @202.12.27.33 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 28366
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+
+;; Query time: 39 msec
+;; SERVER: 202.12.27.33#53(202.12.27.33) (UDP)
+;; WHEN: Sun Dec 21 23:33:55 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_202.12.27.33_title" style="display:none">Recursion Check: 202.12.27.33</div>
+<div id="port53_199.7.83.42_content" style="display:none"><pre>l.root-servers.net [199.7.83.42] 53 (domain) open</pre></div>
+<div id="port53_199.7.83.42_title" style="display:none">TCP Check | 199.7.83.42:53</div>
+<div id="port853_199.7.83.42_content" style="display:none"><pre></pre></div>
+<div id="port853_199.7.83.42_title" style="display:none">TCP Check | 199.7.83.42:853</div>
+<div id="ver_199.7.83.42_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @199.7.83.42 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 5158
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"NSD 4"
+
+;; Query time: 55 msec
+;; SERVER: 199.7.83.42#53(199.7.83.42) (UDP)
+;; WHEN: Sun Dec 21 23:34:08 -03 2025
+;; MSG SIZE  rcvd: 59</pre></div>
+<div id="ver_199.7.83.42_title" style="display:none">Bind Version Check: 199.7.83.42</div>
+<div id="rec_199.7.83.42_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @199.7.83.42 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 31387
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 67 msec
+;; SERVER: 199.7.83.42#53(199.7.83.42) (UDP)
+;; WHEN: Sun Dec 21 23:34:08 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_199.7.83.42_title" style="display:none">Recursion Check: 199.7.83.42</div>
+<div id="port53_199.7.91.13_content" style="display:none"><pre>d.root-servers.net [199.7.91.13] 53 (domain) open</pre></div>
+<div id="port53_199.7.91.13_title" style="display:none">TCP Check | 199.7.91.13:53</div>
+<div id="port853_199.7.91.13_content" style="display:none"><pre></pre></div>
+<div id="port853_199.7.91.13_title" style="display:none">TCP Check | 199.7.91.13:853</div>
+<div id="ver_199.7.91.13_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @199.7.91.13 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 4664
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1450
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"NSD 4"
+
+;; Query time: 139 msec
+;; SERVER: 199.7.91.13#53(199.7.91.13) (UDP)
+;; WHEN: Sun Dec 21 23:34:20 -03 2025
+;; MSG SIZE  rcvd: 59</pre></div>
+<div id="ver_199.7.91.13_title" style="display:none">Bind Version Check: 199.7.91.13</div>
+<div id="rec_199.7.91.13_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @199.7.91.13 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 59068
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1450
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+
+;; Query time: 139 msec
+;; SERVER: 199.7.91.13#53(199.7.91.13) (UDP)
+;; WHEN: Sun Dec 21 23:34:20 -03 2025
+;; MSG SIZE  rcvd: 835</pre></div>
+<div id="rec_199.7.91.13_title" style="display:none">Recursion Check: 199.7.91.13</div>
+<div id="port53_1.0.0.1_content" style="display:none"><pre>one.one.one.one [1.0.0.1] 53 (domain) open</pre></div>
+<div id="port53_1.0.0.1_title" style="display:none">TCP Check | 1.0.0.1:53</div>
+<div id="port853_1.0.0.1_content" style="display:none"><pre>one.one.one.one [1.0.0.1] 853 (domain-s) open</pre></div>
+<div id="port853_1.0.0.1_title" style="display:none">TCP Check | 1.0.0.1:853</div>
+<div id="ver_1.0.0.1_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @1.0.0.1 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: REFUSED, id: 3500
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; Query time: 15 msec
+;; SERVER: 1.0.0.1#53(1.0.0.1) (UDP)
+;; WHEN: Sun Dec 21 23:34:28 -03 2025
+;; MSG SIZE  rcvd: 41</pre></div>
+<div id="ver_1.0.0.1_title" style="display:none">Bind Version Check: 1.0.0.1</div>
+<div id="rec_1.0.0.1_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @1.0.0.1 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 27890
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		128	IN	A	172.217.172.142
+
+;; Query time: 15 msec
+;; SERVER: 1.0.0.1#53(1.0.0.1) (UDP)
+;; WHEN: Sun Dec 21 23:34:28 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_1.0.0.1_title" style="display:none">Recursion Check: 1.0.0.1</div>
+<div id="port53_149.112.112.112_content" style="display:none"><pre>dns.quad9.net [149.112.112.112] 53 (domain) open</pre></div>
+<div id="port53_149.112.112.112_title" style="display:none">TCP Check | 149.112.112.112:53</div>
+<div id="port853_149.112.112.112_content" style="display:none"><pre>dns.quad9.net [149.112.112.112] 853 (domain-s) open</pre></div>
+<div id="port853_149.112.112.112_title" style="display:none">TCP Check | 149.112.112.112:853</div>
+<div id="ver_149.112.112.112_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @149.112.112.112 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 42109
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"Q9-U-7.6"
+
+;; Query time: 19 msec
+;; SERVER: 149.112.112.112#53(149.112.112.112) (UDP)
+;; WHEN: Sun Dec 21 23:34:31 -03 2025
+;; MSG SIZE  rcvd: 62</pre></div>
+<div id="ver_149.112.112.112_title" style="display:none">Bind Version Check: 149.112.112.112</div>
+<div id="rec_149.112.112.112_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @149.112.112.112 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 20414
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		56	IN	A	172.217.162.238
+
+;; Query time: 19 msec
+;; SERVER: 149.112.112.112#53(149.112.112.112) (UDP)
+;; WHEN: Sun Dec 21 23:34:31 -03 2025
+;; MSG SIZE  rcvd: 55</pre></div>
+<div id="rec_149.112.112.112_title" style="display:none">Recursion Check: 149.112.112.112</div>
+<div id="port53_192.33.4.12_content" style="display:none"><pre>c.root-servers.net [192.33.4.12] 53 (domain) open</pre></div>
+<div id="port53_192.33.4.12_title" style="display:none">TCP Check | 192.33.4.12:53</div>
+<div id="port853_192.33.4.12_content" style="display:none"><pre></pre></div>
+<div id="port853_192.33.4.12_title" style="display:none">TCP Check | 192.33.4.12:853</div>
+<div id="ver_192.33.4.12_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.33.4.12 version.bind chaos txt +time=4
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 8117
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: 7a38147414e59dd5010000006948ae3e4604086fb7ab1b3f (good)
+;; QUESTION SECTION:
+;version.bind.			CH	TXT
+
+;; ANSWER SECTION:
+version.bind.		0	CH	TXT	"c-root"
+
+;; Query time: 139 msec
+;; SERVER: 192.33.4.12#53(192.33.4.12) (UDP)
+;; WHEN: Sun Dec 21 23:34:38 -03 2025
+;; MSG SIZE  rcvd: 88</pre></div>
+<div id="ver_192.33.4.12_title" style="display:none">Bind Version Check: 192.33.4.12</div>
+<div id="rec_192.33.4.12_content" style="display:none"><pre>
+; &lt;&lt;&gt;&gt; DiG 9.20.15-1~deb13u1-Debian &lt;&lt;&gt;&gt; @192.33.4.12 google.com A +recurse +time=4 +tries=1
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 43025
+;; flags: qr rd; QUERY: 1, ANSWER: 0, AUTHORITY: 13, ADDITIONAL: 27
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: 250f79000912aea6010000006948ae3ea9ad4286069bf4c4 (good)
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; AUTHORITY SECTION:
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+
+;; ADDITIONAL SECTION:
+m.gtld-servers.net.	172800	IN	A	192.55.83.30
+l.gtld-servers.net.	172800	IN	A	192.41.162.30
+k.gtld-servers.net.	172800	IN	A	192.52.178.30
+j.gtld-servers.net.	172800	IN	A	192.48.79.30
+i.gtld-servers.net.	172800	IN	A	192.43.172.30
+h.gtld-servers.net.	172800	IN	A	192.54.112.30
+g.gtld-servers.net.	172800	IN	A	192.42.93.30
+f.gtld-servers.net.	172800	IN	A	192.35.51.30
+e.gtld-servers.net.	172800	IN	A	192.12.94.30
+d.gtld-servers.net.	172800	IN	A	192.31.80.30
+c.gtld-servers.net.	172800	IN	A	192.26.92.30
+b.gtld-servers.net.	172800	IN	A	192.33.14.30
+a.gtld-servers.net.	172800	IN	A	192.5.6.30
+m.gtld-servers.net.	172800	IN	AAAA	2001:501:b1f9::30
+l.gtld-servers.net.	172800	IN	AAAA	2001:500:d937::30
+k.gtld-servers.net.	172800	IN	AAAA	2001:503:d2d::30
+j.gtld-servers.net.	172800	IN	AAAA	2001:502:7094::30
+i.gtld-servers.net.	172800	IN	AAAA	2001:503:39c1::30
+h.gtld-servers.net.	172800	IN	AAAA	2001:502:8cc::30
+g.gtld-servers.net.	172800	IN	AAAA	2001:503:eea3::30
+f.gtld-servers.net.	172800	IN	AAAA	2001:503:d414::30
+e.gtld-servers.net.	172800	IN	AAAA	2001:502:1ca1::30
+d.gtld-servers.net.	172800	IN	AAAA	2001:500:856e::30
+c.gtld-servers.net.	172800	IN	AAAA	2001:503:83eb::30
+b.gtld-servers.net.	172800	IN	AAAA	2001:503:231d::2:30
+a.gtld-servers.net.	172800	IN	AAAA	2001:503:a83e::2:30
+
+;; Query time: 139 msec
+;; SERVER: 192.33.4.12#53(192.33.4.12) (UDP)
+;; WHEN: Sun Dec 21 23:34:38 -03 2025
+;; MSG SIZE  rcvd: 863</pre></div>
+<div id="rec_192.33.4.12_title" style="display:none">Recursion Check: 192.33.4.12</div>
 </body>
 </html>

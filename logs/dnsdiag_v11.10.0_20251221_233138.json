@@ -1,8 +1,8 @@
 {
   "meta": {
-    "script_version": "11.7.0",
-    "timestamp_start": "21/12/2025 22:30:09",
-    "duration_seconds": 277,
+    "script_version": "11.10.0",
+    "timestamp_start": "21/12/2025 23:31:38",
+    "duration_seconds": 209,
     "user": "flashbsb",
     "hostname": "debian02"
   },
@@ -29,7 +29,7 @@
      "servers": [ {
              "ip": "192.203.230.10",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "OK", "latency": 16.769, "jitter": 2.581, "loss": 0 },
+             "ping": { "status": "OK", "latency": 14.767, "jitter": 2.683, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -40,7 +40,7 @@
            },{
              "ip": "198.41.0.4",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 165.586, "jitter": 2.919, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 163.731, "jitter": 3.083, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -51,7 +51,7 @@
            },{
              "ip": "208.67.220.220",
              "groups": "OPENDNS",
-             "ping": { "status": "OK", "latency": 27.431, "jitter": 2.122, "loss": 0 },
+             "ping": { "status": "OK", "latency": 26.269, "jitter": 1.976, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -62,7 +62,7 @@
            },{
              "ip": "8.8.4.4",
              "groups": "GOOGLE",
-             "ping": { "status": "OK", "latency": 26.023, "jitter": 1.570, "loss": 0 },
+             "ping": { "status": "OK", "latency": 26.909, "jitter": 1.853, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -73,7 +73,7 @@
            },{
              "ip": "1.1.1.1",
              "groups": "CLOUDFLARE",
-             "ping": { "status": "OK", "latency": 19.573, "jitter": 10.425, "loss": 0 },
+             "ping": { "status": "OK", "latency": 18.244, "jitter": 4.147, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -84,7 +84,7 @@
            },{
              "ip": "198.97.190.53",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "OK", "latency": 54.600, "jitter": 2.151, "loss": 0 },
+             "ping": { "status": "OK", "latency": 53.318, "jitter": 3.431, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -95,7 +95,7 @@
            },{
              "ip": "192.36.148.17",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 183.074, "jitter": 2.959, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 187.562, "jitter": 5.600, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -106,7 +106,7 @@
            },{
              "ip": "9.9.9.9",
              "groups": "QUAD9",
-             "ping": { "status": "OK", "latency": 15.017, "jitter": 2.811, "loss": 0 },
+             "ping": { "status": "OK", "latency": 18.271, "jitter": 7.189, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -128,7 +128,7 @@
            },{
              "ip": "8.8.8.8",
              "groups": "GOOGLE",
-             "ping": { "status": "OK", "latency": 33.769, "jitter": 1.309, "loss": 0 },
+             "ping": { "status": "OK", "latency": 32.926, "jitter": 1.462, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -139,7 +139,7 @@
            },{
              "ip": "192.58.128.30",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 162.006, "jitter": 2.375, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 158.959, "jitter": 1.858, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -150,7 +150,7 @@
            },{
              "ip": "199.9.14.201",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 178.029, "jitter": 1.919, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 179.507, "jitter": 1.668, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -161,7 +161,7 @@
            },{
              "ip": "193.0.14.129",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 220.725, "jitter": 7.334, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 215.374, "jitter": 1.436, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -172,7 +172,7 @@
            },{
              "ip": "192.5.5.241",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "OK", "latency": 15.310, "jitter": 0.970, "loss": 0 },
+             "ping": { "status": "OK", "latency": 16.647, "jitter": 5.101, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -183,7 +183,7 @@
            },{
              "ip": "208.67.222.222",
              "groups": "OPENDNS",
-             "ping": { "status": "OK", "latency": 28.451, "jitter": 1.242, "loss": 0 },
+             "ping": { "status": "OK", "latency": 37.615, "jitter": 5.422, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -194,7 +194,7 @@
            },{
              "ip": "202.12.27.33",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "OK", "latency": 39.824, "jitter": 0.943, "loss": 0 },
+             "ping": { "status": "OK", "latency": 37.201, "jitter": 3.178, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -205,7 +205,7 @@
            },{
              "ip": "199.7.83.42",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "OK", "latency": 53.589, "jitter": 2.230, "loss": 0 },
+             "ping": { "status": "OK", "latency": 58.921, "jitter": 8.348, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -216,7 +216,7 @@
            },{
              "ip": "199.7.91.13",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 153.677, "jitter": 1.021, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 154.876, "jitter": 2.259, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -227,7 +227,7 @@
            },{
              "ip": "1.0.0.1",
              "groups": "CLOUDFLARE",
-             "ping": { "status": "OK", "latency": 11.513, "jitter": 2.946, "loss": 0 },
+             "ping": { "status": "OK", "latency": 13.021, "jitter": 3.606, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -238,7 +238,7 @@
            },{
              "ip": "149.112.112.112",
              "groups": "QUAD9",
-             "ping": { "status": "OK", "latency": 11.161, "jitter": 1.374, "loss": 0 },
+             "ping": { "status": "OK", "latency": 16.147, "jitter": 1.026, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "OPEN",
@@ -249,7 +249,7 @@
            },{
              "ip": "192.33.4.12",
              "groups": "ROOT_SERVERS",
-             "ping": { "status": "SLOW", "latency": 140.857, "jitter": 0.501, "loss": 0 },
+             "ping": { "status": "SLOW", "latency": 138.521, "jitter": 1.973, "loss": 0 },
              "capabilities": {
                  "port53": "OPEN",
                  "recursion": "CLOSED",
@@ -260,13 +260,13 @@
            } ],
      "zones": [ {
                "domain": "google.com",
-               "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "soa": "847066381", "axfr": "DENIED" },{ "server": "8.8.4.4", "group": "GOOGLE", "soa": "847364220", "axfr": "DENIED" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "soa": "847066381", "axfr": "DENIED" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "soa": "847066381", "axfr": "DENIED" } ]
+               "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "soa": "847364220", "axfr": "DENIED" },{ "server": "8.8.4.4", "group": "GOOGLE", "soa": "847364220", "axfr": "DENIED" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "soa": "847066381", "axfr": "DENIED" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "soa": "847066381", "axfr": "DENIED" } ]
              },{
                "domain": "wikipedia.org",
                "results": [ { "server": "9.9.9.9", "group": "QUAD9", "soa": "2025120109", "axfr": "DENIED" },{ "server": "149.112.112.112", "group": "QUAD9", "soa": "2025120109", "axfr": "DENIED" },{ "server": "208.67.222.222", "group": "OPENDNS", "soa": "2025120109", "axfr": "DENIED" },{ "server": "208.67.220.220", "group": "OPENDNS", "soa": "2025120109", "axfr": "DENIED" } ]
              },{
                "domain": "cisco.com",
-               "results": [ { "server": "208.67.222.222", "group": "OPENDNS", "soa": "1149507", "axfr": "DENIED" },{ "server": "208.67.220.220", "group": "OPENDNS", "soa": "1149511", "axfr": "DENIED" } ]
+               "results": [ { "server": "208.67.222.222", "group": "OPENDNS", "soa": "1149519", "axfr": "DENIED" },{ "server": "208.67.220.220", "group": "OPENDNS", "soa": "1149519", "axfr": "DENIED" } ]
              },{
                "domain": "ietf.org",
                "results": [ { "server": "198.41.0.4", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "199.9.14.201", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.33.4.12", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "199.7.91.13", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.203.230.10", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.5.5.241", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.112.36.4", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "198.97.190.53", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.36.148.17", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "192.58.128.30", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "193.0.14.129", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "199.7.83.42", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" },{ "server": "202.12.27.33", "group": "ROOT_SERVERS", "soa": "TIMEOUT", "axfr": "DENIED" } ]
@@ -280,7 +280,7 @@
      "records": [ {
                        "target": "google.com",
                        "type": "A",
-                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "142.251.132.238" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "142.251.132.238" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.110" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.110" } ]
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "172.217.172.14" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "172.217.162.206" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "172.217.172.142" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "172.217.172.142" } ]
                      },{
                        "target": "google.com",
                        "type": "AAAA",
@@ -292,11 +292,11 @@
                      },{
                        "target": "www.google.com",
                        "type": "A",
-                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "172.217.172.4" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "172.217.172.4" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.251.150.119 142.251.151.119 142.251.152.119 142.251.153.119 142.251.154.119 142.251.155.119 142.251.156.119 142.251.157.119" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "172.217.30.100" } ]
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.219.36" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.219.36" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "172.217.30.100" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "172.217.30.100" } ]
                      },{
                        "target": "www.google.com",
                        "type": "AAAA",
-                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:816::2004" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80e::2004" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:847::2004" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:847::2004" } ]
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:813::2004" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:813::2004" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:847::2004" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:847::2004" } ]
                      },{
                        "target": "www.google.com",
                        "type": "TXT",
@@ -304,11 +304,11 @@
                      },{
                        "target": "mail.google.com",
                        "type": "A",
-                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.78.165" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.78.165" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.101" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.219.197" } ]
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "142.250.218.229" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "142.251.132.37" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.219.197" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "142.250.78.101" } ]
                      },{
                        "target": "mail.google.com",
                        "type": "AAAA",
-                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80e::2005" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80e::2005" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:816::2005" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:800::2005" } ]
+                       "results": [ { "server": "8.8.8.8", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:80f::2005" },{ "server": "8.8.4.4", "group": "GOOGLE", "status": "NOERROR", "answer": "2800:3f0:4004:812::2005" },{ "server": "1.1.1.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:816::2005" },{ "server": "1.0.0.1", "group": "CLOUDFLARE", "status": "NOERROR", "answer": "2800:3f0:4001:816::2005" } ]
                      },{
                        "target": "mail.google.com",
                        "type": "TXT",
