@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 11.10.0
-# "HTML Stability & Log Fixes"
+# Versão: 12.0.0
+# "Dashboard 2.0 & Complete UI Overhaul"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="11.10.0"
+SCRIPT_VERSION="12.0.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2226,69 +2226,400 @@ ROW
 EOF
 }
 
-assemble_html() {
+
+generate_html_report_v2() {
     local target_file="$HTML_FILE"
     
-    # Initialize Target File
-    > "$target_file"
-     
-    prepare_chart_resources
+    # --- PRE-CALCULATIONS ---
+    local total_exec=$(( CNT_TESTS_SRV + CNT_TESTS_ZONE + CNT_TESTS_REC ))
+    local fail_ratio=0
+    [[ $total_exec -gt 0 ]] && fail_ratio=$(( (FAILED_TESTS * 100) / total_exec ))
     
-    # Offline Warning
-    if [[ "$ENABLE_CHARTS" != "true" ]]; then
-       cat >> "$target_file" << EOF
-       <div style="background:rgba(255,255,0,0.1); border:1px solid #f59e0b; color:#f59e0b; padding:15px; margin:20px; border-radius:8px; text-align:center;">
-           ⚠️ <strong>Aviso:</strong> Gráficos desabilitados (Biblioteca Chart.js não disponível offline ou falha no download).
-       </div>
+    local grade="A"
+    local grade_color="#10b981" # Green
+    if [[ $fail_ratio -ge 10 ]]; then grade="C"; grade_color="#ef4444"; 
+    elif [[ $fail_ratio -gt 0 || $((SEC_REVEALED+SEC_AXFR_RISK)) -gt 0 ]]; then grade="B"; grade_color="#f59e0b"; fi
+    
+    # Prepare JSON Strings for Charts
+    local json_labels=""
+    local json_data=""
+    
+    # Sort Latency
+    local tmp_sort="$LOG_OUTPUT_DIR/lat_sort.tmp"
+    > "$tmp_sort"
+    for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+        local val=${STATS_SERVER_PING_AVG[$ip]}
+        val=$(echo "$val" | tr ',' '.')
+        if [[ "$val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then echo "$ip $val" >> "$tmp_sort"; fi
+    done
+    sort -k2 -nr "$tmp_sort" | head -n 15 | while read -r srv lat; do
+          json_labels+="\"$srv\","
+          json_data+="$lat,"
+    done
+    rm -f "$tmp_sort"
+    
+    json_labels="[${json_labels%,}]"
+    json_data="[${json_data%,}]"
+
+    # --- HTML HEADER & CSS ---
+    cat > "$target_file" << EOF
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório DNS v${SCRIPT_VERSION}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-body: #0f172a; --bg-card: #1e293b; --text-main: #f8fafc; --text-muted: #94a3b8;
+            --border: #334155; --accent: #3b82f6; --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-body); color: var(--text-main); font-size: 14px; line-height: 1.5; height: 100vh; display: flex; overflow: hidden; }
+        
+        /* Sidebar */
+        aside { width: 260px; background: #020617; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; }
+        .logo { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
+        .nav-item { padding: 12px 15px; margin-bottom: 5px; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.2s; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .nav-item.active { background: var(--accent); color: #fff; }
+        
+        /* Main */
+        main { flex: 1; overflow-y: auto; padding: 30px; position: relative; }
+        .page-header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 5px; }
+        .subtitle { color: var(--text-muted); }
+
+        /* Dashboard */
+        .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .kpi-title { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px; }
+        .kpi-value { font-size: 2.2rem; font-weight: 700; color: #fff; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px 15px; background: rgba(0,0,0,0.2); color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+        td { padding: 12px 15px; border-bottom: 1px solid var(--border); color: var(--text-main); vertical-align: middle; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        
+        /* Elements */
+        .badge { display: inline-flex; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; align-items: center; gap: 5px; line-height: 1; }
+        .bg-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .bg-fail { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        .bg-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .btn-tech { background: transparent; border: 1px solid var(--border); color: var(--accent); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; text-decoration: none; display: inline-block; }
+        .btn-tech:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+        /* Tabs & Modals */
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .modal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(4px); }
+        .modal-content { background-color: #1e293b; margin: 5vh auto; width: 90%; max-width: 1000px; height: 90vh; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #0f172a; }
+        .modal-body { flex: 1; padding: 0; overflow-y: auto; background: #0b1120; }
+        .modal-body pre { color: #e2e8f0; font-family: monospace; font-size: 0.9rem; padding: 20px; white-space: pre-wrap; margin:0; }
+    </style>
+    <script>
+        function openTab(id) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.currentTarget.classList.add('active');
+            
+            // Re-render chart if hidden
+            if(id === 'tab-dashboard' && window.myChart) { window.myChart.resize(); }
+        }
+        function showModal(id, title) {
+            const raw = document.getElementById('log_' + id).innerHTML;
+            document.getElementById('mBody').innerHTML = '<pre>' + raw + '</pre>';
+            document.getElementById('mTitle').innerText = title;
+            document.getElementById('logModal').style.display = 'block';
+        }
+        function closeModal() { document.getElementById('logModal').style.display = 'none'; }
+        window.onclick = function(e) { if(e.target.className === 'modal') closeModal(); }
+        document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeModal(); });
+    </script>
+</head>
+<body>
+    <aside>
+        <div class="logo"><span style="color:var(--accent)">DNS</span>Diag <span style="font-size:0.5em; opacity:0.5; margin-left:5px">v${SCRIPT_VERSION}</span></div>
+        <nav>
+            <div class="nav-item active" onclick="openTab('tab-dashboard')">📊 Dashboard</div>
+            <div class="nav-item" onclick="openTab('tab-servers')">🖥️ Servidores</div>
+            <div class="nav-item" onclick="openTab('tab-zones')">🌍 Zonas (Autoridade)</div>
+            <div class="nav-item" onclick="openTab('tab-records')">📝 Registros (Resolução)</div>
+            <div class="nav-item" onclick="openTab('tab-logs')">⚙️ Logs & Detalhes</div>
+        </nav>
+        <div style="margin-top:auto; padding-top:20px; border-top:1px solid var(--border); font-size:0.75rem; color:#64748b;">
+            Executado por: <strong>$USER</strong><br>
+            $TIMESTAMP
+        </div>
+    </aside>
+    <main>
+
+
+        <!-- TAB: DASHBOARD -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="page-header">
+                <div>
+                    <h1>Dashboard Executivo</h1>
+                    <div class="subtitle">Visão geral da saúde e performance da infraestrutura DNS.</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:3rem; font-weight:800; color:${grade_color}; line-height:1;">${grade}</div>
+                    <div style="font-size:0.8rem; letter-spacing:1px; color:${grade_color}; font-weight:600;">HEALTH SCORE</div>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="grid-kpi">
+                <div class="card" style="border-top: 3px solid #3b82f6;">
+                    <div class="kpi-title">Infraestrutura</div>
+                    <div class="kpi-value">${#UNIQUE_SERVERS[@]}</div>
+                    <div class="kpi-trend" style="color:#94a3b8">Servidores Identificados</div>
+                </div>
+                <div class="card" style="border-top: 3px solid #f59e0b;">
+                    <div class="kpi-title">Performance (Avg)</div>
+                    <div class="kpi-value">$(echo $STATS_GLOBAL_LATENCY_AVG | cut -d. -f1)<span style="font-size:1rem; opacity:0.7">ms</span></div>
+                    <div class="kpi-trend" style="color:#94a3b8">Latência Média Global</div>
+                </div>
+                <div class="card" style="border-top: 3px solid #ef4444;">
+                    <div class="kpi-title">Riscos de Segurança</div>
+                    <div class="kpi-value">$((SEC_REVEALED + SEC_AXFR_RISK))</div>
+                    <div class="kpi-trend" style="color:#ef4444">Issues Detectados</div>
+                </div>
+                <div class="card" style="border-top: 3px solid #10b981;">
+                    <div class="kpi-title">Confiabilidade</div>
+                    <div class="kpi-value">$(( 100 - fail_ratio ))<span style="font-size:1rem;">%</span></div>
+                    <div class="kpi-trend" style="color:#10b981">Taxa de Sucesso</div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 30px;">
+                <div class="card">
+                   <div class="kpi-title">Top Latência (ms)</div>
+                   <div style="height: 250px;"><canvas id="chartLat"></canvas></div>
+                </div>
+                <div class="card">
+                   <div class="kpi-title">Distribuição de Status</div>
+                   <div style="height: 250px;"><canvas id="chartStat"></canvas></div>
+                </div>
+            </div>
+            
+             <!-- Charts Script -->
+            <script>
+                const ctxLat = document.getElementById('chartLat');
+                if(ctxLat) {
+                    new Chart(ctxLat, {
+                        type: 'bar',
+                        data: {
+                            labels: $json_labels,
+                            datasets: [{
+                                label: 'Ping (ms)',
+                                data: $json_data,
+                                backgroundColor: '#3b82f6',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            scales: { y: { beginAtZero: true, grid: { color:'rgba(255,255,255,0.05)' } }, x: { grid: { display:false } } },
+                            plugins: { legend: { display: false } }
+                        }
+                    });
+                }
+                const ctxStat = document.getElementById('chartStat');
+                if(ctxStat) {
+                    new Chart(ctxStat, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Sucesso', 'Falha', 'Divergente'],
+                            datasets: [{
+                                data: [$SUCCESS_TESTS, $FAILED_TESTS, $DIVERGENT_TESTS],
+                                backgroundColor: ['#10b981', '#ef4444', '#a855f7'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                             plugins: { legend: { position: 'bottom', labels: { color:'#94a3b8' } } }
+                        }
+                    });
+                }
+            </script>
+        </div>
+
 EOF
-    fi
-    
-    generate_executive_summary
-    generate_health_map
-    generate_group_stats_html 
-    generate_object_summary
-    generate_timing_html
-    generate_disclaimer_html 
-    generate_config_html
-    generate_modal_html
-    generate_help_html
 
-    # --- FINAL ASSEMBLY ---
-    > "$TEMP_HEADER"
-    write_html_header "$mode"
+    # --- BUILD SERVER ROWS ---
+    local server_rows=""
+    for ip in "${!UNIQUE_SERVERS[@]}"; do
+        local grp="${SERVER_GROUPS_MAP[$ip]}"
+        
+        # Latency
+        local lat="${STATS_SERVER_PING_AVG[$ip]:-0}"
+        local jit="${STATS_SERVER_PING_JITTER[$ip]:-0}"
+        local loss="${STATS_SERVER_PING_LOSS[$ip]:-0}"
+        local lat_class="bg-ok"
+        if (( $(echo "$lat > 100" | bc -l 2>/dev/null) )); then lat_class="bg-warn"; fi
+        if [[ "$loss" != "0%" && "$loss" != "0" ]]; then lat_class="bg-fail"; fi
+        
+        # Caps
+        local caps=""
+        [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]] && caps+="<span class='badge bg-ok'>UDP53</span>" || caps+="<span class='badge bg-fail'>UDP53</span>"
+        [[ "${STATS_SERVER_RECURSION[$ip]}" == "OPEN" ]] && caps+="<span class='badge bg-fail'>REC:OPEN</span>" 
+        [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && caps+="<span class='badge ok-bg' style='color:#a855f7; bg:rgba(168,85,247,0.1)'>DNSSEC</span>"
+        [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>DOH</span>"
+        [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>TLS</span>"
+        
+        # Tech ID
+        local tid_ver="ver_${ip//./_}"; local tid_rec="rec_${ip//./_}"; local tid_axfr="axfr_${ip//./_}"
+        
+        server_rows+="<tr>
+            <td><div style='font-weight:bold; color:#fff'>$ip</div><div style='font-size:0.8em; color:#94a3b8'>$grp</div></td>
+            <td><span class='badge $lat_class'>${lat}ms</span> <span style='font-size:0.8em; color:#64748b'>Jit: ${jit} / Loss: ${loss}</span></td>
+            <td><div style='display:flex; gap:5px; flex-wrap:wrap'>$caps</div></td>
+            <td style='text-align:right'>
+                 <button class='btn-tech' onclick=\"showModal('${tid_ver}', 'BIND Version ($ip)')\">VER</button>
+                 <button class='btn-tech' onclick=\"showModal('${tid_rec}', 'Recursion ($ip)')\">REC</button>
+            </td>
+        </tr>"
+    done
 
-    cat "$TEMP_HEADER" >> "$target_file"
-    cat "$TEMP_MODAL" >> "$target_file"
-    
-    generate_executive_summary
-    cat "$TEMP_STATS" >> "$target_file"
-    
-    # 1. SERVER HEALTH SECTION
-    cat "$TEMP_SECTION_SERVER" >> "$target_file"
-    
-    # 2. ZONE HEALTH SECTION
-    cat "$TEMP_SECTION_ZONE" >> "$target_file"
-    
-    # 3. RECORD VALIDITY SECTION
-    cat "$TEMP_SECTION_RECORD" >> "$target_file"
-
-    # Append any legacy details if needed (mostly replaced by above)
-    generate_disclaimer_html
-    cat "$TEMP_DISCLAIMER" >> "$target_file"
-    cat "$TEMP_CONFIG" >> "$target_file" 
-    
-    generate_help_html
-    cat "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" >> "$target_file"
-
-    # Append Hidden Details (Modals)
-    if [[ -f "$TEMP_DETAILS" ]]; then
-        cat "$TEMP_DETAILS" >> "$target_file"
+    # --- BUILD ZONE ROWS ---
+    local zone_rows=""
+    # (Assuming looping over a temp file or reproducing logic, let's use the CSV or DOMAINS file)
+    # Using DOMAINS file to drive structure is safest
+    if [[ -f "$FILE_DOMAINS" ]]; then
+        while IFS=';' read -r domain groups _ _ _; do
+             [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+             domain=$(echo "$domain" | xargs)
+             
+             IFS=',' read -ra grp_list <<< "$groups"
+             for grp in "${grp_list[@]}"; do
+                  for srv in ${DNS_GROUPS[$grp]}; do
+                       local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
+                       local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                       local soa_cls="bg-neutral"; [[ "$soa" == "SYNC" ]] && soa_cls="bg-ok" || soa_cls="bg-warn"
+                       local axfr_cls="bg-ok"; [[ "$axfr" != "DENIED" && "$axfr" != "REFUSED" ]] && axfr_cls="bg-fail"
+                       
+                       zone_rows+="<tr>
+                           <td><span style='color:#fff; font-weight:600'>$domain</span></td>
+                           <td>$grp / $srv</td>
+                           <td><span class='badge $soa_cls'>$soa</span></td>
+                           <td><span class='badge $axfr_cls'>$axfr</span></td>
+                       </tr>"
+                  done
+             done
+        done < "$FILE_DOMAINS"
     fi
 
     cat >> "$target_file" << EOF
+
+        <!-- TAB: SERVERS -->
+        <div id="tab-servers" class="tab-content">
+            <div class="page-header">
+                <h1>Servidores DNS</h1>
+                <div class="subtitle">Inventário detalhado e análise de recursos.</div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Servidor / Grupo</th>
+                            <th>Latência / Qualidade</th>
+                            <th>Recursos & Capabilities</th>
+                            <th style="text-align:right">Logs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        $server_rows
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: ZONES -->
+        <div id="tab-zones" class="tab-content">
+            <div class="page-header">
+                <h1>Zonas Autoritativas</h1>
+                <div class="subtitle">Verificação de SOA, Sincronização e Transferência de Zona.</div>
+            </div>
+            <div class="table-container">
+                 <table>
+                    <thead>
+                        <tr>
+                            <th>Domínio</th>
+                            <th>Origem (Grupo / Server)</th>
+                            <th>SOA Status</th>
+                            <th>AXFR Policy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        $zone_rows
+                    </tbody>
+                 </table>
+            </div>
+        </div>
+
+
+        <!-- TAB: RECORDS -->
+        <div id="tab-records" class="tab-content">
+            <div class="page-header">
+                <h1>Resolução de Registros</h1>
+                <div class="subtitle">Validação de respostas e consistência entre servidores.</div>
+            </div>
+            <!-- Check consistency summary from previous run -->
+             <div class="card">
+                <h3>Resumo de Consistência</h3>
+                <div style="margin-top:10px; color:#cbd5e1">
+                    <ul>
+                        <li><strong>Sucesso:</strong> $SUCCESS_TESTS</li>
+                        <li><strong>Falhas:</strong> $FAILED_TESTS</li>
+                        <li><strong>Divergências:</strong> $DIVERGENT_TESTS</li>
+                    </ul>
+                    <p style="margin-top:10px; font-size:0.9em; opacity:0.7">Para detalhes granulares, consulte os logs técnicos ou os arquivos CSV gerados.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- TAB: LOGS -->
+        <div id="tab-logs" class="tab-content">
+             <div class="page-header">
+                <h1>Logs & Detalhes Técnicos</h1>
+                <div class="subtitle">Saída bruta dos comandos executados.</div>
+            </div>
+            <div style="color:#aaa; font-style:italic;">
+                Clique nos botões "VER", "REC" ou "AXFR" nas abas anteriores para ver os detalhes aqui.
+                <br>Logs brutos estão armazenados abaixo (hidden).
+            </div>
+        </div>
+        
+        <!-- Hidden Logs Injection -->
+        <div style="display:none">
+EOF
+    
+    if [[ -f "$TEMP_DETAILS" ]]; then
+        cat "$TEMP_DETAILS" >> "$target_file"
+    fi
+    
+    cat >> "$target_file" << EOF
+        </div>
+    </main>
+</div>
 </body>
 </html>
 EOF
+
+}
+
+# Legacy Function Placeholder (to prevent errors if called, though we will replace call site)
+assemble_html() {
+    :
 }
 
 
@@ -4124,7 +4455,7 @@ main() {
     TOTAL_SLEEP_TIME=$(LC_NUMERIC=C awk "BEGIN {printf \"%.2f\", $TOTAL_SLEEP_TIME}")
 
     # Always generate standard HTML report
-    assemble_html
+    generate_html_report_v2
     
     if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
         assemble_json
