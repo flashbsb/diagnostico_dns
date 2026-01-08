@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.0.0
-# "Dashboard 2.0 & Complete UI Overhaul"
+# Versão: 12.1.1
+# "Full Dashboard & Legacy Features Restored, fixed some bugs"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.0.0"
+SCRIPT_VERSION="12.1.1"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2227,6 +2227,7 @@ EOF
 }
 
 
+
 generate_html_report_v2() {
     local target_file="$HTML_FILE"
     
@@ -2260,6 +2261,118 @@ generate_html_report_v2() {
     
     json_labels="[${json_labels%,}]"
     json_data="[${json_data%,}]"
+
+    # --- BUILD SERVER ROWS ---
+    local server_rows=""
+    for ip in "${!UNIQUE_SERVERS[@]}"; do
+        local grp="${SERVER_GROUPS_MAP[$ip]}"
+        
+        local lat="${STATS_SERVER_PING_AVG[$ip]:-0}"
+        local jit="${STATS_SERVER_PING_JITTER[$ip]:-0}"
+        local loss="${STATS_SERVER_PING_LOSS[$ip]:-0}"
+        local lat_class="bg-ok"
+        if (( $(echo "$lat > 100" | bc -l 2>/dev/null) )); then lat_class="bg-warn"; fi
+        if [[ "$loss" != "0%" && "$loss" != "0" ]]; then lat_class="bg-fail"; fi
+        
+        # Capability Badges
+        local caps=""
+        # UDP53
+        if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then caps+="<span class='badge bg-ok'>UDP</span>"; else caps+="<span class='badge bg-fail'>UDP</span>"; fi
+        # TCP53 (New)
+        if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then caps+="<span class='badge bg-ok'>TCP</span>"; else caps+="<span class='badge bg-fail'>TCP</span>"; fi
+        
+        # Security Features
+        [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && caps+="<span class='badge ok-bg' style='color:#a855f7;'>DNSSEC</span>"
+        [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>DOH</span>"
+        [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>TLS</span>"
+        [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>COOKIE</span>"
+        [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>EDNS</span>"
+
+        # Version & Recursion Status Text - More explicit
+        local ver_st="${STATS_SERVER_VERSION[$ip]}"
+        local rec_st="${STATS_SERVER_RECURSION[$ip]}"
+        local ver_cls="bg-neutral"; [[ "$ver_st" == "HIDDEN" ]] && ver_cls="bg-ok" || ver_cls="bg-fail"
+        local rec_cls="bg-neutral"; [[ "$rec_st" == "CLOSED" ]] && rec_cls="bg-ok" || rec_cls="bg-fail"
+        
+        local tid_ver="ver_${ip//./_}"; local tid_rec="rec_${ip//./_}"
+        
+        server_rows+="<tr>
+            <td><div style='font-weight:bold; color:#fff'>$ip</div><div style='font-size:0.8em; color:#94a3b8'>$grp</div></td>
+            <td><span class='badge $lat_class'>${lat}ms</span> <span style='font-size:0.8em; color:#64748b'>Jit: ${jit} / Loss: ${loss}</span></td>
+            <td><div style='display:flex; gap:5px; flex-wrap:wrap'>$caps</div></td>
+            <td>
+                <span class='badge $ver_cls' style='cursor:pointer' onclick=\"showModal('${tid_ver}', 'BIND Version ($ip)')\">VER: $ver_st</span>
+                <span class='badge $rec_cls' style='cursor:pointer' onclick=\"showModal('${tid_rec}', 'Recursion ($ip)')\">REC: $rec_st</span>
+            </td>
+        </tr>"
+    done
+
+    # --- BUILD ZONE ROWS ---
+    local zone_rows=""
+    if [[ -f "$FILE_DOMAINS" ]]; then
+        while IFS=';' read -r domain groups _ _ _; do
+             [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+             domain=$(echo "$domain" | xargs)
+             IFS=',' read -ra grp_list <<< "$groups"
+             for grp in "${grp_list[@]}"; do
+                  for srv in ${DNS_GROUPS[$grp]}; do
+                       local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
+                       local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                       local soa_cls="bg-neutral"
+                       # Rudimentary SOA check: if numeric, assume OK-ish, if TIMEOUT/ERR fail
+                       if [[ "$soa" =~ ^[0-9]+$ ]]; then soa_cls="bg-ok"; else soa_cls="bg-warn"; fi
+                       
+                       local axfr_cls="bg-ok"; [[ "$axfr" != "DENIED" && "$axfr" != "REFUSED" ]] && axfr_cls="bg-fail"
+                       
+                       zone_rows+="<tr>
+                            <td><span style='color:#fff; font-weight:600'>$domain</span></td>
+                            <td>$grp / $srv</td>
+                            <td style='font-family:monospace'><span class='badge $soa_cls'>$soa</span></td>
+                            <td><span class='badge $axfr_cls'>$axfr</span></td>
+                        </tr>"
+                  done
+             done
+        done < "$FILE_DOMAINS"
+    fi
+
+    # --- BUILD RECORD ROWS ---
+    local record_rows=""
+    # Iterate over sorted keys
+    local tmp_rec_keys="$LOG_OUTPUT_DIR/rec_keys.tmp"
+    for key in "${!STATS_RECORD_RES[@]}"; do echo "$key" >> "$tmp_rec_keys"; done
+    if [[ -s "$tmp_rec_keys" ]]; then
+        sort "$tmp_rec_keys" | while read -r key; do
+             IFS='|' read -r r_dom r_type r_grp r_srv <<< "$key"
+             local r_status="${STATS_RECORD_RES[$key]}"
+             local r_ans="${STATS_RECORD_ANSWER[$key]}"
+             local r_lat="${STATS_RECORD_LATENCY[$key]}"
+             local r_cons="${STATS_RECORD_CONSISTENCY[$r_dom|$r_type|$r_grp]}"
+             
+             local st_cls="bg-neutral"
+             [[ "$r_status" == "NOERROR" || "$r_status" == "OK" ]] && st_cls="bg-ok"
+             [[ "$r_status" == "NXDOMAIN" || "$r_status" == "REFUSED" || "$r_status" == "SERVFAIL" ]] && st_cls="bg-fail"
+             
+             local cons_badge=""
+             if [[ "$r_cons" == "DIVERGENT" ]]; then
+                 cons_badge="<span class='badge bg-fail'>DIVERGENT</span>"
+             else
+                 cons_badge="<span class='badge bg-neutral'>MATCH</span>"
+             fi
+             
+             # Full Answer logic
+             local ans_display="<div style='max-height:60px; overflow-y:auto; font-size:0.8em; white-space:pre-wrap;'>$r_ans</div>"
+             
+             record_rows+="<tr>
+                 <td><div style='font-weight:bold; color:#fff'>${r_dom}</div><div style='font-size:0.75rem; color:#64748b'>${r_type}</div></td>
+                 <td>${r_grp} / ${r_srv}</td>
+                 <td><span class='badge $st_cls'>$r_status</span></td>
+                 <td>$ans_display</td>
+                 <td>$cons_badge</td>
+                 <td style='text-align:right; font-size:0.85em'>${r_lat}ms</td>
+             </tr>"
+        done
+        rm -f "$tmp_rec_keys"
+    fi
 
     # --- HTML HEADER & CSS ---
     cat > "$target_file" << EOF
@@ -2308,6 +2421,7 @@ generate_html_report_v2() {
         .bg-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; }
         .bg-fail { background: rgba(239, 68, 68, 0.15); color: #f87171; }
         .bg-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .bg-neutral { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
         .btn-tech { background: transparent; border: 1px solid var(--border); color: var(--accent); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; text-decoration: none; display: inline-block; }
         .btn-tech:hover { background: var(--accent); color: white; border-color: var(--accent); }
 
@@ -2321,6 +2435,8 @@ generate_html_report_v2() {
         .modal-header { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #0f172a; }
         .modal-body { flex: 1; padding: 0; overflow-y: auto; background: #0b1120; }
         .modal-body pre { color: #e2e8f0; font-family: monospace; font-size: 0.9rem; padding: 20px; white-space: pre-wrap; margin:0; }
+        
+        .section-header { color: var(--accent); font-size:1.1em; margin-top:20px; margin-bottom:10px; border-bottom:1px solid #334155; padding-bottom:5px; }
     </style>
     <script>
         function openTab(id) {
@@ -2351,7 +2467,9 @@ generate_html_report_v2() {
             <div class="nav-item" onclick="openTab('tab-servers')">🖥️ Servidores</div>
             <div class="nav-item" onclick="openTab('tab-zones')">🌍 Zonas (Autoridade)</div>
             <div class="nav-item" onclick="openTab('tab-records')">📝 Registros (Resolução)</div>
-            <div class="nav-item" onclick="openTab('tab-logs')">⚙️ Logs & Detalhes</div>
+            <div class="nav-item" onclick="openTab('tab-config')">⚙️ Bastidores e Execução</div>
+            <div class="nav-item" onclick="openTab('tab-help')">❓ Ajuda & Sobre</div>
+            <div class="nav-item" onclick="openTab('tab-logs')">📜 Logs Brutos</div>
         </nav>
         <div style="margin-top:auto; padding-top:20px; border-top:1px solid var(--border); font-size:0.75rem; color:#64748b;">
             Executado por: <strong>$USER</strong><br>
@@ -2359,7 +2477,6 @@ generate_html_report_v2() {
         </div>
     </aside>
     <main>
-
 
         <!-- TAB: DASHBOARD -->
         <div id="tab-dashboard" class="tab-content active">
@@ -2453,73 +2570,6 @@ generate_html_report_v2() {
             </script>
         </div>
 
-EOF
-
-    # --- BUILD SERVER ROWS ---
-    local server_rows=""
-    for ip in "${!UNIQUE_SERVERS[@]}"; do
-        local grp="${SERVER_GROUPS_MAP[$ip]}"
-        
-        # Latency
-        local lat="${STATS_SERVER_PING_AVG[$ip]:-0}"
-        local jit="${STATS_SERVER_PING_JITTER[$ip]:-0}"
-        local loss="${STATS_SERVER_PING_LOSS[$ip]:-0}"
-        local lat_class="bg-ok"
-        if (( $(echo "$lat > 100" | bc -l 2>/dev/null) )); then lat_class="bg-warn"; fi
-        if [[ "$loss" != "0%" && "$loss" != "0" ]]; then lat_class="bg-fail"; fi
-        
-        # Caps
-        local caps=""
-        [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]] && caps+="<span class='badge bg-ok'>UDP53</span>" || caps+="<span class='badge bg-fail'>UDP53</span>"
-        [[ "${STATS_SERVER_RECURSION[$ip]}" == "OPEN" ]] && caps+="<span class='badge bg-fail'>REC:OPEN</span>" 
-        [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && caps+="<span class='badge ok-bg' style='color:#a855f7; bg:rgba(168,85,247,0.1)'>DNSSEC</span>"
-        [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>DOH</span>"
-        [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>TLS</span>"
-        
-        # Tech ID
-        local tid_ver="ver_${ip//./_}"; local tid_rec="rec_${ip//./_}"; local tid_axfr="axfr_${ip//./_}"
-        
-        server_rows+="<tr>
-            <td><div style='font-weight:bold; color:#fff'>$ip</div><div style='font-size:0.8em; color:#94a3b8'>$grp</div></td>
-            <td><span class='badge $lat_class'>${lat}ms</span> <span style='font-size:0.8em; color:#64748b'>Jit: ${jit} / Loss: ${loss}</span></td>
-            <td><div style='display:flex; gap:5px; flex-wrap:wrap'>$caps</div></td>
-            <td style='text-align:right'>
-                 <button class='btn-tech' onclick=\"showModal('${tid_ver}', 'BIND Version ($ip)')\">VER</button>
-                 <button class='btn-tech' onclick=\"showModal('${tid_rec}', 'Recursion ($ip)')\">REC</button>
-            </td>
-        </tr>"
-    done
-
-    # --- BUILD ZONE ROWS ---
-    local zone_rows=""
-    # (Assuming looping over a temp file or reproducing logic, let's use the CSV or DOMAINS file)
-    # Using DOMAINS file to drive structure is safest
-    if [[ -f "$FILE_DOMAINS" ]]; then
-        while IFS=';' read -r domain groups _ _ _; do
-             [[ "$domain" =~ ^# || -z "$domain" ]] && continue
-             domain=$(echo "$domain" | xargs)
-             
-             IFS=',' read -ra grp_list <<< "$groups"
-             for grp in "${grp_list[@]}"; do
-                  for srv in ${DNS_GROUPS[$grp]}; do
-                       local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
-                       local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
-                       local soa_cls="bg-neutral"; [[ "$soa" == "SYNC" ]] && soa_cls="bg-ok" || soa_cls="bg-warn"
-                       local axfr_cls="bg-ok"; [[ "$axfr" != "DENIED" && "$axfr" != "REFUSED" ]] && axfr_cls="bg-fail"
-                       
-                       zone_rows+="<tr>
-                           <td><span style='color:#fff; font-weight:600'>$domain</span></td>
-                           <td>$grp / $srv</td>
-                           <td><span class='badge $soa_cls'>$soa</span></td>
-                           <td><span class='badge $axfr_cls'>$axfr</span></td>
-                       </tr>"
-                  done
-             done
-        done < "$FILE_DOMAINS"
-    fi
-
-    cat >> "$target_file" << EOF
-
         <!-- TAB: SERVERS -->
         <div id="tab-servers" class="tab-content">
             <div class="page-header">
@@ -2532,7 +2582,7 @@ EOF
                         <tr>
                             <th>Servidor / Grupo</th>
                             <th>Latência / Qualidade</th>
-                            <th>Recursos & Capabilities</th>
+                            <th>Features & Capabilities</th>
                             <th style="text-align:right">Logs</th>
                         </tr>
                     </thead>
@@ -2566,25 +2616,97 @@ EOF
             </div>
         </div>
 
-
         <!-- TAB: RECORDS -->
         <div id="tab-records" class="tab-content">
             <div class="page-header">
                 <h1>Resolução de Registros</h1>
                 <div class="subtitle">Validação de respostas e consistência entre servidores.</div>
             </div>
-            <!-- Check consistency summary from previous run -->
-             <div class="card">
-                <h3>Resumo de Consistência</h3>
-                <div style="margin-top:10px; color:#cbd5e1">
-                    <ul>
-                        <li><strong>Sucesso:</strong> $SUCCESS_TESTS</li>
-                        <li><strong>Falhas:</strong> $FAILED_TESTS</li>
-                        <li><strong>Divergências:</strong> $DIVERGENT_TESTS</li>
-                    </ul>
-                    <p style="margin-top:10px; font-size:0.9em; opacity:0.7">Para detalhes granulares, consulte os logs técnicos ou os arquivos CSV gerados.</p>
+             <div class="card" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; color:#cbd5e1">
+                    <div><strong>Sucesso:</strong> $SUCCESS_TESTS</div>
+                    <div><strong>Falhas:</strong> $FAILED_TESTS</div>
+                    <div><strong>Divergências:</strong> $DIVERGENT_TESTS</div>
                 </div>
             </div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Query (Domínio/Tipo)</th>
+                            <th>Servidor</th>
+                            <th>Status Code</th>
+                            <th>Resposta / Conteúdo</th>
+                            <th style="text-align:right">Latência</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        $record_rows
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- TAB: CONFIG / BASTIDORES -->
+        <div id="tab-config" class="tab-content">
+             <div class="page-header">
+                <h1>Bastidores da Execução</h1>
+                <div class="subtitle">Inventário, configurações e parâmetros utilizados.</div>
+             </div>
+             
+             <div class="card">
+                <h3 class="section-header">🔍 Parâmetros de Execução</h3>
+                <div class="table-container">
+                     <table>
+                        <thead><tr><th>Parâmetro</th><th>Valor</th><th>Descrição</th></tr></thead>
+                        <tbody>
+                            <tr><td>Versão</td><td>$SCRIPT_VERSION</td><td>Script Release</td></tr>
+                             <tr><td>Timeout</td><td>${TIMEOUT}s</td><td>Tempo limite por query</td></tr>
+                             <tr><td>Tentativas</td><td>${CONSISTENCY_CHECKS}x</td><td>Testes consistência</td></tr>
+                             <tr><td>Strict IP</td><td>${STRICT_IP_CHECK}</td><td>Requerer mesmo IP</td></tr>
+                             <tr><td>Strict Check</td><td>${STRICT_ORDER_CHECK}</td><td>Requerer mesma ordem</td></tr>
+                             <tr><td>Ping Count</td><td>${PING_COUNT}</td><td>Pacotes ICMP por server</td></tr>
+                             <tr><td>Features</td><td>DNSSEC=${ENABLE_DNSSEC_CHECK} / TCP=${ENABLE_TCP_CHECK}</td><td>Testes Avançados</td></tr>
+                             <tr><td>Privacy</td><td>DoH=${ENABLE_DOH_CHECK} / TLS=${ENABLE_TLS_CHECK}</td><td>Encrypted DNS</td></tr>
+                        </tbody>
+                     </table>
+                </div>
+                
+                 <h3 class="section-header">⏱️ Timing</h3>
+                 <div style="display:flex; justify-content:space-between; color:#cbd5e1; padding:10px; background:#1e293b; border-radius:8px;">
+                     <div>Início: $START_TIME_HUMAN</div>
+                     <div>Fim: $END_TIME_HUMAN</div>
+                     <div>Duração: ${TOTAL_DURATION}s</div>
+                 </div>
+             </div>
+        </div>
+        
+        <!-- TAB: AJUDA / SOBRE -->
+        <div id="tab-help" class="tab-content">
+             <div class="page-header">
+                <h1>Ajuda & Sobre</h1>
+                <div class="subtitle">Aviso legal e manual de referência.</div>
+             </div>
+             
+             <div class="card" style="border-left:4px solid #f59e0b;">
+                 <h3 class="section-header" style="border-bottom:none; margin-top:0;">⚠️ Aviso de Isenção de Responsabilidade</h3>
+                 <div style="color:#e2e8f0; line-height:1.6;">
+                    Este relatório reflete apenas o estado da rede <strong>no momento da execução</strong>.<br>
+                    Falhas podem ser causadas por firewalls, rate-limits ou instabilidades passageiras.<br>
+                    Verifique os logs brutos antes de tomar ações críticas.
+                 </div>
+             </div>
+             
+             <div class="card" style="margin-top:20px;">
+                 <h3 class="section-header">📘 Legenda & Referência</h3>
+                 <ul style="padding-left:20px; color:#e2e8f0; line-height:1.8;">
+                     <li><strong>SOA Sync:</strong> Verifica se todos os servidores autoritativos possuem o mesmo Serial Number.</li>
+                     <li><strong>AXFR:</strong> Transferência de Zona. Deve ser NEGADA para IPs estranhos. Se "Allowed", há risco de vazamento de zona.</li>
+                     <li><strong>Recursão:</strong> Servidores autoritativos públicos NÃO devem fazer recursão para terceiros (Risco de Amplificação).</li>
+                     <li><strong>Divergência:</strong> Quando o mesmo servidor responde IPs diferentes para a mesma query em momentos consecutivos (exceto se configurado Round-Robin e Strict IP=false).</li>
+                  </ul>
+             </div>
         </div>
         
         <!-- TAB: LOGS -->
@@ -2596,6 +2718,17 @@ EOF
             <div style="color:#aaa; font-style:italic;">
                 Clique nos botões "VER", "REC" ou "AXFR" nas abas anteriores para ver os detalhes aqui.
                 <br>Logs brutos estão armazenados abaixo (hidden).
+            </div>
+        </div>
+        
+        <!-- MODAL & HIDDEN -->
+        <div id="logModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div id="mTitle">Log</div>
+                    <span style="cursor:pointer; font-size:1.5em;" onclick="closeModal()">×</span>
+                </div>
+                <div id="mBody" class="modal-body"></div>
             </div>
         </div>
         
@@ -2616,7 +2749,6 @@ EOF
 EOF
 
 }
-
 # Legacy Function Placeholder (to prevent errors if called, though we will replace call site)
 assemble_html() {
     :
