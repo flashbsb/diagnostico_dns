@@ -2,12 +2,12 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.1.1
-# "Full Dashboard & Legacy Features Restored, fixed some bugs"
+# Versão: 12.1.2
+# "Collapsible Dashboard, Interaction & Granular Logging"
 # ==============================================
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.1.1"
+SCRIPT_VERSION="12.1.2"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2241,6 +2241,20 @@ generate_html_report_v2() {
     if [[ $fail_ratio -ge 10 ]]; then grade="C"; grade_color="#ef4444"; 
     elif [[ $fail_ratio -gt 0 || $((SEC_REVEALED+SEC_AXFR_RISK)) -gt 0 ]]; then grade="B"; grade_color="#f59e0b"; fi
     
+    # Global Latency Calc
+    local glob_lat_sum=0
+    local glob_lat_cnt=0
+    for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+        local val=${STATS_SERVER_PING_AVG[$ip]}
+        val=${val%%.*} # Integer part
+        if [[ "$val" =~ ^[0-9]+$ ]] && [[ "$val" -gt 0 ]]; then
+            glob_lat_sum=$((glob_lat_sum + val))
+            glob_lat_cnt=$((glob_lat_cnt + 1))
+        fi
+    done
+    local glob_lat_avg=0
+    [[ $glob_lat_cnt -gt 0 ]] && glob_lat_avg=$((glob_lat_sum / glob_lat_cnt))
+
     # Prepare JSON Strings for Charts
     local json_labels=""
     local json_data=""
@@ -2250,8 +2264,8 @@ generate_html_report_v2() {
     > "$tmp_sort"
     for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
         local val=${STATS_SERVER_PING_AVG[$ip]}
-        val=$(echo "$val" | tr ',' '.')
-        if [[ "$val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then echo "$ip $val" >> "$tmp_sort"; fi
+        local display_val=$(echo "$val" | tr ',' '.')
+        if [[ "$display_val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then echo "$ip $display_val" >> "$tmp_sort"; fi
     done
     sort -k2 -nr "$tmp_sort" | head -n 15 | while read -r srv lat; do
           json_labels+="\"$srv\","
@@ -2262,116 +2276,160 @@ generate_html_report_v2() {
     json_labels="[${json_labels%,}]"
     json_data="[${json_data%,}]"
 
-    # --- BUILD SERVER ROWS ---
+    # --- BUILD SERVER ROWS (GROUPED) ---
     local server_rows=""
-    for ip in "${!UNIQUE_SERVERS[@]}"; do
-        local grp="${SERVER_GROUPS_MAP[$ip]}"
-        
-        local lat="${STATS_SERVER_PING_AVG[$ip]:-0}"
-        local jit="${STATS_SERVER_PING_JITTER[$ip]:-0}"
-        local loss="${STATS_SERVER_PING_LOSS[$ip]:-0}"
-        local lat_class="bg-ok"
-        if (( $(echo "$lat > 100" | bc -l 2>/dev/null) )); then lat_class="bg-warn"; fi
-        if [[ "$loss" != "0%" && "$loss" != "0" ]]; then lat_class="bg-fail"; fi
-        
-        # Capability Badges
-        local caps=""
-        # UDP53
-        if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then caps+="<span class='badge bg-ok'>UDP</span>"; else caps+="<span class='badge bg-fail'>UDP</span>"; fi
-        # TCP53 (New)
-        if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then caps+="<span class='badge bg-ok'>TCP</span>"; else caps+="<span class='badge bg-fail'>TCP</span>"; fi
-        
-        # Security Features
-        [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && caps+="<span class='badge ok-bg' style='color:#a855f7;'>DNSSEC</span>"
-        [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>DOH</span>"
-        [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>TLS</span>"
-        [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>COOKIE</span>"
-        [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>EDNS</span>"
+    # Iterate groups
+    for grp in "${!DNS_GROUPS[@]}"; do
+        server_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
+            <summary style='background:#1e293b; padding:10px 15px; cursor:pointer; font-weight:600; color:#fff;'>📂 Grupo: $grp</summary>
+            <table style='width:100%; border-collapse:collapse;'>
+            <thead style='background:#0f172a;'>
+               <tr>
+                   <th style='width:25%'>Servidor</th>
+                   <th style='width:20%'>Latência</th>
+                   <th>Capabilities</th>
+                   <th style='width:15%; text-align:right'>Detalhamento</th>
+               </tr>
+            </thead>
+            <tbody>"
+            
+        for ip in ${DNS_GROUPS[$grp]}; do
+            local lat="${STATS_SERVER_PING_AVG[$ip]:-0}"
+            local jit="${STATS_SERVER_PING_JITTER[$ip]:-0}"
+            local loss="${STATS_SERVER_PING_LOSS[$ip]:-0}"
+            local lat_class="bg-ok"
+            if (( $(echo "$lat > 100" | bc -l 2>/dev/null) )); then lat_class="bg-warn"; fi
+            if [[ "$loss" != "0%" && "$loss" != "0" ]]; then lat_class="bg-fail"; fi
+            
+            # Caps
+            local caps=""
+             # SECURITY BADGES
+            [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && caps+="<span class='badge ok-bg' style='color:#a855f7;'>DNSSEC</span>"
+            [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>DOH</span>"
+            [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>TLS</span>"
+            [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>COOKIE</span>"
+            [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>EDNS</span>"
+            
+            local ver_st="${STATS_SERVER_VERSION[$ip]}"
+            local rec_st="${STATS_SERVER_RECURSION[$ip]}"
+            local ver_cls="bg-neutral"; [[ "$ver_st" == "HIDDEN" ]] && ver_cls="bg-ok" || ver_cls="bg-fail"
+            local rec_cls="bg-neutral"; [[ "$rec_st" == "CLOSED" ]] && rec_cls="bg-ok" || rec_cls="bg-fail"
 
-        # Version & Recursion Status Text - More explicit
-        local ver_st="${STATS_SERVER_VERSION[$ip]}"
-        local rec_st="${STATS_SERVER_RECURSION[$ip]}"
-        local ver_cls="bg-neutral"; [[ "$ver_st" == "HIDDEN" ]] && ver_cls="bg-ok" || ver_cls="bg-fail"
-        local rec_cls="bg-neutral"; [[ "$rec_st" == "CLOSED" ]] && rec_cls="bg-ok" || rec_cls="bg-fail"
-        
-        local tid_ver="ver_${ip//./_}"; local tid_rec="rec_${ip//./_}"
-        
-        server_rows+="<tr>
-            <td><div style='font-weight:bold; color:#fff'>$ip</div><div style='font-size:0.8em; color:#94a3b8'>$grp</div></td>
-            <td><span class='badge $lat_class'>${lat}ms</span> <span style='font-size:0.8em; color:#64748b'>Jit: ${jit} / Loss: ${loss}</span></td>
-            <td><div style='display:flex; gap:5px; flex-wrap:wrap'>$caps</div></td>
-            <td>
-                <span class='badge $ver_cls' style='cursor:pointer' onclick=\"showModal('${tid_ver}', 'BIND Version ($ip)')\">VER: $ver_st</span>
-                <span class='badge $rec_cls' style='cursor:pointer' onclick=\"showModal('${tid_rec}', 'Recursion ($ip)')\">REC: $rec_st</span>
-            </td>
-        </tr>"
+            # IDs
+            local safe_ip=${ip//./_}
+            local tid_ver="ver_${safe_ip}"
+            local tid_rec="rec_${safe_ip}"
+            
+            server_rows+="<tr>
+                <td><div style='font-weight:bold; color:#fff'>$ip</div></td>
+                <td><span class='badge $lat_class'>${lat}ms</span> <div style='font-size:0.7em; color:#64748b'>Loss: $loss</div></td>
+                <td><div style='display:flex; gap:5px; flex-wrap:wrap'>$caps</div></td>
+                <td style='text-align:right'>
+                    <span class='badge $ver_cls' style='cursor:pointer' onclick=\"showModal('${tid_ver}', 'BIND ($ip)')\">VER</span>
+                    <span class='badge $rec_cls' style='cursor:pointer' onclick=\"showModal('${tid_rec}', 'REC ($ip)')\">REC</span>
+                </td>
+            </tr>"
+        done
+        server_rows+="</tbody></table></details>"
     done
 
-    # --- BUILD ZONE ROWS ---
+    # --- BUILD ZONE ROWS (GROUPED) ---
     local zone_rows=""
     if [[ -f "$FILE_DOMAINS" ]]; then
+        # Group by Zone -> Groups
         while IFS=';' read -r domain groups _ _ _; do
              [[ "$domain" =~ ^# || -z "$domain" ]] && continue
              domain=$(echo "$domain" | xargs)
+             
+             zone_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
+                <summary style='background:#1e293b; padding:10px 15px; cursor:pointer; font-weight:600; color:#fff;'>🌍 Zona: $domain</summary>
+                <table style='width:100%'>
+                <thead style='background:#0f172a'><tr><th>Grupo</th><th>Servidor</th><th>SOA Serial</th><th>AXFR Policy</th><th>Logs</th></tr></thead>
+                <tbody>"
+
              IFS=',' read -ra grp_list <<< "$groups"
              for grp in "${grp_list[@]}"; do
                   for srv in ${DNS_GROUPS[$grp]}; do
                        local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
                        local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
                        local soa_cls="bg-neutral"
-                       # Rudimentary SOA check: if numeric, assume OK-ish, if TIMEOUT/ERR fail
                        if [[ "$soa" =~ ^[0-9]+$ ]]; then soa_cls="bg-ok"; else soa_cls="bg-warn"; fi
-                       
                        local axfr_cls="bg-ok"; [[ "$axfr" != "DENIED" && "$axfr" != "REFUSED" ]] && axfr_cls="bg-fail"
                        
+                       # Logs IDs
+                       local safe_dom=${domain//./_}
+                       local safe_srv=${srv//./_}
+                       local tid_soa="soa_${safe_dom}_${safe_srv}"
+                       local tid_axfr="axfr_${safe_dom}_${safe_srv}"
+
                        zone_rows+="<tr>
-                            <td><span style='color:#fff; font-weight:600'>$domain</span></td>
-                            <td>$grp / $srv</td>
+                            <td>$grp</td>
+                            <td>$srv</td>
                             <td style='font-family:monospace'><span class='badge $soa_cls'>$soa</span></td>
                             <td><span class='badge $axfr_cls'>$axfr</span></td>
+                            <td>
+                                <button class='btn-tech' onclick=\"showModal('$tid_soa','SOA $domain @ $srv')\">SOA</button>
+                                <button class='btn-tech' onclick=\"showModal('$tid_axfr','AXFR $domain @ $srv')\">AXFR</button>
+                            </td>
                         </tr>"
                   done
              done
+             zone_rows+="</tbody></table></details>"
         done < "$FILE_DOMAINS"
     fi
 
-    # --- BUILD RECORD ROWS ---
+    # --- BUILD RECORD ROWS (GROUPED BY QUERY) ---
     local record_rows=""
-    # Iterate over sorted keys
     local tmp_rec_keys="$LOG_OUTPUT_DIR/rec_keys.tmp"
     for key in "${!STATS_RECORD_RES[@]}"; do echo "$key" >> "$tmp_rec_keys"; done
+    
     if [[ -s "$tmp_rec_keys" ]]; then
-        sort "$tmp_rec_keys" | while read -r key; do
-             IFS='|' read -r r_dom r_type r_grp r_srv <<< "$key"
-             local r_status="${STATS_RECORD_RES[$key]}"
-             local r_ans="${STATS_RECORD_ANSWER[$key]}"
-             local r_lat="${STATS_RECORD_LATENCY[$key]}"
-             local r_cons="${STATS_RECORD_CONSISTENCY[$r_dom|$r_type|$r_grp]}"
-             
-             local st_cls="bg-neutral"
-             [[ "$r_status" == "NOERROR" || "$r_status" == "OK" ]] && st_cls="bg-ok"
-             [[ "$r_status" == "NXDOMAIN" || "$r_status" == "REFUSED" || "$r_status" == "SERVFAIL" ]] && st_cls="bg-fail"
-             
-             local cons_badge=""
-             if [[ "$r_cons" == "DIVERGENT" ]]; then
-                 cons_badge="<span class='badge bg-fail'>DIVERGENT</span>"
-             else
-                 cons_badge="<span class='badge bg-neutral'>MATCH</span>"
-             fi
-             
-             # Full Answer logic
-             local ans_display="<div style='max-height:60px; overflow-y:auto; font-size:0.8em; white-space:pre-wrap;'>$r_ans</div>"
-             
-             record_rows+="<tr>
-                 <td><div style='font-weight:bold; color:#fff'>${r_dom}</div><div style='font-size:0.75rem; color:#64748b'>${r_type}</div></td>
-                 <td>${r_grp} / ${r_srv}</td>
-                 <td><span class='badge $st_cls'>$r_status</span></td>
-                 <td>$ans_display</td>
-                 <td>$cons_badge</td>
-                 <td style='text-align:right; font-size:0.85em'>${r_lat}ms</td>
-             </tr>"
-        done
-        rm -f "$tmp_rec_keys"
+       sort "$tmp_rec_keys" > "$tmp_rec_keys.sorted"
+       local current_query=""
+       
+       while read -r key; do
+           IFS='|' read -r r_dom r_type r_grp r_srv <<< "$key"
+           local query_id="$r_dom ($r_type)"
+           
+           if [[ "$query_id" != "$current_query" ]]; then
+               if [[ -n "$current_query" ]]; then record_rows+="</tbody></table></details>"; fi
+               current_query="$query_id"
+               record_rows+="<details open style='margin-bottom:10px; border:1px solid #334155; border-radius:8px;'>
+                   <summary style='background:#1e293b; padding:8px 15px; cursor:pointer; font-weight:600;'>🔍 Query: $r_dom <span style='color:#f59e0b'>$r_type</span></summary>
+                   <table style='width:100%'>
+                   <thead><tr><th>Grupo</th><th>Servidor</th><th>Status</th><th>Resposta</th><th>Latência</th><th>Log</th></tr></thead>
+                   <tbody>"
+           fi
+           
+           local r_status="${STATS_RECORD_RES[$key]}"
+           local r_ans="${STATS_RECORD_ANSWER[$key]}"
+           local r_lat="${STATS_RECORD_LATENCY[$key]}"
+           local r_cons="${STATS_RECORD_CONSISTENCY[$r_dom|$r_type|$r_grp]}"
+           
+           local st_cls="bg-neutral"
+           [[ "$r_status" == "NOERROR" ]] && st_cls="bg-ok"
+           [[ "$r_status" == "NXDOMAIN" ]] && st_cls="bg-warn"
+           [[ "$r_status" != "NOERROR" && "$r_status" != "NXDOMAIN" ]] && st_cls="bg-fail"
+           
+           local cons_badge=""
+           [[ "$r_cons" == "DIVERGENT" ]] && cons_badge="<span class='badge bg-fail'>DIV</span>"
+           
+           local safe_dom=${r_dom//./_}
+           local safe_srv=${r_srv//./_}
+           local tid_rec="rec_${safe_dom}_${r_type}_${safe_srv}"
+           
+           record_rows+="<tr>
+               <td>$r_grp</td>
+               <td>$r_srv $cons_badge</td>
+               <td><span class='badge $st_cls'>$r_status</span></td>
+               <td><div style='max-height:50px; overflow-y:auto; font-size:0.8rem; font-family:monospace'>$r_ans</div></td>
+               <td>${r_lat}ms</td>
+               <td><button class='btn-tech' onclick=\"showModal('$tid_rec','DIG $r_dom ($r_type)')\">LOG</button></td>
+           </tr>"
+           
+       done < "$tmp_rec_keys.sorted"
+       if [[ -n "$current_query" ]]; then record_rows+="</tbody></table></details>"; fi
+       rm -f "$tmp_rec_keys" "$tmp_rec_keys.sorted"
     fi
 
     # --- HTML HEADER & CSS ---
@@ -2449,7 +2507,9 @@ generate_html_report_v2() {
             if(id === 'tab-dashboard' && window.myChart) { window.myChart.resize(); }
         }
         function showModal(id, title) {
-            const raw = document.getElementById('log_' + id).innerHTML;
+            const el = document.getElementById('log_' + id);
+            if(!el) { alert('Log not found for ID: ' + id); return; }
+            const raw = el.innerHTML;
             document.getElementById('mBody').innerHTML = '<pre>' + raw + '</pre>';
             document.getElementById('mTitle').innerText = title;
             document.getElementById('logModal').style.display = 'block';
@@ -2500,7 +2560,7 @@ generate_html_report_v2() {
                 </div>
                 <div class="card" style="border-top: 3px solid #f59e0b;">
                     <div class="kpi-title">Performance (Avg)</div>
-                    <div class="kpi-value">$(echo $STATS_GLOBAL_LATENCY_AVG | cut -d. -f1)<span style="font-size:1rem; opacity:0.7">ms</span></div>
+                    <div class="kpi-value">${glob_lat_avg}<span style="font-size:1rem; opacity:0.7">ms</span></div>
                     <div class="kpi-trend" style="color:#94a3b8">Latência Média Global</div>
                 </div>
                 <div class="card" style="border-top: 3px solid #ef4444;">
@@ -2574,22 +2634,10 @@ generate_html_report_v2() {
         <div id="tab-servers" class="tab-content">
             <div class="page-header">
                 <h1>Servidores DNS</h1>
-                <div class="subtitle">Inventário detalhado e análise de recursos.</div>
+                <div class="subtitle">Inventário detalhado e análise de recursos (Agrupado).</div>
             </div>
             <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Servidor / Grupo</th>
-                            <th>Latência / Qualidade</th>
-                            <th>Features & Capabilities</th>
-                            <th style="text-align:right">Logs</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        $server_rows
-                    </tbody>
-                </table>
+                $server_rows
             </div>
         </div>
 
@@ -2597,22 +2645,10 @@ generate_html_report_v2() {
         <div id="tab-zones" class="tab-content">
             <div class="page-header">
                 <h1>Zonas Autoritativas</h1>
-                <div class="subtitle">Verificação de SOA, Sincronização e Transferência de Zona.</div>
+                <div class="subtitle">Verificação de SOA, Sincronização e Transferência de Zona (Agrupado).</div>
             </div>
             <div class="table-container">
-                 <table>
-                    <thead>
-                        <tr>
-                            <th>Domínio</th>
-                            <th>Origem (Grupo / Server)</th>
-                            <th>SOA Status</th>
-                            <th>AXFR Policy</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        $zone_rows
-                    </tbody>
-                 </table>
+                 $zone_rows
             </div>
         </div>
 
@@ -2620,7 +2656,7 @@ generate_html_report_v2() {
         <div id="tab-records" class="tab-content">
             <div class="page-header">
                 <h1>Resolução de Registros</h1>
-                <div class="subtitle">Validação de respostas e consistência entre servidores.</div>
+                <div class="subtitle">Validação de respostas e consistência entre servidores (Agrupado por Query).</div>
             </div>
              <div class="card" style="margin-bottom:20px;">
                 <div style="display:flex; justify-content:space-between; color:#cbd5e1">
@@ -2631,20 +2667,7 @@ generate_html_report_v2() {
             </div>
             
             <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Query (Domínio/Tipo)</th>
-                            <th>Servidor</th>
-                            <th>Status Code</th>
-                            <th>Resposta / Conteúdo</th>
-                            <th style="text-align:right">Latência</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        $record_rows
-                    </tbody>
-                </table>
+                $record_rows
             </div>
         </div>
         
@@ -2868,9 +2891,8 @@ log_tech_details() {
     local title=$2
     local content=$3
     # Sanitize content for HTML
-    local safe_out=$(echo "$content" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-    echo "<div id=\"${id}_content\" style=\"display:none\"><pre>$safe_out</pre></div>" >> "$TEMP_DETAILS"
-    echo "<div id=\"${id}_title\" style=\"display:none\">${title}</div>" >> "$TEMP_DETAILS"
+    local safe_out=$(echo "$content" | sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g')
+    echo "<div id=\"log_${id}\" style=\"display:none\">$safe_out</div>" >> "$TEMP_DETAILS"
 }
 
 check_tcp_dns() {
@@ -4189,6 +4211,9 @@ EOF
                        STATS_ZONE_SOA["$domain|$grp|$srv"]="N/A"
                   fi
                   
+                  # Log SOA
+                  log_tech_details "soa_${domain}_${srv}" "SOA Check: $domain @ $srv" "$(dig +short @$srv $domain SOA 2>&1)"
+                  
                   # AXFR
                   local axfr_stat="N/A"
                   local axfr_raw="SKIPPED"
@@ -4208,6 +4233,8 @@ EOF
                           SEC_AXFR_TIMEOUT=$((SEC_AXFR_TIMEOUT+1))
                       fi
                       CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
+                      # Log AXFR
+                      log_tech_details "axfr_${domain}_${srv}" "AXFR Check: $domain @ $srv" "$out_axfr"
                   fi
                   
                   # DNSSEC Signature Check (Smart Detection)
@@ -4387,6 +4414,11 @@ EOF
                          local out_full
                          out_full=$(dig +tries=1 +time=$TIMEOUT @$srv $target $rec_type 2>&1)
                          local ret=$?
+                         
+                         # Log Raw Output
+                         local safe_target=${target//./_}
+                         local safe_srv=${srv//./_}
+                         log_tech_details "rec_${safe_target}_${rec_type}_${safe_srv}" "DIG: $target ($rec_type) @ $srv" "$out_full"
                          
                          # Extract status
                          local status="UNKNOWN"
