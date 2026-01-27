@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.2.0
-# "Full Feature Restoration + Fixes"
+# Versão: 12.4.0
+# "Traceroute Restoration + Full Logs"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.2.0"
+SCRIPT_VERSION="12.4.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -178,6 +178,10 @@ ENABLE_PHASE_SERVER=${ENABLE_PHASE_SERVER:-"true"}
 ENABLE_PHASE_ZONE=${ENABLE_PHASE_ZONE:-"true"}
 ENABLE_PHASE_RECORD=${ENABLE_PHASE_RECORD:-"true"}
 
+# Traceroute Defaults
+ENABLE_TRACE=${ENABLE_TRACE:-"false"}
+TRACE_MAX_HOPS=${TRACE_MAX_HOPS:-30}
+
 init_html_parts() {
     # Generate unique session ID for temp files (PID + Random + Timestamp)
     SESSION_ID="${$}_${RANDOM}_$(date +%s%N)"
@@ -229,6 +233,10 @@ init_html_parts() {
         > "$TEMP_JSON_Trace"
         > "$TEMP_JSON_DOMAINS"
     fi
+    
+    # Exec Full Log (HTML Embed)
+    TEMP_FULL_LOG="$LOG_OUTPUT_DIR/temp_full_log_${SESSION_ID}.txt"
+    > "$TEMP_FULL_LOG"
     
     # Init CSV
     if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -454,6 +462,8 @@ print_execution_summary() {
         echo -e "\n${PURPLE}[3. DETALHES FASE 1: SERVIDORES]${NC}"
         echo -e "  🏓 Ping Check      : ${CYAN}${ENABLE_PING}${NC}"
         [[ "$ENABLE_PING" == "true" ]] && echo -e "     ↳ Count: $PING_COUNT | Timeout: ${PING_TIMEOUT}s | LossLimit: ${PING_PACKET_LOSS_LIMIT}%"
+        echo -e "  🗺️  Traceroute     : ${CYAN}${ENABLE_TRACE}${NC}"
+        [[ "$ENABLE_TRACE" == "true" ]] && echo -e "     ↳ Max Hops: $TRACE_MAX_HOPS"
         echo -e "  🔌 TCP Check       : ${CYAN}${ENABLE_TCP_CHECK}${NC}"
         echo -e "  🔐 DNSSEC Check    : ${CYAN}${ENABLE_DNSSEC_CHECK}${NC}"
         echo -e "  🛡️  BIND Version    : ${CYAN}${CHECK_BIND_VERSION}${NC}"
@@ -506,15 +516,25 @@ print_execution_summary() {
 # ==============================================
 
 log_entry() {
-    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     local msg="$1"
     local ts=$(date +"%Y-%m-%d %H:%M:%S")
+    # Always log to temp buffer for HTML
+    echo -e "[$ts] $msg" >> "$TEMP_FULL_LOG"
+    
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     echo -e "[$ts] $msg" >> "$LOG_FILE_TEXT"
 }
 
 log_section() {
-    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     local title="$1"
+    {
+        echo ""
+        echo "================================================================================"
+        echo ">>> $title"
+        echo "================================================================================"
+    } >> "$TEMP_FULL_LOG"
+
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     {
         echo ""
         echo "================================================================================"
@@ -524,8 +544,16 @@ log_section() {
 }
 
 log_cmd_result() {
-    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     local context="$1"; local cmd="$2"; local output="$3"; local time="$4"
+    {
+        echo "--------------------------------------------------------------------------------"
+        echo "CTX: $context | CMD: $cmd | TIME: ${time}ms"
+        echo "OUTPUT:"
+        echo "$output"
+        echo "--------------------------------------------------------------------------------"
+    } >> "$TEMP_FULL_LOG"
+
+    [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     {
         echo "--------------------------------------------------------------------------------"
         echo "CTX: $context | CMD: $cmd | TIME: ${time}ms"
@@ -681,6 +709,11 @@ interactive_configuration() {
                  ask_variable "   ↳ Ping Timeout (s)" "PING_TIMEOUT"
             fi
             
+            ask_boolean "Ativar Traceroute?" "ENABLE_TRACE"
+            if [[ "$ENABLE_TRACE" == "true" ]]; then
+                 ask_variable "   ↳ Max Hops" "TRACE_MAX_HOPS"
+            fi
+
             ask_boolean "Ativar Teste TCP (+tcp)?" "ENABLE_TCP_CHECK"
             ask_boolean "Ativar Teste DNSSEC (+dnssec validation)?" "ENABLE_DNSSEC_CHECK"
             
@@ -792,6 +825,10 @@ save_config_to_file() {
     if [[ "$ENABLE_PING" == "true" ]]; then
         sed -i "s|^PING_COUNT=.*|PING_COUNT=$PING_COUNT|" "$CONFIG_FILE"
         sed -i "s|^PING_TIMEOUT=.*|PING_TIMEOUT=$PING_TIMEOUT|" "$CONFIG_FILE"
+    fi
+    update_conf_key "ENABLE_TRACE" "$ENABLE_TRACE"
+    if [[ "$ENABLE_TRACE" == "true" ]]; then
+        sed -i "s|^TRACE_MAX_HOPS=.*|TRACE_MAX_HOPS=$TRACE_MAX_HOPS|" "$CONFIG_FILE"
     fi
     update_conf_key "ENABLE_TCP_CHECK" "$ENABLE_TCP_CHECK"
     update_conf_key "ENABLE_DNSSEC_CHECK" "$ENABLE_DNSSEC_CHECK"
@@ -1802,6 +1839,7 @@ cat > "$TEMP_CONFIG" << EOF
                         <tr><td>Modern Features</td><td>E=${ENABLE_EDNS_CHECK} C=${ENABLE_COOKIE_CHECK} Q=${ENABLE_QNAME_CHECK}</td><td>EDNS0, Cookie e QNAME Minimization.</td></tr>
                         <tr><td>Encrypted DNS</td><td>TLS=${ENABLE_TLS_CHECK} DoT=${ENABLE_DOT_CHECK} DoH=${ENABLE_DOH_CHECK}</td><td>Suporte a transporte criptografado.</td></tr>
                         <tr><td>Ping Enabled</td><td>${ENABLE_PING}</td><td>Verificação de latência ICMP (Count: ${PING_COUNT}, Timeout: ${PING_TIMEOUT}s).</td></tr>
+                        <tr><td>Traceroute</td><td>${ENABLE_TRACE}</td><td>Mapeamento de rota (Hops: ${TRACE_MAX_HOPS}).</td></tr>
                         <tr><td>TCP Check (+tcp)</td><td>${ENABLE_TCP_CHECK}</td><td>Obrigatoriedade de suporte a DNS via TCP.</td></tr>
                         <tr><td>DNSSEC Check (+dnssec)</td><td>${ENABLE_DNSSEC_CHECK}</td><td>Validação da cadeia de confiança DNSSEC.</td></tr>
 
@@ -1923,6 +1961,14 @@ generate_charts_script() {
     done
     rm -f "$tmp_lat_sort"
 
+    # Prepare Traceroute Data
+    local trace_js=""
+    if [[ -f "$TEMP_TRACE" ]]; then
+        while IFS=':' read -r ip hops; do
+             trace_js+="traceLabels.push('$ip'); traceData.push($hops);"
+        done < "$TEMP_TRACE"
+    fi
+
     cat << EOF
     <script>
         // Chart Configuration
@@ -1961,8 +2007,11 @@ generate_charts_script() {
         // 2. LATENCY CHART (Top 10 Slowest or All)
         const latencyLabels = [];
         const latencyData = [];
+        const traceLabels = [];
+        const traceData = [];
         
         $lat_js
+        $trace_js
 
         const colorPalette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
@@ -2629,6 +2678,11 @@ HOSTNAME=$HOSTNAME
 TERM=$TERM
 SHELL=$SHELL
              </pre>
+             
+             <!-- INJECT DETAILED CONFIG TABLE -->
+EOF
+    if [[ -f "$TEMP_CONFIG" ]]; then cat "$TEMP_CONFIG" >> "$target_file"; fi
+    cat >> "$target_file" << EOF
         </div>
         
         <div id="tab-help" class="tab-content">
@@ -2671,11 +2725,19 @@ SHELL=$SHELL
                 <pre style="color:#e2e8f0;">$help_content</pre>
              </div>
         </div>
-        
-        <div id="tab-logs" class="tab-content">
-             <div class="page-header"><h1>Logs Verbos</h1></div>
-             <div style="color:#aaa">Use os botões de logs nas outras abas.</div>
-        </div>
+                <div id="tab-logs" class="tab-content">
+              <div class="page-header"><h1>Logs Verbos (Execução Terminal)</h1></div>
+              <div style="background:#0b1120; color:#e2e8f0; font-family:monospace; padding:20px; border-radius:8px; height:70vh; overflow:auto; white-space:pre-wrap; font-size:0.85rem; border:1px solid #334155;">
+EOF
+    if [[ -f "$TEMP_FULL_LOG" ]]; then 
+        # Sanitize HTML entities in log to prevent breaking the report
+        sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$TEMP_FULL_LOG" >> "$target_file"
+    else
+        echo "Log indisponível." >> "$target_file"
+    fi
+    cat >> "$target_file" << EOF
+              </div>
+         </div>
         
         <div id="logModal" class="modal">
             <div class="modal-content">
@@ -3398,7 +3460,7 @@ generate_hierarchical_stats() {
         
         # Row: 
         # Zone: 30
-        # SOA Sync: 29 (11 text + 9 color chars [5 start, 4 end] = 20?)
+        # SOA Cons: 20 visual -> 29 raw
         # Wait, \e[32m is 5 chars. \e[0m is 4 chars. Total 9 invis chars. 
         # Text "✅ SYNC". Length 7. 7+9 = 16.
         # printf %-29s pads it to 29. Visual length 29-9 = 20. Match Header 20. Correct.
@@ -3637,6 +3699,9 @@ print_final_terminal_summary() {
           # Redirect new stats to log
           generate_hierarchical_stats >> "$LOG_FILE_TEXT"
      fi
+     
+     # Always append stats to HTML Log Buffer
+     generate_hierarchical_stats >> "$TEMP_FULL_LOG"
 
      echo -e "\n${BOLD}======================================================${NC}"
      echo -e "${CYAN}      📥 BAIXE E CONTRIBUA NO GITHUB${NC}"
@@ -3724,6 +3789,7 @@ run_server_tests() {
     declare -gA STATS_SERVER_DNSSEC
     declare -gA STATS_SERVER_DOH
     declare -gA STATS_SERVER_TLS
+    declare -gA STATS_SERVER_HOPS
 
 
     
@@ -3739,6 +3805,7 @@ run_server_tests() {
                     <th>Grupos</th>
                     <th>Ping (ICMP)</th>
                     <th>Latência (Avg/Jit/Loss)</th>
+                    <th>Hops</th>
                     <th>Porta 53</th>
                     <th>Porta 853 (ABS)</th>
                     <th>Versão (Bind)</th>
@@ -3849,6 +3916,38 @@ EOF
                 
                 lat_stats="${p_avg}ms / ±${p_mdev} / ${loss_pct}%"
             fi
+        fi
+
+        # --- TRACEROUTE CHECK ---
+        local hops="N/A"
+        local hops_html="<span class='badge neutral'>N/A</span>"
+        
+        if [[ "$ENABLE_TRACE" == "true" ]]; then
+             echo -e "     🗺️  Tracing..."
+             # Use -n to avoid DNS resolution delays, -w to limit wait
+             local trace_out
+             trace_out=$(traceroute -n -m "$TRACE_MAX_HOPS" -w 3 "$ip" 2>&1)
+             
+             # Extract hops (count lines that are properly numbered or approximate)
+             # A simple way: get the first field of the last line. 
+             # If successful, it's the hop number.
+             local last_hop
+             last_hop=$(echo "$trace_out" | tail -n 1 | awk '{print $1}')
+             
+             if [[ "$last_hop" =~ ^[0-9]+$ ]]; then
+                 hops=$last_hop
+                 hops_html="<span class='badge neutral'>${hops}</span>"
+                 STATS_SERVER_HOPS[$ip]=$hops
+                 
+                 # Append to Trace Chart Data (Memory)
+                 # Format: "IP:Hops"
+                 echo "$ip:$hops" >> "$TEMP_TRACE"
+             else
+                 hops_html="<span class='badge status-warn'>ERR</span>"
+             fi
+             
+             log_tech_details "trace_${ip}" "Traceroute: $ip" "$trace_out"
+             hops_html="<button class='btn-tech' onclick=\"showLog('trace_${ip}')\">${hops}</button>"
         fi
         
         # Port 53
@@ -4028,7 +4127,7 @@ EOF
         [[ "$ENABLE_DOH_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
 
         # ADD ROW
-        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
+        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
         # CSV Export Server
         if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -4478,7 +4577,7 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$LOG_OUTPUT_DIR/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" "$TEMP_SECTION_SERVER" "$TEMP_SECTION_ZONE" "$TEMP_SECTION_RECORD" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$LOG_OUTPUT_DIR/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" "$TEMP_SECTION_SERVER" "$TEMP_SECTION_ZONE" "$TEMP_SECTION_RECORD" "$TEMP_FULL_LOG" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhyjstdxrTVZMvq" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
@@ -4561,6 +4660,9 @@ main() {
     
     # Calculate stats first via terminal summary (which calls hierarchical_stats)
     print_final_terminal_summary
+    
+    # Generate Config HTML for insertion
+    generate_config_html
     
     # Then generate HTML with populated stats
     generate_html_report_v2
