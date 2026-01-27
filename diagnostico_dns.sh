@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.1.6
-# "Full Feature Restoration"
+# Versão: 12.2.0
+# "Full Feature Restoration + Fixes"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.1.6"
+SCRIPT_VERSION="12.2.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -431,7 +431,7 @@ EOF
 print_execution_summary() {
     clear
     echo -e "${BOLD}======================================================${NC}"
-    echo -e "${BOLD}       DIAGNÓSTICO DNS - DASHBOARD DE EXECUÇÃO        ${NC}"
+    echo -e "${BOLD}   🔍 DIAGNÓSTICO DNS - EXECUTIVE REPORT (v${SCRIPT_VERSION})   ${NC}"
     echo -e "${BOLD}======================================================${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -3068,8 +3068,8 @@ generate_hierarchical_stats() {
             local lat_min="${STATS_SERVER_PING_MIN[$ip]}"; [[ -z "$lat_min" ]] && lat_min=0
             local lat_avg="${STATS_SERVER_PING_AVG[$ip]}"; [[ -z "$lat_avg" ]] && lat_avg=0
             local lat_max="${STATS_SERVER_PING_MAX[$ip]}"; [[ -z "$lat_max" ]] && lat_max=0
-            local jit="${STATS_SERVER_PING_JITTER[$ip]}";  [[ -z "$jit" ]] && jit=0
-            local loss="${STATS_SERVER_PING_LOSS[$ip]}";   [[ -z "$loss" ]] && loss=0
+            local jit="${STATS_SERVER_PING_JITTER[$ip]}";  [[ -z "$jit" || "$jit" == "-" ]] && jit=0
+            local loss="${STATS_SERVER_PING_LOSS[$ip]}";   [[ -z "$loss" || "$loss" == "-" ]] && loss=0
             
             # Global Aggregates (Latency)
             if [[ "$lat_avg" != "0" ]]; then
@@ -3077,6 +3077,20 @@ generate_hierarchical_stats() {
                 G_LAT_CNT=$((G_LAT_CNT + 1))
                 if (( $(echo "$lat_avg < $G_LAT_MIN" | bc -l) )); then G_LAT_MIN=$lat_avg; fi
                 if (( $(echo "$lat_avg > $G_LAT_MAX" | bc -l) )); then G_LAT_MAX=$lat_avg; fi
+            fi
+            
+            # Global Aggregates (Jitter)
+            if [[ -n "${STATS_SERVER_PING_JITTER[$ip]}" && "${STATS_SERVER_PING_JITTER[$ip]}" != "-" ]]; then
+                G_JIT_SUM=$(echo "$G_JIT_SUM + $jit" | bc)
+                G_JIT_CNT=$((G_JIT_CNT + 1))
+                if (( $(echo "$jit < $G_JIT_MIN" | bc -l) )); then G_JIT_MIN=$jit; fi
+                if (( $(echo "$jit > $G_JIT_MAX" | bc -l) )); then G_JIT_MAX=$jit; fi
+            fi
+
+            # Global Aggregates (Loss)
+            if [[ -n "${STATS_SERVER_PING_LOSS[$ip]}" && "${STATS_SERVER_PING_LOSS[$ip]}" != "-" ]]; then
+                G_LOSS_SUM=$(echo "$G_LOSS_SUM + $loss" | bc)
+                G_LOSS_CNT=$((G_LOSS_CNT + 1))
             fi
              
             # Ping Status Counters
@@ -3144,8 +3158,10 @@ generate_hierarchical_stats() {
                 [[ -z "${GRP_JIT_MIN[$g]}" ]] && GRP_JIT_MIN[$g]=999999
                 [[ -z "${GRP_JIT_MAX[$g]}" ]] && GRP_JIT_MAX[$g]=0
 
-                GRP_LOSS_SUM[$g]=$(awk -v s="${GRP_LOSS_SUM[$g]:-0}" -v v="$loss" 'BEGIN {print s+v}')
-                GRP_LOSS_CNT[$g]=$(( ${GRP_LOSS_CNT[$g]:-0} + 1 ))
+                if [[ -n "${STATS_SERVER_PING_LOSS[$ip]}" && "${STATS_SERVER_PING_LOSS[$ip]}" != "-" ]]; then
+                    GRP_LOSS_SUM[$g]=$(awk -v s="${GRP_LOSS_SUM[$g]:-0}" -v v="$loss" 'BEGIN {print s+v}')
+                    GRP_LOSS_CNT[$g]=$(( ${GRP_LOSS_CNT[$g]:-0} + 1 ))
+                fi
                 
                 # Numeric
                 if (( $(echo "$lat_avg > 0" | bc -l) )); then
@@ -3154,10 +3170,12 @@ generate_hierarchical_stats() {
                      GRP_LAT_SUM[$g]=$(awk -v s="${GRP_LAT_SUM[$g]:-0}" -v v="$lat_avg" 'BEGIN {print s+v}')
                      GRP_LAT_CNT[$g]=$(( ${GRP_LAT_CNT[$g]:-0} + 1 ))
 
-                     if (( $(echo "$jit < ${GRP_JIT_MIN[$g]}" | bc -l) )); then GRP_JIT_MIN[$g]=$jit; fi
-                     if (( $(echo "$jit > ${GRP_JIT_MAX[$g]}" | bc -l) )); then GRP_JIT_MAX[$g]=$jit; fi
-                     GRP_JIT_SUM[$g]=$(awk -v s="${GRP_JIT_SUM[$g]:-0}" -v v="$jit" 'BEGIN {print s+v}')
-                     GRP_JIT_CNT[$g]=$(( ${GRP_JIT_CNT[$g]:-0} + 1 ))
+                     if [[ -n "${STATS_SERVER_PING_JITTER[$ip]}" && "${STATS_SERVER_PING_JITTER[$ip]}" != "-" ]]; then
+                         if (( $(echo "$jit < ${GRP_JIT_MIN[$g]}" | bc -l) )); then GRP_JIT_MIN[$g]=$jit; fi
+                         if (( $(echo "$jit > ${GRP_JIT_MAX[$g]}" | bc -l) )); then GRP_JIT_MAX[$g]=$jit; fi
+                         GRP_JIT_SUM[$g]=$(awk -v s="${GRP_JIT_SUM[$g]:-0}" -v v="$jit" 'BEGIN {print s+v}')
+                         GRP_JIT_CNT[$g]=$(( ${GRP_JIT_CNT[$g]:-0} + 1 ))
+                     fi
                 fi
             
             # Capabilities Group
@@ -3191,8 +3209,8 @@ generate_hierarchical_stats() {
     # Display Global Stats
     if [[ $G_LAT_CNT -gt 0 ]]; then
         local g_lat_avg=$(awk -v s="$G_LAT_SUM" -v c="$G_LAT_CNT" 'BEGIN {printf "%.2f", s/c}')
-        local g_jit_avg=$(awk -v s="$G_JIT_SUM" -v c="$G_JIT_CNT" 'BEGIN {printf "%.2f", s/c}')
-        local g_loss_avg=$(awk -v s="$G_LOSS_SUM" -v c="$G_LOSS_CNT" 'BEGIN {printf "%.2f", s/c}')
+        local g_jit_avg=$(awk -v s="$G_JIT_SUM" -v c="$G_JIT_CNT" 'BEGIN {if(c>0) printf "%.2f", s/c; else print "0.00"}')
+        local g_loss_avg=$(awk -v s="$G_LOSS_SUM" -v c="$G_LOSS_CNT" 'BEGIN {if(c>0) printf "%.2f", s/c; else print "0.00"}')
         
         echo -e "${GRAY}---------------------------------------------------------------${NC}"
         echo -e "  🌍 ${BOLD}GLOBAL ALL SERVERS${NC}"
