@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.7.0
-# "DoT Stats in Terminal + Blocked Trace Fix"
+# Versão: 12.10.0
+# "Unified Output Format"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.7.0"
+SCRIPT_VERSION="12.10.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -163,7 +163,7 @@ LOG_FILE_CSV_REC="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}_
 # Default Configuration (Respects Config File)
 # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
 VERBOSE_LEVEL=${VERBOSE_LEVEL:-1}
-ENABLE_JSON_LOG=${ENABLE_JSON_LOG:-"false"}
+
 
 # Extra Features Defaults
 ENABLE_EDNS_CHECK=${ENABLE_EDNS_CHECK:-"true"}
@@ -503,7 +503,7 @@ print_execution_summary() {
     
     echo -e "\n${PURPLE}[8. LOGS & SAÍDA]${NC}"
     echo -e "  📝 Log Texto (.log) : ${CYAN}${ENABLE_LOG_TEXT}${NC}"
-    echo -e "  📝 Log JSON (.json) : ${CYAN}${ENABLE_JSON_LOG}${NC}"
+
     echo -e "  🎨 Color Output     : ${COLOR_OUTPUT}"
     echo -e "  📂 Output Dir       : $LOG_DIR"
     
@@ -687,7 +687,7 @@ interactive_configuration() {
         ask_boolean "Habilitar Gráficos no HTML?" "ENABLE_CHARTS"
         ask_boolean "Gerar relatório Detalhado HTML?" "ENABLE_HTML_REPORT"
         ask_boolean "Gerar relatório JSON (Report)?" "ENABLE_JSON_REPORT"
-        ask_boolean "Gerar log JSON? (Raw)" "ENABLE_JSON_LOG"
+
         ask_boolean "Gerar relatório CSV (Plano)?" "ENABLE_CSV_REPORT"
         
         ask_boolean "Testar SOMENTE grupos usados por domínios?" "ONLY_TEST_ACTIVE_GROUPS"
@@ -807,7 +807,7 @@ save_config_to_file() {
     
     update_conf_key "VALIDATE_CONNECTIVITY" "$VALIDATE_CONNECTIVITY"
     sed -i "s|^VERBOSE_LEVEL=.*|VERBOSE_LEVEL=$VERBOSE_LEVEL|" "$CONFIG_FILE" # Numeric
-    update_conf_key "ENABLE_JSON_LOG" "$ENABLE_JSON_LOG"
+
     update_conf_key "ENABLE_LOG_TEXT" "$ENABLE_LOG_TEXT"
     
     # Report Flags
@@ -3098,7 +3098,7 @@ assemble_json() {
   }
 }
 EOF
-    echo -e "  📄 Relatório JSON    : ${GREEN}$JSON_FILE${NC}"
+
 }
 
 # --- HIERARCHICAL REPORTING (v2 Refactored) ---
@@ -3353,7 +3353,7 @@ generate_hierarchical_stats() {
         echo -e "     ✨ Modern   : DNSSEC OK:${GREEN}${GRP_DNSSEC_OK[$g]:-0}${NC} | DoH OK:${GREEN}${GRP_DOH_OK[$g]:-0}${NC} | TLS OK:${GREEN}${GRP_TLS_OK[$g]:-0}${NC}"
 
         echo -e "     ${GRAY}Servers:${NC}"
-        printf "       %-18s | %-6s | %-20s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Ping" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "COOKIE" "DNSSEC" "DOH" "TLS"
+        printf "       %-18s | %-6s | %-20s | %-6s | %-12s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Ping" "Lat/Jit/Loss" "TCP53" "DoT_TCP853" "VER" "REC" "EDNS" "COOKIE" "DNSSEC" "DOH" "TLS"
         
         # List Servers in this Group
         for ip in ${DNS_GROUPS[$g]}; do
@@ -3405,8 +3405,8 @@ generate_hierarchical_stats() {
              local lat_str="${s_lat_avg}/${s_jit}/${s_loss}%"
              [[ "$s_loss" == "100" ]] && lat_str="DOWN"
              
-             printf "       %-18s | ${c_stat}%-6s${NC} | ${c_stat}%-20s${NC} | ${c_p53}%-6s${NC} | ${c_dot}%-6s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
-                 "$ip" "$s_status" "$lat_str" "${p53:0:4}" "${p853:0:3}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
+             printf "       %-18s | ${c_stat}%-6s${NC} | ${c_stat}%-20s${NC} | ${c_p53}%-6s${NC} | ${c_dot}%-12s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
+                 "$ip" "$s_status" "$lat_str" "${p53:0:4}" "${p853:0:6}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
         done
     done
     
@@ -4207,7 +4207,7 @@ EOF
         local tls_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && tls_term="${GREEN}OK${NC}"
         [[ "${STATS_SERVER_TLS[$ip]}" == "FAIL" ]] && tls_term="${RED}FAIL${NC}"
 
-        echo -e "     Ping:${ping_res_term} | 53:${tcp53_res_term} | 853:${tls853_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term} | DNSSEC:${dnssec_term} | DoH:${doh_term} | TLS:${tls_term}"
+        echo -e "     Ping:${ping_res_term} | TCP53:${tcp53_res_term} | DoT_TCP853:${tls853_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term} | DNSSEC:${dnssec_term} | DoH:${doh_term} | TLS:${tls_term}"
 
         # --- JSON Export (Ping) ---
         if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
@@ -4732,15 +4732,15 @@ main() {
     fi
     
     echo -e "\n${GREEN}=== CONCLUÍDO ===${NC}"
-    echo "Relatório HTML: $HTML_FILE"
-    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo "Relatório JSON: $LOG_FILE_JSON"
+    echo "  📄 Relatório HTML   : $HTML_FILE"
+    [[ "$ENABLE_JSON_REPORT" == "true" ]] && echo "  📄 Relatório JSON   : $LOG_FILE_JSON"
     if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
-        echo "Relatório CSV (Srv) : $LOG_FILE_CSV_SRV"
-        echo "Relatório CSV (Zone): $LOG_FILE_CSV_ZONE"
-        echo "Relatório CSV (Rec) : $LOG_FILE_CSV_REC"
+        echo "  📄 Relatório CSV (Srv) : $LOG_FILE_CSV_SRV"
+        echo "  📄 Relatório CSV (Zone): $LOG_FILE_CSV_ZONE"
+        echo "  📄 Relatório CSV (Rec) : $LOG_FILE_CSV_REC"
     fi
-    [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "Log Texto     : $LOG_FILE_TEXT"
-    [[ "$ENABLE_JSON_LOG" == "true" ]] && echo "Log JSON      : $LOG_FILE_JSON"
+    [[ "$ENABLE_LOG_TEXT" == "true" ]] && echo "  📝 Log Texto        : $LOG_FILE_TEXT"
+
 }
 
 main "$@"
