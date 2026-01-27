@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.11.0
-# "HTML Active Groups Filter"
+# Versão: 12.16.0
+# "HTML Footer & Disclaimer"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.11.0"
+SCRIPT_VERSION="12.16.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2280,28 +2280,102 @@ generate_html_report_v2() {
     local target_file="$HTML_FILE"
     
     # --- PRE-CALCULATIONS & SUMMARY STATS ---
-    local total_exec=$(( CNT_TESTS_SRV + CNT_TESTS_ZONE + CNT_TESTS_REC ))
-    local fail_ratio=0
-    [[ $total_exec -gt 0 ]] && fail_ratio=$(( (FAILED_TESTS * 100) / total_exec ))
+    # --- METRICS CALCULATION (4 Pillars) ---
     
-    local grade="A"
-    local grade_color="#10b981" # Green
-    if [[ $fail_ratio -ge 10 ]]; then grade="C"; grade_color="#ef4444"; 
-    elif [[ $fail_ratio -gt 0 || $((SEC_REVEALED+SEC_AXFR_RISK)) -gt 0 ]]; then grade="B"; grade_color="#f59e0b"; fi
+    # 1. Network Health (Infra & Connectivity)
+    # Penalties: Down(-20), TCP Fail(-10), Loss(-1% per %), Latency(>Slow -5)
+    local score_network=100
+    for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+         local s_stat="${STATS_SERVER_PING_STATUS[$ip]}"
+         local s_loss="${STATS_SERVER_PING_LOSS[$ip]%%%}"
+         local s_tcp="${STATS_SERVER_PORT_53[$ip]}"
+         local s_lat="${STATS_SERVER_PING_AVG[$ip]%%.*}" # int
+
+         if [[ "$s_stat" == "FAIL" ]]; then score_network=$((score_network - 20)); fi
+         if [[ "$s_tcp" == "CLOSED" || "$s_tcp" == "FILTERED" ]]; then score_network=$((score_network - 10)); fi
+         if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt 0 ]]; then score_network=$((score_network - s_loss)); fi
+         if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$PING_LATENCY_SLOW" ]]; then score_network=$((score_network - 5)); fi
+    done
+    if [[ $score_network -lt 0 ]]; then score_network=0; fi
+
+    # 2. Service Stability (Reliability & Consistency)
+    # Penalties: Divergent(-5), Fail/Refused(-10) 
+    local score_stability=100
+    # Deduct based on global counters populated during execution
+    score_stability=$(( score_stability - (CNT_REC_DIVERGENT * 5) ))
+    score_stability=$(( score_stability - (CNT_REC_FAIL * 10) ))
+    # Also consider zone divergence
+    score_stability=$(( score_stability - (CNT_ZONES_DIV * 5) ))
+    if [[ $score_stability -lt 0 ]]; then score_stability=0; fi
+
+    # 3. Security Posture (Risk Assessment)
+    # Penalties: AXFR Open(-40), Version Exposed(-15), Recursion Open(-20)
+    local score_security=100
+    if [[ $SEC_AXFR_RISK -gt 0 ]]; then score_security=$((score_security - 40)); fi
+    if [[ $SEC_REVEALED -gt 0 ]]; then score_security=$((score_security - 15)); fi
+    if [[ $SEC_REC_RISK -gt 0 ]]; then score_security=$((score_security - 20)); fi
+    # Bonus/Penalty for DNSSEC logic could go here, but kept simple
+    if [[ $score_security -lt 0 ]]; then score_security=0; fi
+
+    # 4. Modernity Capabilities (Feature Adoption)
+    # Cumulative Score based on coverage ratio: EDNS, Cookies, DNSSEC, Encryption
+    local score_modernity=0
+    local srv_total=${#UNIQUE_SERVERS[@]}
+    if [[ $srv_total -gt 0 ]]; then
+         # Each category contributes up to 25 points based on % of servers
+         # EDNS
+         local ratio_edns=$(( (EDNS_SUCCESS * 25) / srv_total ))
+         score_modernity=$((score_modernity + ratio_edns))
+         
+         # COOKIE
+         local ratio_cookie=$(( (COOKIE_SUCCESS * 25) / srv_total ))
+         score_modernity=$((score_modernity + ratio_cookie))
+         
+         # DNSSEC Support (Server side validation capability)
+         local ratio_dnssec=$(( (DNSSEC_SUCCESS * 25) / srv_total ))
+         score_modernity=$((score_modernity + ratio_dnssec))
+
+         # Encryption (DoT or TLS - Check whichever is higher or combine?) 
+         # Let's use DOT_SUCCESS or TLS_SUCCESS. If strict, sum them carefully? 
+         # Let's count max coverage of encryption.
+         local enc_count=0
+         for ip in "${!UNIQUE_SERVERS[@]}"; do
+             if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" || "${STATS_SERVER_PORT_853[$ip]}" == "OK" || "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
+                 enc_count=$((enc_count+1))
+             fi
+         done
+         local ratio_enc=$(( (enc_count * 25) / srv_total ))
+         score_modernity=$((score_modernity + ratio_enc))
+    fi
+    if [[ $score_modernity -gt 100 ]]; then score_modernity=100; fi
+
+    # Helper function for grading color
+    get_score_color() {
+        local sc=$1
+        if [[ $sc -ge 90 ]]; then echo "#10b981"; # Green
+        elif [[ $sc -ge 70 ]]; then echo "#f59e0b"; # Yellow
+        elif [[ $sc -ge 50 ]]; then echo "#f97316"; # Orange
+        else echo "#ef4444"; fi # Red
+    }
+    
+    local color_net=$(get_score_color $score_network)
+    local color_stab=$(get_score_color $score_stability)
+    local color_sec=$(get_score_color $score_security)
+    local color_mod=$(get_score_color $score_modernity)
     
     # Scope Calculations (Parity with Terminal)
     local srv_count=${#UNIQUE_SERVERS[@]}
     local zone_count=0
     local rec_count=0
     if [[ -f "$FILE_DOMAINS" ]]; then
-        zone_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
-        rec_count=$(awk -F';' '!/^#/ && !/^\s*$/ { 
-            n_recs = split($4, a, ",");
-            n_extras = 0;
-            gsub(/[[:space:]]/, "", $5);
-            if (length($5) > 0) n_extras = split($5, b, ",");
-            count += n_recs * (1 + n_extras) 
-        } END { print count }' "$FILE_DOMAINS")
+         zone_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
+         rec_count=$(awk -F';' '!/^#/ && !/^\s*$/ { 
+             n_recs = split($4, a, ",");
+             n_extras = 0;
+             gsub(/[[:space:]]/, "", $5);
+             if (length($5) > 0) n_extras = split($5, b, ",");
+             count += n_recs * (1 + n_extras) 
+         } END { print count }' "$FILE_DOMAINS")
     fi
      [[ -z "$rec_count" ]] && rec_count=0
     
@@ -2318,6 +2392,7 @@ generate_html_report_v2() {
     done
     local glob_lat_avg=0
     [[ $glob_lat_cnt -gt 0 ]] && glob_lat_avg=$((glob_lat_sum / glob_lat_cnt))
+
 
     # Prepare JSON Strings for Charts
     local json_labels=""
@@ -2359,7 +2434,7 @@ generate_html_report_v2() {
         done
         [[ $g_total -gt 0 ]] && g_avg_lat=$((g_lat_sum / g_total))
         
-        server_rows+="<details style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
+        server_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
             <summary style='background:#1e293b; padding:12px 15px; cursor:pointer; font-weight:600; color:#fff; display:flex; justify-content:space-between;'>
                 <span>📂 $grp <span style='font-size:0.8em; opacity:0.6; font-weight:400;'>($g_total servers)</span></span>
                 <span style='font-size:0.8em; color:#94a3b8;'>Avg Lat: ${g_avg_lat}ms</span>
@@ -2389,10 +2464,17 @@ generate_html_report_v2() {
             local ver_cls="bg-neutral"; [[ "$ver_st" == "HIDDEN" ]] && ver_cls="bg-ok" || ver_cls="bg-fail"
             local rec_cls="bg-neutral"; [[ "$rec_st" == "CLOSED" ]] && rec_cls="bg-ok" || rec_cls="bg-fail"
 
+            local loss_clean=$(echo "$loss" | tr -d '%')
+            local loss_color="#10b981" # Green
+            if [[ "$loss_clean" != "0" ]]; then
+                 loss_color="#ef4444" # Red
+                 if [[ "$loss_clean" -lt "$PING_PACKET_LOSS_LIMIT" ]]; then loss_color="#f59e0b"; fi # Yellow
+            fi
+
             local safe_ip=${ip//./_}
             server_rows+="<tr>
                 <td><div style='font-weight:bold; color:#fff'>$ip</div></td>
-                <td><span class='badge $lat_class'>${lat}ms</span> <div style='font-size:0.7em; color:#64748b'>Loss: $loss</div></td>
+                <td><span class='badge $lat_class'>${lat}ms</span> <div style='font-size:0.75em; font-weight:600; color:$loss_color'>Loss: $loss</div></td>
                 <td><div style='margin-bottom:4px;'><span class='badge $ver_cls'>VER: $ver_st</span> <span class='badge $rec_cls'>REC: $rec_st</span></div><div style='display:flex; gap:5px; flex-wrap:wrap; opacity:0.8'>$caps</div></td>
                 <td style='text-align:right'>
                     <button class='btn-tech' onclick=\"showModal('ver_${safe_ip}', 'BIND ($ip)')\">VER</button>
@@ -2424,7 +2506,7 @@ generate_html_report_v2() {
              done
              unset soa_counts
              
-             zone_rows+="<details style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
+             zone_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
                 <summary style='background:#1e293b; padding:12px 15px; cursor:pointer; font-weight:600; color:#fff;'>🌍 $domain <span style='font-size:0.8em; color:#94a3b8; font-weight:400; margin-left:10px;'>Consensus SOA: $most_frequent_soa</span></summary>
                 <table style='width:100%'>
                 <thead style='background:#0f172a'><tr><th>Grupo</th><th>Servidor</th><th>SOA Serial</th><th>AXFR Policy</th><th>Logs</th></tr></thead>
@@ -2436,7 +2518,12 @@ generate_html_report_v2() {
                        local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
                        local soa_cls="bg-neutral"; [[ "$soa" == "$most_frequent_soa" ]] && soa_cls="bg-ok" || soa_cls="bg-fail"
                        [[ "$most_frequent_soa" == "" ]] && soa_cls="bg-warn" 
-                       local axfr_cls="bg-ok"; [[ "$axfr" != "DENIED" && "$axfr" != "REFUSED" ]] && axfr_cls="bg-fail"
+                       local axfr_cls="bg-fail"
+                       if [[ "$axfr" == "DENIED" || "$axfr" == "REFUSED" ]]; then 
+                           axfr_cls="bg-ok"
+                       elif [[ "$axfr" == "TIMEOUT" || "$axfr" == "ERR" || "$axfr" == "TIMEOUT/ERR" ]]; then
+                           axfr_cls="bg-warn"
+                       fi
                        
                        local safe_dom=${domain//./_}; local safe_srv=${srv//./_}
                        zone_rows+="<tr>
@@ -2460,15 +2547,28 @@ generate_html_report_v2() {
         local cur_zone=""; local cur_type=""
         while read -r key; do
              IFS='|' read -r r_dom r_type r_grp r_srv <<< "$key"
+             
+             # Zone Change
              if [[ "$r_dom" != "$cur_zone" ]]; then
-                 [[ -n "$cur_zone" ]] && record_rows+="</tbody></table></details></details>"
-                 cur_zone="$r_dom"; cur_type=""; 
-                 record_rows+="<details style='margin-bottom:10px; border:1px solid #334155; border-radius:8px;'><summary style='background:#1e293b; padding:10px 15px; cursor:pointer; font-weight:700; color:#fff;'>📝 $cur_zone</summary>"
+                 # Close previous inner type if active
+                 [[ -n "$cur_type" ]] && record_rows+="</tbody></table></details></div>"
+                 # Close previous zone if active
+                 [[ -n "$cur_zone" ]] && record_rows+="</details>"
+                 
+                 cur_zone="$r_dom"
+                 cur_type="" # Reset type for new zone
+                 # Open Zone
+                 record_rows+="<details open style='margin-bottom:10px; border:1px solid #334155; border-radius:8px;'><summary style='background:#1e293b; padding:10px 15px; cursor:pointer; font-weight:700; color:#fff;'>📝 $cur_zone</summary>"
              fi
+             
+             # Type Change
              if [[ "$r_type" != "$cur_type" ]]; then
-                 [[ -n "$cur_type" ]] && record_rows+="</tbody></table></details>"
+                 # Close previous type if active within same zone
+                 [[ -n "$cur_type" ]] && record_rows+="</tbody></table></details></div>"
+                 
                  cur_type="$r_type"
-                 record_rows+="<div style='padding:5px 15px;'><details style='margin-bottom:5px; border:1px solid #475569; border-radius:6px;'><summary style='background:#334155; padding:5px 10px; cursor:pointer; font-size:0.9em;'>Tipo: <strong style='color:#facc15'>$cur_type</strong></summary><table style='width:100%; font-size:0.9em;'><thead><tr><th>Server</th><th>Status</th><th>Resposta</th><th>Latência</th><th>Log</th></tr></thead><tbody>"
+                 # Open Type (Wrapped in Div for Indent)
+                 record_rows+="<div style='padding:5px 15px;'><details style='margin-bottom:5px; border:1px solid #475569; border-radius:6px;' open><summary style='background:#334155; padding:5px 10px; cursor:pointer; font-size:0.9em; font-weight:600;'>Tipo: <span style='color:#facc15'>$cur_type</span></summary><div class='table-responsive'><table style='width:100%; font-size:0.9em; border-collapse: collapse;'><thead><tr style='background:#0f172a; color:#94a3b8; text-align:left;'><th style='padding:8px;'>Server</th><th style='padding:8px;'>Status</th><th style='padding:8px;'>Resposta</th><th style='padding:8px;'>Latência</th><th style='padding:8px;'>Log</th></tr></thead><tbody>"
              fi
 
              local r_status="${STATS_RECORD_RES[$key]}"; local r_ans="${STATS_RECORD_ANSWER[$key]}"; local r_lat="${STATS_RECORD_LATENCY[$key]}"
@@ -2477,9 +2577,11 @@ generate_html_report_v2() {
              local cons_badge=""; [[ "$r_cons" == "DIVERGENT" ]] && cons_badge="<span class='badge bg-fail'>DIV</span>"
              local safe_dom=${r_dom//./_}; local safe_srv=${r_srv//./_}
              
-             record_rows+="<tr><td>$r_srv <span style='font-size:0.8em;opacity:0.6'>($r_grp)</span> $cons_badge</td><td><span class='badge $st_cls'>$r_status</span></td><td><div style='max-height:40px; overflow-y:auto; font-family:monospace; font-size:0.8em; white-space:pre-wrap;'>$r_ans</div></td><td>${r_lat}ms</td><td><button class='btn-tech' onclick=\"showModal('rec_${safe_dom}_${r_type}_${safe_srv}','DIG $r_dom ($r_type)')\">LOG</button></td></tr>"
+             record_rows+="<tr style='border-bottom: 1px solid #334155;'><td style='padding:8px;'>$r_srv <span style='font-size:0.8em;opacity:0.6'>($r_grp)</span> $cons_badge</td><td style='padding:8px;'><span class='badge $st_cls'>$r_status</span></td><td style='padding:8px;'><div style='max-height:60px; overflow-y:auto; font-family:monospace; font-size:0.85em; white-space:pre-wrap; color:#e2e8f0;'>$r_ans</div></td><td style='padding:8px;'>${r_lat}ms</td><td style='padding:8px;'><button class='btn-tech' onclick=\"showModal('rec_${safe_dom}_${r_type}_${safe_srv}','DIG $r_dom ($r_type)')\">LOG</button></td></tr>"
         done < "$tmp_rec_keys.sorted"
-        [[ -n "$cur_type" ]] && record_rows+="</tbody></table></details></div>"
+        
+        # Close Final Tags
+        [[ -n "$cur_type" ]] && record_rows+="</tbody></table></div></details></div>" 
         [[ -n "$cur_zone" ]] && record_rows+="</details>"
         rm -f "$tmp_rec_keys" "$tmp_rec_keys.sorted"
     fi
@@ -2536,6 +2638,14 @@ generate_html_report_v2() {
         .summary-card { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; color:#fff; display: flex; gap: 20px; flex-wrap: wrap; }
     </style>
     <script>
+        function toggleAllDetails(open) {
+            const details = document.querySelectorAll('.tab-content.active details');
+            details.forEach(el => {
+                if(open) el.setAttribute('open', '');
+                else el.removeAttribute('open');
+            });
+        }
+
         function openTab(id) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -2576,7 +2686,37 @@ generate_html_report_v2() {
         <div id="tab-dashboard" class="tab-content active">
             <div class="page-header">
                 <div><h1>Dashboard Executivo</h1><div class="subtitle">Visão unificada da execução (Paridade Terminal).</div></div>
-                <div style="text-align:right"><div style="font-size:3rem; font-weight:800; color:${grade_color}; line-height:1;">${grade}</div><div style="font-size:0.8rem; letter-spacing:1px; color:${grade_color}; font-weight:600;">HEALTH SCORE</div></div>
+            </div>
+            
+            <!-- NEW METRICS GRID -->
+            <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                 <!-- 1. NETWORK -->
+                 <div class="card" style="border-top: 3px solid ${color_net}; display:flex; flex-direction:column; justify-content:space-between;">
+                     <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">📡 Rede</div>
+                     <div style="font-size:2.5rem; font-weight:800; color:${color_net}; margin:10px 0;">${score_network}</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Infra & Conectividade</div>
+                 </div>
+                 
+                 <!-- 2. STABILITY -->
+                 <div class="card" style="border-top: 3px solid ${color_stab}; display:flex; flex-direction:column; justify-content:space-between;">
+                     <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">⚙️ Estabilidade</div>
+                     <div style="font-size:2.5rem; font-weight:800; color:${color_stab}; margin:10px 0;">${score_stability}</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Consistência & DNS</div>
+                 </div>
+                 
+                 <!-- 3. SECURITY -->
+                 <div class="card" style="border-top: 3px solid ${color_sec}; display:flex; flex-direction:column; justify-content:space-between;">
+                     <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🛡️ Segurança</div>
+                     <div style="font-size:2.5rem; font-weight:800; color:${color_sec}; margin:10px 0;">${score_security}</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Riscos & Hardening</div>
+                 </div>
+                 
+                 <!-- 4. MODERNITY -->
+                 <div class="card" style="border-top: 3px solid ${color_mod}; display:flex; flex-direction:column; justify-content:space-between;">
+                     <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🚀 Capacidades</div>
+                     <div style="font-size:2.5rem; font-weight:800; color:${color_mod}; margin:10px 0;">${score_modernity}</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Features Modernas</div>
+                 </div>
             </div>
 
             <!-- TERMINAL PARITY GRID -->
@@ -2627,11 +2767,39 @@ generate_html_report_v2() {
                 const ctxStat = document.getElementById('chartStat');
                 if(ctxStat) { new Chart(ctxStat, { type: 'doughnut', data: { labels: ['Sucesso', 'Falha', 'Divergente'], datasets: [{ data: [$SUCCESS_TESTS, $FAILED_TESTS, $DIVERGENT_TESTS], backgroundColor: ['#10b981', '#ef4444', '#a855f7'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color:'#94a3b8' } } } } }); }
             </script>
+            <!-- METRIC DEFINITIONS -->
+            <div style="margin-top:30px; display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px; font-size:0.8rem; color:#94a3b8; border-top:1px solid #334155; padding-top:20px;">
+                <div><strong style="color:#fff">📡 Rede</strong><br>Avalia conectividade (Ping), disponibilidade TCP e latência. Penaliza falhas de conexão e perda de pacotes.</div>
+                <div><strong style="color:#fff">⚙️ Estabilidade</strong><br>Mede a consistência das respostas entre servidores e falhas de resolução (SERVFAIL/REFUSED).</div>
+                <div><strong style="color:#fff">🛡️ Segurança</strong><br>Detecta riscos críticos como AXFR (Transferência de Zona) aberto, versão do BIND exposta e recursão indevida.</div>
+                <div><strong style="color:#fff">🚀 Capacidades</strong><br>Pontua a adesão a padrões modernos: DNSSEC, Criptografia (DoT/TLS), EDNS e Cookies.</div>
+            </div>
+
+            <!-- DISCLAIMER -->
+            <details style="margin-top:20px; background:rgba(0,0,0,0.2); border:1px solid #334155; border-radius:8px; font-size:0.85rem;">
+                <summary style="padding:10px; cursor:pointer; color:#fbbf24; font-weight:600;">⚠️ AVISO DE ISENÇÃO DE RESPONSABILIDADE (Leia-me)</summary>
+                <div style="padding:15px; color:#cbd5e1; line-height:1.6;">
+                    <p>Este relatório reflete apenas o que sobreviveu à viagem de volta para este script, e não necessariamente a <strong>Verdade Absoluta do Universo™</strong>.</p>
+                    <p>Lembre-se que entre o seu terminal e o servidor DNS existe uma selva hostil habitada por:</p>
+                    <ul style="margin-left:20px; margin-top:5px; margin-bottom:10px;">
+                        <li><strong>Firewalls Paranoicos:</strong> Que bloqueiam até pensamento positivo (e pacotes UDP legítimos).</li>
+                        <li><strong>Middleboxes Criativos:</strong> Filtros de segurança que acham que sua query DNS é um ataque nuclear.</li>
+                        <li><strong>Rate Limits:</strong> Porque ninguém gosta de spam, nem mesmo o servidor.</li>
+                        <li><strong>Balanceamento de Carga:</strong> Onde servidores diferentes respondem com humores diferentes.</li>
+                    </ul>
+                    <p><strong>Conclusão:</strong> Se estiver tudo vermelho, respire antes de xingar o admin do DNS (verifique sua rede). Se estiver tudo verde, desconfie.</p>
+                </div>
+            </details>
+            
+            <div style="margin-top:30px; text-align:center; color:#64748b; font-size:0.8rem; border-top:1px solid #334155; padding-top:20px;">
+                Gerado automaticamente por <strong>DNS Diagnostic Tool</strong><br>
+                Repositório Oficial: <a href="https://github.com/flashbsb/diagnostico_dns" target="_blank" style="color:#3b82f6; text-decoration:none;">github.com/flashbsb/diagnostico_dns</a>
+            </div>
         </div>
 
-        <div id="tab-servers" class="tab-content"><div class="page-header"><h1>Servidores</h1><div class="subtitle">Inventário e Performance.</div></div>$server_rows</div>
-        <div id="tab-zones" class="tab-content"><div class="page-header"><h1>Zonas</h1><div class="subtitle">Autoridade e SOA.</div></div>$zone_rows</div>
-        <div id="tab-records" class="tab-content"><div class="page-header"><h1>Registros</h1><div class="subtitle">Resolução e Consistência.</div></div>$record_rows</div>
+        <div id="tab-servers" class="tab-content"><div class="page-header"><div><h1>Servidores</h1><div class="subtitle">Inventário e Performance.</div></div><div><button class="btn-tech" onclick="toggleAllDetails(true)">Expandir Todos</button> <button class="btn-tech" onclick="toggleAllDetails(false)">Colapsar Todos</button></div></div>$server_rows</div>
+        <div id="tab-zones" class="tab-content"><div class="page-header"><div><h1>Zonas</h1><div class="subtitle">Autoridade e SOA.</div></div><div><button class="btn-tech" onclick="toggleAllDetails(true)">Expandir Todos</button> <button class="btn-tech" onclick="toggleAllDetails(false)">Colapsar Todos</button></div></div>$zone_rows</div>
+        <div id="tab-records" class="tab-content"><div class="page-header"><div><h1>Registros</h1><div class="subtitle">Resolução e Consistência.</div></div><div><button class="btn-tech" onclick="toggleAllDetails(true)">Expandir Todos</button> <button class="btn-tech" onclick="toggleAllDetails(false)">Colapsar Todos</button></div></div>$record_rows</div>
         
         <div id="tab-config" class="tab-content">
              <div class="page-header"><h1>Bastidores da Execução</h1></div>
