@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.10.0
-# "Unified Output Format"
+# Versão: 12.11.0
+# "HTML Active Groups Filter"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.10.0"
+SCRIPT_VERSION="12.11.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2344,6 +2344,13 @@ generate_html_report_v2() {
     local server_rows=""
     local sorted_groups=$(echo "${!DNS_GROUPS[@]}" | tr ' ' '\n' | sort)
     for grp in $sorted_groups; do
+        # Filter Logic
+        if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" ]]; then
+             # Sanitize key for lookup (remove potential hidden chars if any, though sorted_groups should be clean)
+             local clean_key=$(echo "$grp" | tr -d '[:space:]\r\n\t')
+             if [[ -z "${ACTIVE_GROUPS_CALC[$clean_key]}" ]]; then continue; fi
+        fi
+        
         local g_total=0; local g_avg_lat=0; local g_lat_sum=0
         for ip in ${DNS_GROUPS[$grp]}; do
              g_total=$((g_total+1))
