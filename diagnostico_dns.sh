@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.4.0
-# "Traceroute Restoration + Full Logs"
+# Versão: 12.7.0
+# "DoT Stats in Terminal + Blocked Trace Fix"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.4.0"
+SCRIPT_VERSION="12.7.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2825,7 +2825,7 @@ load_dns_groups() {
     [[ ! -f "$FILE_GROUPS" ]] && { echo -e "${RED}ERRO: $FILE_GROUPS não encontrado!${NC}"; exit 1; }
     while IFS=';' read -r name desc type timeout servers || [ -n "$name" ]; do
         [[ "$name" =~ ^# || -z "$name" ]] && continue
-        name=$(echo "$name" | xargs); servers=$(echo "$servers" | tr -d '[:space:]\r')
+        name=$(echo "$name" | tr -d '[:space:]\r\n\t' ); servers=$(echo "$servers" | tr -d '[:space:]\r')
         [[ -z "$timeout" ]] && timeout=$TIMEOUT
         IFS=',' read -ra srv_arr <<< "$servers"
         DNS_GROUPS["$name"]="${srv_arr[@]}"; DNS_GROUP_DESC["$name"]="$desc"; DNS_GROUP_TYPE["$name"]="$type"; DNS_GROUP_TIMEOUT["$name"]="$timeout"
@@ -2835,32 +2835,58 @@ load_dns_groups() {
     declare -gA UNIQUE_SERVERS
     declare -gA SERVER_GROUPS_MAP
     
-    # Pre-calculate active groups based on domains_tests.csv if filter is on
+    # Identificar Grupos Ativos (Filtragem)
+    # Limpar qualquer whitespace ou caractere invisivel nos nomes dos grupos
     declare -gA ACTIVE_GROUPS_CALC
+    
     if [[ "$ONLY_TEST_ACTIVE_GROUPS" == "true" ]]; then
-        # Check if domains file exists first
+        echo -e "${GRAY}  Filtro Ativado: Carregando apenas grupos referenciados em $FILE_DOMAINS...${NC}"
         if [[ -f "$FILE_DOMAINS" ]]; then
             while IFS=';' read -r domain groups _ _ _; do
                  [[ "$domain" =~ ^# || -z "$domain" ]] && continue
+                 
+                 # Split groups by comma
                  IFS=',' read -ra grp_list <<< "$groups"
-                 for g in "${grp_list[@]}"; do ACTIVE_GROUPS_CALC[$(echo "$g" | tr -d '[:space:]')]=1; done
+                 for raw_g in "${grp_list[@]}"; do
+                     # Sanitize: Remove spaces, carriage returns, tabs
+                     local clean_g=$(echo "$raw_g" | tr -d '[:space:]\r\n\t')
+                     if [[ -n "$clean_g" ]]; then
+                         ACTIVE_GROUPS_CALC["$clean_g"]=1
+                         # Debug only if verbose > 1
+                         [[ "$VERBOSE_LEVEL" -gt 1 ]] && echo "    -> Ativando Grupo: [$clean_g]"
+                     fi
+                 done
             done < "$FILE_DOMAINS"
+        else
+            echo -e "${YELLOW}  Aviso: $FILE_DOMAINS não encontrado. Ativando todos os grupos.${NC}"
+            for g in "${!DNS_GROUPS[@]}"; do ACTIVE_GROUPS_CALC[$g]=1; done
         fi
     else
+        # Se filtro desligado, ativa todos
         for g in "${!DNS_GROUPS[@]}"; do ACTIVE_GROUPS_CALC[$g]=1; done
     fi
 
     for grp in "${!DNS_GROUPS[@]}"; do
-        # Skip if not active
-        [[ -z "${ACTIVE_GROUPS_CALC[$grp]}" ]] && continue
+        # Sanitize loop key just in case
+        local clean_key=$(echo "$grp" | tr -d '[:space:]\r\n\t')
         
+        # Skip if not active
+        if [[ -z "${ACTIVE_GROUPS_CALC[$clean_key]}" ]]; then 
+             [[ "$VERBOSE_LEVEL" -gt 1 ]] && echo -e "    🚫 Ignorando Grupo Inativo: [$clean_key]"
+             continue
+        fi
+        
+        # Add to unique servers list
         for ip in ${DNS_GROUPS[$grp]}; do
             UNIQUE_SERVERS[$ip]=1
             # Append group to map
             if [[ -z "${SERVER_GROUPS_MAP[$ip]}" ]]; then SERVER_GROUPS_MAP[$ip]="$grp"; else SERVER_GROUPS_MAP[$ip]="${SERVER_GROUPS_MAP[$ip]},$grp"; fi
         done
     done
-    echo -e "  Identificados ${#UNIQUE_SERVERS[@]} servidores únicos para teste."
+    
+    local num_active=${#ACTIVE_GROUPS_CALC[@]}
+    local num_srv=${#UNIQUE_SERVERS[@]}
+    echo -e "  ✅ Escopo Definido: ${BOLD}${num_active}${NC} Grupos Ativos -> ${BOLD}${num_srv}${NC} Servidores Únicos."
 }
 
 
@@ -3245,6 +3271,9 @@ generate_hierarchical_stats() {
             elif [[ "$p53" == "CLOSED" ]]; then GRP_P53_CLOSED[$g]=$(( ${GRP_P53_CLOSED[$g]:-0} + 1 ));
             else GRP_P53_FILT[$g]=$(( ${GRP_P53_FILT[$g]:-0} + 1 )); fi
             
+            if [[ "$p853" == "OK" ]]; then GRP_P853_OK[$g]=$(( ${GRP_P853_OK[$g]:-0} + 1 ));
+            else GRP_P853_FAIL[$g]=$(( ${GRP_P853_FAIL[$g]:-0} + 1 )); fi
+            
             if [[ "$rec" == "OPEN" ]]; then GRP_REC_OPEN[$g]=$(( ${GRP_REC_OPEN[$g]:-0} + 1 ));
             else GRP_REC_CLOSED[$g]=$(( ${GRP_REC_CLOSED[$g]:-0} + 1 )); fi
             
@@ -3280,7 +3309,7 @@ generate_hierarchical_stats() {
         echo -e "     Jitter   : Min ${G_JIT_MIN}ms / Avg ${g_jit_avg}ms / Max ${G_JIT_MAX}ms"
         echo -e "     Connectivity : OK:${GREEN}${G_PING_OK}${NC} | Slow:${YELLOW}${G_PING_SLOW}${NC} | Fail:${RED}${G_PING_FAIL}${NC} | Down:${RED}${G_PING_DOWN}${NC}"
         echo -e "     Avg Loss : ${g_loss_avg}%"
-        echo -e "     Port 53  : Open:${GREEN}${G_P53_OPEN}${NC} / Closed:${RED}${G_P53_CLOSED}${NC} / Filt:${YELLOW}${G_P53_FILT}${NC}"
+        echo -e "     Ports    : 53 [Open:${GREEN}${G_P53_OPEN}${NC}/${RED}${G_P53_CLOSED}${NC}/${YELLOW}${G_P53_FILT}${NC}] | 853 [OK:${GREEN}${G_P853_OK}${NC}/Fail:${RED}${G_P853_FAIL}${NC}]"
         echo -e "     Security : Rec Open:${RED}${G_REC_OPEN}${NC} | Ver Hidden:${GREEN}${G_VER_HIDDEN}${NC} | Cookie OK:${GREEN}${G_COOKIE_OK}${NC}"
         echo -e "     Modern   : EDNS OK:${GREEN}${G_EDNS_OK}${NC} | DNSSEC OK:${GREEN}${G_DNSSEC_OK}${NC} | DoH OK:${GREEN}${G_DOH_OK}${NC} | TLS OK:${GREEN}${G_TLS_OK}${NC}"
     fi
@@ -3308,11 +3337,21 @@ generate_hierarchical_stats() {
             gloss_avg=$(awk -v s="${GRP_LOSS_SUM[$g]}" -v c="${GRP_LOSS_CNT[$g]}" 'BEGIN {printf "%.2f", s/c}')
         fi
         
+        # Calculate Group DoT
+        local g_dot_ok=${GRP_TLS_OK[$g]:-0} # Using TLS OK count which corresponds to DoT/853 check in this context or create specific if needed
+        # In run_server_tests: GRP_TLS stats are populated from DoT check? No, separate.
+        # Let's check GRP_P53_* vs GRP_P853 needed?
+        # Re-check accumulation loop: 
+        # GRP counters for 853 were missing in accumulation!
+        # Need to fix accumulation first? 
+        # Wait, I see GRP_TLS_OK... In run_server_tests, STATS_SERVER_TLS is handshake. STATS_SERVER_PORT_853 is socket.
+        # Let's check aggregation loop lines ~3270+
+        
         echo -e "     📊 Performance: Lat [${gl_min}/${gl_avg}/${gl_max}] | Jit [${gj_min}/${gj_avg}/${gj_max}] | Loss [${gloss_avg}%]"
         echo -e "     📡 Conexão : OK:${GREEN}${GRP_PING_OK[$g]:-0}${NC} | Slow:${YELLOW}${GRP_PING_SLOW[$g]:-0}${NC} | Fail:${RED}${GRP_PING_FAIL[$g]:-0}${NC} | Down:${RED}${GRP_PING_DOWN[$g]:-0}${NC}"
-        echo -e "     🛡️  Segurança: P53 Open:${GREEN}${GRP_P53_OPEN[$g]:-0}${NC} | Rec Open:${RED}${GRP_REC_OPEN[$g]:-0}${NC} | EDNS OK:${GREEN}${GRP_EDNS_OK[$g]:-0}${NC}"
+        echo -e "     🛡️  Segurança: P53 Open:${GREEN}${GRP_P53_OPEN[$g]:-0}${NC} | P853 Open:${GREEN}${GRP_P853_OK[$g]:-0}${NC} | Rec Open:${RED}${GRP_REC_OPEN[$g]:-0}${NC} | EDNS OK:${GREEN}${GRP_EDNS_OK[$g]:-0}${NC}"
         echo -e "     ✨ Modern   : DNSSEC OK:${GREEN}${GRP_DNSSEC_OK[$g]:-0}${NC} | DoH OK:${GREEN}${GRP_DOH_OK[$g]:-0}${NC} | TLS OK:${GREEN}${GRP_TLS_OK[$g]:-0}${NC}"
-        
+
         echo -e "     ${GRAY}Servers:${NC}"
         printf "       %-18s | %-6s | %-20s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s | %-6s\n" "IP" "Ping" "Lat/Jit/Loss" "P53" "DOT" "VER" "REC" "EDNS" "COOKIE" "DNSSEC" "DOH" "TLS"
         
@@ -3928,26 +3967,47 @@ EOF
              local trace_out
              trace_out=$(traceroute -n -m "$TRACE_MAX_HOPS" -w 3 "$ip" 2>&1)
              
-             # Extract hops (count lines that are properly numbered or approximate)
-             # A simple way: get the first field of the last line. 
-             # If successful, it's the hop number.
-             local last_hop
-             last_hop=$(echo "$trace_out" | tail -n 1 | awk '{print $1}')
+             # Logic to determine status
+             local last_line=$(echo "$trace_out" | tail -n 1)
+             local last_hop_num=$(echo "$last_line" | awk '{print $1}')
+             local reached_target="false"
              
-             if [[ "$last_hop" =~ ^[0-9]+$ ]]; then
-                 hops=$last_hop
+             # Check if target IP appears in the output (ignoring the command line itself)
+             # Use grep to check for IP in the last few lines or strictly in the output lines
+             if echo "$trace_out" | grep -q "$ip"; then
+                 # Be careful, $ip is in the command line echoed by some shells or header of traceroute
+                 # Check if it appears at the end of a line or as a hop address
+                 if echo "$trace_out" | grep -v "traceroute to" | grep -Fq "$ip"; then
+                     reached_target="true"
+                 fi
+             fi
+             
+             if [[ "$reached_target" == "true" && "$last_hop_num" =~ ^[0-9]+$ ]]; then
+                 # Success
+                 hops=$last_hop_num
                  hops_html="<span class='badge neutral'>${hops}</span>"
                  STATS_SERVER_HOPS[$ip]=$hops
-                 
-                 # Append to Trace Chart Data (Memory)
-                 # Format: "IP:Hops"
                  echo "$ip:$hops" >> "$TEMP_TRACE"
+                 echo -e "     🗺️  ${GRAY}Trace Hops  :${NC} ${hops}"
+                 
+             elif [[ "$last_hop_num" -ge "$TRACE_MAX_HOPS" ]]; then
+                 # Reached Max Hops without confirmation -> BLOCKED/TIMEOUT
+                 hops="MAX"
+                 hops_html="<span class='badge status-warn' title='Trace completou $TRACE_MAX_HOPS saltos sem confirmar destino. Provável Bloqueio ICMP.'>BLOCKED</span>"
+                 STATS_SERVER_HOPS[$ip]=$TRACE_MAX_HOPS
+                 # We flag as MAX for chart or just don't add to chart? Let's add as Max to show distance/effort.
+                 echo "$ip:$TRACE_MAX_HOPS" >> "$TEMP_TRACE"
+                 echo -e "     🗺️  ${GRAY}Trace Hops  :${NC} ${YELLOW}BLOCKED ($TRACE_MAX_HOPS)${NC}"
+                 
              else
-                 hops_html="<span class='badge status-warn'>ERR</span>"
+                 # Partial or weird error
+                 hops="ERR"
+                 hops_html="<span class='badge status-fail'>ERR</span>"
+                 echo -e "     🗺️  ${GRAY}Trace Hops  :${NC} ${RED}FAIL (N/A)${NC}"
              fi
              
              log_tech_details "trace_${ip}" "Traceroute: $ip" "$trace_out"
-             hops_html="<button class='btn-tech' onclick=\"showLog('trace_${ip}')\">${hops}</button>"
+             hops_html="<button class='btn-tech' onclick=\"showLog('trace_${ip}')\">${hops_html/button/span}</button>"
         fi
         
         # Port 53
