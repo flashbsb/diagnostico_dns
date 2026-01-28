@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.9
-# "Precision Logging"
+# Versão: 12.23.10
+# "Debug & Logging Fixes"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.9"
+SCRIPT_VERSION="12.23.10"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -460,7 +460,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Precision Logging      ${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Debug & Logging Fixes  ${NC}         ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -2874,7 +2874,7 @@ generate_html_report_v2() {
             // Remove active from nav items - matching href-style behavior conceptually but using ID map
             // Need to map tab ID to nav item index or selector. 
             // Simplified: remove all active, then find the one with onclick matching or use data attribs.
-            // But here we rely on the `event` if passed, or just manual class management.
+            // But here we rely on the \`event\` if passed, or just manual class management.
             
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             
@@ -3445,9 +3445,31 @@ log_tech_details() {
     local id=$1
     local title=$2
     local content=$3
+    
+    # 1. HTML Output
     # Sanitize content for HTML
     local safe_out=$(echo "$content" | sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g')
     echo "<div id=\"log_${id}\" style=\"display:none\">$safe_out</div>" >> "$TEMP_DETAILS"
+    
+    # 2. Text/Console Log Output (if enabled)
+    if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
+        {
+            echo "--------------------------------------------------------------------------------"
+            echo "TECH DETAILS: $title"
+            echo "--------------------------------------------------------------------------------"
+            echo "$content"
+            echo "--------------------------------------------------------------------------------"
+        } >> "$LOG_FILE_TEXT"
+        
+        # Also log to TEMP_FULL_LOG for the HTML tab mirroring
+        {
+            echo "--------------------------------------------------------------------------------"
+            echo "TECH DETAILS: $title"
+            echo "--------------------------------------------------------------------------------"
+            echo "$content"
+            echo "--------------------------------------------------------------------------------"
+        } >> "$TEMP_FULL_LOG"
+    fi
 }
 
 check_tcp_dns() {
