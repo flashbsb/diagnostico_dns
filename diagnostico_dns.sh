@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.0
+# Versão: 12.23.1
 # "Complete Scoring Transparency"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.0"
+SCRIPT_VERSION="12.23.1"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2470,72 +2470,69 @@ generate_html_report_v2() {
     local srv_total=${#UNIQUE_SERVERS[@]}
     
     if [[ $srv_total -gt 0 ]]; then
-         # Each category contributes up to 25 points based on % of servers
-         
+         # Recalculate counts locally for accuracy (iterating unique servers)
+         local cnt_edns=0; local missing_edns=""
+         local cnt_cookie=0; local missing_cookie=""
+         local cnt_dnssec=0; local missing_dnssec=""
+         local cnt_enc=0; local missing_enc=""
+
+         for ip in "${!UNIQUE_SERVERS[@]}"; do
+             if [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]]; then cnt_edns=$((cnt_edns+1)); else missing_edns+="$ip, "; fi
+             if [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]]; then cnt_cookie=$((cnt_cookie+1)); else missing_cookie+="$ip, "; fi
+             if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then cnt_dnssec=$((cnt_dnssec+1)); else missing_dnssec+="$ip, "; fi
+             if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" || "${STATS_SERVER_PORT_853[$ip]}" == "OK" || "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
+                 cnt_enc=$((cnt_enc+1)); else missing_enc+="$ip, "; fi
+         done
+
          # 1. EDNS
-         local ratio_edns=$(( (EDNS_SUCCESS * 25) / srv_total ))
+         local ratio_edns=$(( (cnt_edns * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_edns))
          modernity_details_log+="<li style='margin-bottom:8px;'><strong>EDNS0 (Score: +${ratio_edns}/25 pts)</strong>:<br>"
-         if [[ $ratio_edns -lt 25 ]]; then
-             local missing_edns=""
-             for ip in "${!UNIQUE_SERVERS[@]}"; do
-                 [[ "${STATS_SERVER_EDNS[$ip]}" != "OK" ]] && missing_edns+="$ip, "
-             done
+         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Presente em $cnt_edns de $srv_total servidores.</span><br>"
+         if [[ $cnt_edns -lt $srv_total ]]; then
              modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente em: ${missing_edns%, }</span><br>"
          else 
-             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Implementado em 100% dos servidores.</span><br>"
+             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
          fi
          modernity_details_log+="</li>"
          
          # 2. COOKIE
-         local ratio_cookie=$(( (COOKIE_SUCCESS * 25) / srv_total ))
+         local ratio_cookie=$(( (cnt_cookie * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_cookie))
          modernity_details_log+="<li style='margin-bottom:8px;'><strong>DNS Cookies (Score: +${ratio_cookie}/25 pts)</strong>:<br>"
-         if [[ $ratio_cookie -lt 25 ]]; then
-             local missing_cookie=""
-             for ip in "${!UNIQUE_SERVERS[@]}"; do
-                 [[ "${STATS_SERVER_COOKIE[$ip]}" != "OK" ]] && missing_cookie+="$ip, "
-             done
+         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Presente em $cnt_cookie de $srv_total servidores.</span><br>"
+         if [[ $cnt_cookie -lt $srv_total ]]; then
              modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente em: ${missing_cookie%, }</span><br>"
          else
-              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Implementado em 100% dos servidores.</span><br>"
+              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
          fi
          modernity_details_log+="</li>"
          
-         # 3. DNSSEC Support
-         local ratio_dnssec=$(( (DNSSEC_SUCCESS * 25) / srv_total ))
+         # 3. DNSSEC
+         local ratio_dnssec=$(( (cnt_dnssec * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_dnssec))
          modernity_details_log+="<li style='margin-bottom:8px;'><strong>Validação DNSSEC (Score: +${ratio_dnssec}/25 pts)</strong>:<br>"
-         if [[ $ratio_dnssec -lt 25 ]]; then
-             local missing_dnssec=""
-             for ip in "${!UNIQUE_SERVERS[@]}"; do
-                 [[ "${STATS_SERVER_DNSSEC[$ip]}" != "OK" ]] && missing_dnssec+="$ip, "
-             done
+         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Validando em $cnt_dnssec de $srv_total servidores.</span><br>"
+         if [[ $cnt_dnssec -lt $srv_total ]]; then
              modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente/Falha em: ${missing_dnssec%, }</span><br>"
          else
-             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Suportado por todos os servidores.</span><br>"
+             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
          fi
          modernity_details_log+="</li>"
 
-         # 4. Encryption (DoT etc)
-         local enc_count=0
-         local missing_enc=""
-         for ip in "${!UNIQUE_SERVERS[@]}"; do
-             if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" || "${STATS_SERVER_PORT_853[$ip]}" == "OK" || "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
-                 enc_count=$((enc_count+1))
-             else
-                 missing_enc+="$ip, "
-             fi
-         done
-         local ratio_enc=$(( (enc_count * 25) / srv_total ))
+         # 4. Encryption
+         local ratio_enc=$(( (cnt_enc * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_enc))
          modernity_details_log+="<li style='margin-bottom:8px;'><strong>Criptografia (DoT/DoH/TLS) (Score: +${ratio_enc}/25 pts)</strong>:<br>"
-         if [[ $ratio_enc -lt 25 ]]; then
+         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Suportado em $cnt_enc de $srv_total servidores.</span><br>"
+         if [[ $cnt_enc -lt $srv_total ]]; then
               modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Não detectado em: ${missing_enc%, }</span><br>"
          else
-              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Suporte a criptografia em todos os servidores.</span><br>"
+              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
          fi
          modernity_details_log+="</li>"
+    else
+         modernity_details_log="<li><span style='color:#94a3b8'>Nenhum servidor identificado para análise de capacidades.</span></li>"
     fi
     if [[ $score_modernity -gt 100 ]]; then score_modernity=100; fi
 
