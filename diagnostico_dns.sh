@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.3
-# "Complete Scoring Transparency"
+# Versão: 12.23.8
+# "Refined Scoring & Alerts"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.3"
+SCRIPT_VERSION="12.23.8"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -46,6 +46,26 @@ if [[ "$COLOR_OUTPUT" == "true" ]]; then
     GRAY=$'\e[0;90m'
     NC=$'\e[0m'
 fi
+
+# --- DATA COLLECTION FOR BACKSTAGE ---
+# Capture tool versions and system info for the report
+SYS_KERNEL=$(uname -r 2>/dev/null || echo "Unknown")
+SYS_OS=$(grep -E '^(PRETTY_NAME|NAME)=' /etc/os-release 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"' || uname -s)
+TOOL_DIG_VER=$(dig -v 2>&1 | head -n1 | cut -d' ' -f2,3)
+TOOL_OPENSSL_VER=$(openssl version 2>/dev/null | cut -d' ' -f1,2 || echo "Not Found")
+TOOL_CURL_VER=$(curl --version 2>/dev/null | head -n1 | cut -d' ' -f1,2 || echo "Not Found")
+TOOL_TRACE_VER=$(traceroute --version 2>&1 | head -n1 | cut -d' ' -f2- || tracepath -V 2>&1 || echo "Not Found")
+INPUT_DOMAINS_COUNT=0
+INPUT_GROUPS_COUNT=0
+[[ -f "$FILE_DOMAINS" ]] && INPUT_DOMAINS_COUNT=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
+[[ -f "$FILE_GROUPS" ]] && INPUT_GROUPS_COUNT=$(grep -vE '^\s*#|^\s*$' "$FILE_GROUPS" | wc -l)
+FILE_DOMAINS_SIZE=$(du -h "$FILE_DOMAINS" 2>/dev/null | cut -f1 || echo "0")
+FILE_GROUPS_SIZE=$(du -h "$FILE_GROUPS" 2>/dev/null | cut -f1 || echo "0")
+# Read content for display (head 50 lines to avoid overflow)
+CONTENT_DOMAINS=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" 2>/dev/null | head -n 50)
+CONTENT_GROUPS=$(grep -vE '^\s*#|^\s*$' "$FILE_GROUPS" 2>/dev/null | head -n 50)
+
+
 
 declare -A CONNECTIVITY_CACHE
 declare -A HTML_CONN_ERR_LOGGED 
@@ -440,7 +460,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Complete Transparency${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Refined Scoring        ${NC}         ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -2289,7 +2309,7 @@ generate_html_report_v2() {
     # --- METRICS CALCULATION (4 Pillars) ---
     
     # 1. Network Health (Infra & Connectivity)
-    # Penalties: Down(-20), TCP Fail(-10), Loss(-1% per %), Latency(>Slow -5)
+    # Penalties: Down(-20), TCP Fail(-10), Loss(-1% per %), Latency(>Threshold -5)
     local score_network=100
     local network_details_log=""
     for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
@@ -2307,11 +2327,11 @@ generate_html_report_v2() {
              score_network=$((score_network - 10))
              penalties+="<span style='color:#f59e0b'>Porta 53 Fechada/Filtrada (-10)</span>; "
          fi
-         if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt 0 ]]; then 
+         if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt "$PING_PACKET_LOSS_LIMIT" ]]; then 
              score_network=$((score_network - s_loss))
              penalties+="<span style='color:#f59e0b'>Perda de Pacote ${s_loss}% (-${s_loss})</span>; "
          fi
-         if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$PING_LATENCY_SLOW" ]]; then 
+         if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$LATENCY_WARNING_THRESHOLD" ]]; then 
              score_network=$((score_network - 5))
              penalties+="<span style='color:#f59e0b'>Alta Latência ${s_lat}ms (-5)</span>; "
          fi
@@ -2938,25 +2958,7 @@ generate_html_report_v2() {
                  </div>
             </div>
 
-            <!-- NAV CARDS GRID -->
-            <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:20px;">
-                 <div class="card" onclick="openTab('tab-config')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">⚙️</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Geral</div><div style="font-size:1.2rem; font-weight:700;">Status</div></div>
-                 </div>
-                 <div class="card" onclick="openTab('tab-servers')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">🖥️</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Servidores</div><div style="font-size:1.2rem; font-weight:700;">${srv_count}</div></div>
-                 </div>
-                 <div class="card" onclick="openTab('tab-zones')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">🌍</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Zonas</div><div style="font-size:1.2rem; font-weight:700;">${zone_count}</div></div>
-                 </div>
-                 <div class="card" onclick="openTab('tab-records')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">📝</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Registros</div><div style="font-size:1.2rem; font-weight:700;">${rec_count}</div></div>
-                 </div>
-            </div>
+
 
             <!-- HIDDEN LOGS FOR MODALS -->
             <div id="log_network_details" style="display:none">
@@ -3002,7 +3004,7 @@ generate_html_report_v2() {
             <!-- TERMINAL PARITY GRID -->
             <div class="dashboard-grid">
                 <!-- GERAL -->
-                <div class="card" style="border-top: 3px solid #3b82f6;">
+                <div class="card" onclick="openTab('tab-config')" style="border-top: 3px solid #3b82f6; cursor:pointer;">
                     <div class="card-header">GERAL</div>
                     <div class="stat-row"><span class="stat-label">⏱️ Duração</span> <span class="stat-val">${TOTAL_DURATION}s</span></div>
                     <div class="stat-row"><span class="stat-label">🧪 Execuções</span> <span class="stat-val">${total_exec}</span></div>
@@ -3011,7 +3013,7 @@ generate_html_report_v2() {
                 </div>
 
                 <!-- SERVIDORES -->
-                <div class="card" style="border-top: 3px solid #f59e0b;">
+                <div class="card" onclick="openTab('tab-servers')" style="border-top: 3px solid #f59e0b; cursor:pointer;">
                     <div class="card-header">SERVIDORES</div>
                     <div class="stat-row"><span class="stat-label">📡 Conectividade</span> <span class="stat-val"><span class="text-ok">${CNT_PING_OK:-0} OK</span> / <span class="text-fail">${CNT_PING_FAIL:-0} Fail</span></span></div>
                     <div class="stat-row"><span class="stat-label">🌉 Portas (53/853)</span> <span class="stat-val">53[<span class="text-ok">${TCP_SUCCESS:-0}</span>/<span class="text-fail">${TCP_FAIL:-0}</span>] | 853[<span class="text-ok">${DOT_SUCCESS:-0}</span>/<span class="text-fail">${DOT_FAIL:-0}</span>]</span></div>
@@ -3021,7 +3023,7 @@ generate_html_report_v2() {
                 </div>
 
                 <!-- ZONAS -->
-                <div class="card" style="border-top: 3px solid #10b981;">
+                <div class="card" onclick="openTab('tab-zones')" style="border-top: 3px solid #10b981; cursor:pointer;">
                      <div class="card-header">ZONAS</div>
                      <div class="stat-row"><span class="stat-label">🔄 SOA Sync</span> <span class="stat-val"><span class="text-ok">${CNT_ZONES_OK:-0} OK</span> / <span class="text-fail">${CNT_ZONES_DIV:-0} DIV</span></span></div>
                      <div class="stat-row"><span class="stat-label">🌍 AXFR</span> <span class="stat-val"><span class="text-ok">${SEC_AXFR_OK:-0} Block</span> / <span class="text-fail">${SEC_AXFR_RISK:-0} Open</span></span></div>
@@ -3029,7 +3031,7 @@ generate_html_report_v2() {
                 </div>
 
                  <!-- REGISTROS -->
-                <div class="card" style="border-top: 3px solid #a855f7;">
+                <div class="card" onclick="openTab('tab-records')" style="border-top: 3px solid #a855f7; cursor:pointer;">
                      <div class="card-header">REGISTROS</div>
                      <div class="stat-row"><span class="stat-label">✅ Sucessos</span> <span class="stat-val"><span class="text-ok">${CNT_REC_FULL_OK:-0} OK</span> / <span class="text-warn">${CNT_REC_PARTIAL:-0} Partial</span></span></div>
                      <div class="stat-row"><span class="stat-label">🚫 Resultados</span> <span class="stat-val"><span class="text-fail">${CNT_REC_FAIL:-0} Fail</span> / <span class="text-warn">${CNT_REC_NXDOMAIN:-0} NX</span></span></div>
@@ -3075,58 +3077,139 @@ generate_html_report_v2() {
         <div id="tab-zones" class="tab-content"><div class="page-header"><div><h1>Zonas</h1><div class="subtitle">Autoridade e SOA.</div></div><div><button class="btn-tech" onclick="toggleAllDetails(true)">Expandir Todos</button> <button class="btn-tech" onclick="toggleAllDetails(false)">Colapsar Todos</button></div></div>$zone_rows</div>
         <div id="tab-records" class="tab-content"><div class="page-header"><div><h1>Registros</h1><div class="subtitle">Resolução e Consistência.</div></div><div><button class="btn-tech" onclick="toggleAllDetails(true)">Expandir Todos</button> <button class="btn-tech" onclick="toggleAllDetails(false)">Colapsar Todos</button></div></div>$record_rows</div>
         
-        <div id="tab-config" class="tab-content">
-             <div class="page-header"><h1>Bastidores da Execução</h1></div>
-             <div class="dashboard-grid">
+<div id="tab-config" class="tab-content">
+             <div class="page-header"><h1>Bastidores da Execução</h1><div class="subtitle">Detalhes técnicos, ambiente e configurações utilizadas.</div></div>
+             
+             <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
+                 
+                 <!-- 1. EXECUTION ENVIRONMENT -->
                  <div class="card">
-                    <div class="card-header">⏱️ Tempos e Performance</div>
+                    <div class="card-header">💻 Ambiente de Execução</div>
                     <table>
-                        <tr><td>Inicio</td><td>${START_TIME_HUMAN}</td></tr>
-                        <tr><td>Fim</td><td>${END_TIME_HUMAN}</td></tr>
-                        <tr><td>Duração</td><td>${TOTAL_DURATION}s</td></tr>
-                        <tr><td>Sleep Overhead</td><td>${TOTAL_SLEEP_TIME}s</td></tr>
+                        <tr><td style="width:40%">Usuário</td><td><span class="badge bg-neutral">$USER</span></td></tr>
+                        <tr><td>Hostname</td><td><span class="badge bg-neutral">$HOSTNAME</span></td></tr>
+                        <tr><td>Kernel</td><td style="font-family:monospace; font-size:0.85em">$SYS_KERNEL</td></tr>
+                        <tr><td>OS</td><td>$SYS_OS</td></tr>
+                        <tr><td>Shell</td><td>$SHELL</td></tr>
+                        <tr><td>Term</td><td>$TERM</td></tr>
+                        <!-- Merged duplicated info -->
+                        <tr><td>Script Dir</td><td style="font-family:monospace; font-size:0.8em">${SCRIPT_DIR}</td></tr>
+                        <tr><td>Log Output</td><td style="font-family:monospace; font-size:0.8em">${LOG_OUTPUT_DIR}</td></tr>
                     </table>
                  </div>
+
+                 <!-- 2. TOOL VERSIONS -->
                  <div class="card">
-                     <div class="card-header">📂 Arquivos e Caminhos</div>
+                     <div class="card-header">🛠️ Ferramentas & Versões</div>
                      <table>
-                        <tr><td>Script Dir</td><td style="font-family:monospace; font-size:0.8em">${SCRIPT_DIR}</td></tr>
-                        <tr><td>Domains File</td><td style="font-family:monospace; font-size:0.8em">${FILE_DOMAINS}</td></tr>
-                        <tr><td>Groups File</td><td style="font-family:monospace; font-size:0.8em">${FILE_GROUPS}</td></tr>
-                        <tr><td>Log Output</td><td style="font-family:monospace; font-size:0.8em">${LOG_OUTPUT_DIR}</td></tr>
+                        <tr><td>Script Version</td><td><strong style="color:var(--accent)">v${SCRIPT_VERSION}</strong></td></tr>
+                        <tr><td>Dig (DNS Utils)</td><td>$TOOL_DIG_VER</td></tr>
+                        <tr><td>OpenSSL</td><td>$TOOL_OPENSSL_VER</td></tr>
+                        <tr><td>Traceroute</td><td>$TOOL_TRACE_VER</td></tr>
+                        <tr><td>Curl/Wget</td><td>$TOOL_CURL_VER</td></tr>
+                     </table>
+                     <div style="margin-top:15px; font-size:0.8em; color:#64748b; font-style:italic;">
+                        * Versões detectadas no path do sistema durante a inicialização.
+                     </div>
+                 </div>
+                 
+                 <!-- 3. INPUT FILES -->
+                 <div class="card">
+                     <div class="card-header">📂 Arquivos de Entrada</div>
+                     <table>
+                        <tr>
+                            <td rowspan="2" style="width:30%; vertical-align:top; border-bottom:0;">Domínios</td>
+                            <td>
+                                <div style="font-family:monospace; font-size:0.85em; margin-bottom:4px;">$FILE_DOMAINS</div>
+                                <span class="badge bg-neutral">${INPUT_DOMAINS_COUNT} linhas</span> <span style="font-size:0.8em; color:#64748b">(${FILE_DOMAINS_SIZE})</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border-top:0; padding-top:0;">
+                                <details style="background:rgba(0,0,0,0.2); border-radius:4px; padding:5px;">
+                                    <summary style="font-size:0.75rem; cursor:pointer; color:var(--accent);">Ver Conteúdo (Amostra)</summary>
+                                    <pre style="font-size:0.7rem; color:#cbd5e1; max-height:100px; overflow-y:auto; margin-top:5px;">$CONTENT_DOMAINS</pre>
+                                </details>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td rowspan="2" style="width:30%; vertical-align:top; border-bottom:0;">Grupos DNS</td>
+                            <td>
+                                <div style="font-family:monospace; font-size:0.85em; margin-bottom:4px;">$FILE_GROUPS</div>
+                                <span class="badge bg-neutral">${INPUT_GROUPS_COUNT} linhas</span> <span style="font-size:0.8em; color:#64748b">(${FILE_GROUPS_SIZE})</span>
+                            </td>
+                        </tr>
+                         <tr>
+                            <td style="border-top:0; padding-top:0;">
+                                <details style="background:rgba(0,0,0,0.2); border-radius:4px; padding:5px;">
+                                    <summary style="font-size:0.75rem; cursor:pointer; color:var(--accent);">Ver Conteúdo (Amostra)</summary>
+                                    <pre style="font-size:0.7rem; color:#cbd5e1; max-height:100px; overflow-y:auto; margin-top:5px;">$CONTENT_GROUPS</pre>
+                                </details>
+                            </td>
+                        </tr>
                      </table>
                  </div>
+
+                 <!-- 4. PERFORMANCE & TIMING -->
                  <div class="card">
-                     <div class="card-header">⚙️ Flags de Execução</div>
-                     <table>
-                        <tr><td>Ping Check</td><td>${ENABLE_PING}</td></tr>
-                        <tr><td>IPv6</td><td>${ENABLE_IPV6}</td></tr>
-                        <tr><td>Trace</td><td>${ENABLE_TRACE}</td></tr>
-                        <tr><td>JSON Report</td><td>${ENABLE_JSON_REPORT}</td></tr>
-                        <tr><td>Color Output</td><td>${COLOR_OUTPUT}</td></tr>
-                     </table>
+                    <div class="card-header">⏱️ Performance da Coleta</div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+                        <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:0.8em; color:#94a3b8; text-transform:uppercase;">Duração Total</div>
+                            <div style="font-size:1.4em; font-weight:700; color:#fff;">${TOTAL_DURATION}s</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:0.8em; color:#94a3b8; text-transform:uppercase;">Sleep Time</div>
+                            <div style="font-size:1.4em; font-weight:700; color:#fbbf24;">${TOTAL_SLEEP_TIME}s</div>
+                        </div>
+                    </div>
+                    <table>
+                        <tr><td>Início</td><td style="font-size:0.9em">$START_TIME_HUMAN</td></tr>
+                        <tr><td>Fim</td><td style="font-size:0.9em">$END_TIME_HUMAN</td></tr>
+                    </table>
                  </div>
              </div>
-             
-             <div class="card">
-                <div class="card-header">🔧 Tresholds e Limites</div>
-                <div style="display:flex; gap:20px; flex-wrap:wrap;">
-                    <span class="badge bg-neutral">Ping Count: ${PING_COUNT}</span>
-                    <span class="badge bg-neutral">Ping Timeout: ${PING_TIMEOUT}s</span>
-                    <span class="badge bg-neutral">Dig Retry: ${DIG_TRIES}</span>
-                    <span class="badge bg-neutral">Dig Timeout: ${DIG_TIMEOUT}s</span>
-                    <span class="badge bg-neutral">Packet Loss Limit: ${PING_PACKET_LOSS_LIMIT}%</span>
-                    <span class="badge bg-neutral">Latency Slow: ${PING_LATENCY_SLOW}ms</span>
-                </div>
+
+             <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top:20px;">
+                 <!-- 5. CONFIGURATION FLAGS (Standardized Layout) -->
+                 <div class="card">
+                     <div class="card-header">⚙️ Flags de Configuração</div>
+                     <table class="simple-table">
+                        <style>.conf-row td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); } .conf-true { color: #10b981; font-weight:bold; } .conf-false { color: #f59e0b; opacity:0.8; }</style>
+                        <tr class="conf-row"><td>Ping Check</td><td class="conf-${ENABLE_PING:-false}">${ENABLE_PING:-false}</td></tr>
+                        <tr class="conf-row"><td>IPV6 Support</td><td class="conf-${ENABLE_IPV6:-false}">${ENABLE_IPV6:-false}</td></tr>
+                        <tr class="conf-row"><td>Traceroute</td><td class="conf-${ENABLE_TRACE:-false}">${ENABLE_TRACE:-false}</td></tr>
+                        <tr class="conf-row"><td>TCP Check</td><td class="conf-${ENABLE_TCP_CHECK:-false}">${ENABLE_TCP_CHECK:-false}</td></tr>
+                        <tr class="conf-row"><td>DNSSEC Check</td><td class="conf-${ENABLE_DNSSEC_CHECK:-false}">${ENABLE_DNSSEC_CHECK:-false}</td></tr>
+                        <tr class="conf-row"><td>Version Check</td><td class="conf-${CHECK_BIND_VERSION:-false}">${CHECK_BIND_VERSION:-false}</td></tr>
+                        <tr class="conf-row"><td>AXFR Check</td><td class="conf-${ENABLE_AXFR_CHECK:-false}">${ENABLE_AXFR_CHECK:-false}</td></tr>
+                        <tr class="conf-row"><td>HTML Report</td><td class="conf-${ENABLE_HTML_REPORT:-false}">${ENABLE_HTML_REPORT:-false}</td></tr>
+                        <tr class="conf-row"><td>JSON Report</td><td class="conf-${ENABLE_JSON_REPORT:-false}">${ENABLE_JSON_REPORT:-false}</td></tr>
+                        <tr class="conf-row"><td>CSV Report</td><td class="conf-${ENABLE_CSV_REPORT:-false}">${ENABLE_CSV_REPORT:-false}</td></tr>
+                     </table>
+                 </div>
+
+                 <!-- 6. THRESHOLDS (Complete) -->
+                 <div class="card">
+                    <div class="card-header">📏 Limites e Tolerâncias</div>
+                    <table>
+                        <tr><td>Timeout Global</td><td>${TIMEOUT}s</td></tr>
+                        <tr><td>Sleep Interval</td><td>${SLEEP}s</td></tr>
+                        <tr><td>Consistency Checks</td><td>${CONSISTENCY_CHECKS} tries</td></tr>
+                        <tr><td>Trace Hop Limit</td><td>${TRACE_MAX_HOPS}</td></tr>
+                        <tr><td>Ping Timeout</td><td>${PING_TIMEOUT}s</td></tr>
+                        <tr><td>Ping Count</td><td>${PING_COUNT} pkts</td></tr>
+                        <tr><td>Loss Threshold</td><td><strong style="color:#ef4444">${PING_PACKET_LOSS_LIMIT}%</strong></td></tr>
+                        <tr><td>Latency Warning</td><td><strong style="color:#f59e0b">${LATENCY_WARNING_THRESHOLD}ms</strong></td></tr>
+                        <tr><td>Dig Timeout</td><td>${DIG_TIMEOUT}s</td></tr>
+                        <tr><td>Dig Retries</td><td>${DIG_TRIES}</td></tr>
+                        <tr><td>Strict IP</td><td>${STRICT_IP_CHECK}</td></tr>
+                        <tr><td>Strict Order</td><td>${STRICT_ORDER_CHECK}</td></tr>
+                        <tr><td>Strict TTL</td><td>${STRICT_TTL_CHECK}</td></tr>
+                    </table>
+                 </div>
              </div>
-             
-             <h3 style="margin-top:20px">Variáveis de Ambiente</h3>
-             <pre style="background:#020617; padding:15px; border-radius:8px; overflow-x:auto; font-size:0.8em; color:#64748b;">
-USER=$USER
-HOSTNAME=$HOSTNAME
-TERM=$TERM
-SHELL=$SHELL
-             </pre>
+
              
              <!-- INJECT DETAILED CONFIG TABLE -->
 EOF
