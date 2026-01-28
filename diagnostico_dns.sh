@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.18.0
-# "Dashboard Refresh & Metrics"
+# Versão: 12.23.0
+# "Complete Scoring Transparency"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.18.0"
+SCRIPT_VERSION="12.23.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -392,9 +392,9 @@ print_help_text() {
 
 show_help() {
     clear
-    echo -e "${BLUE}==============================================================================${NC}"
-    echo -e "${BLUE}       🔍 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA v${SCRIPT_VERSION}        ${NC}"
-    echo -e "${BLUE}==============================================================================${NC}"
+    echo -e "${CYAN}==============================================================================${NC}"
+    echo -e "${CYAN}   📚 DIAGNÓSTICO DNS AVANÇADO - MANUAL DE REFERÊNCIA (v${SCRIPT_VERSION})    ${NC}"
+    echo -e "${CYAN}==============================================================================${NC}"
     echo -e ""
     print_help_text
     echo -e "${BLUE}==============================================================================${NC}"
@@ -438,9 +438,10 @@ EOF
 
 print_execution_summary() {
     clear
-    echo -e "${BOLD}======================================================${NC}"
-    echo -e "${BLUE}   🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION (v${SCRIPT_VERSION})   ${NC}"
-    echo -e "${BOLD}======================================================${NC}"
+    echo -e "${CYAN}######################################################${NC}"
+    echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Complete Transparency${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
     echo -e "  🏷️  Versão Script   : v${SCRIPT_VERSION}"
@@ -2290,67 +2291,251 @@ generate_html_report_v2() {
     # 1. Network Health (Infra & Connectivity)
     # Penalties: Down(-20), TCP Fail(-10), Loss(-1% per %), Latency(>Slow -5)
     local score_network=100
+    local network_details_log=""
     for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
          local s_stat="${STATS_SERVER_PING_STATUS[$ip]}"
          local s_loss="${STATS_SERVER_PING_LOSS[$ip]%%%}"
          local s_tcp="${STATS_SERVER_PORT_53[$ip]}"
          local s_lat="${STATS_SERVER_PING_AVG[$ip]%%.*}" # int
-
-         if [[ "$s_stat" == "FAIL" ]]; then score_network=$((score_network - 20)); fi
-         if [[ "$s_tcp" == "CLOSED" || "$s_tcp" == "FILTERED" ]]; then score_network=$((score_network - 10)); fi
-         if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt 0 ]]; then score_network=$((score_network - s_loss)); fi
-         if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$PING_LATENCY_SLOW" ]]; then score_network=$((score_network - 5)); fi
+         
+         local penalties=""
+         if [[ "$s_stat" == "FAIL" ]]; then 
+             score_network=$((score_network - 20))
+             penalties+="<span style='color:#ef4444'>Falha no Ping (-20)</span>; "
+         fi
+         if [[ "$s_tcp" == "CLOSED" || "$s_tcp" == "FILTERED" ]]; then 
+             score_network=$((score_network - 10))
+             penalties+="<span style='color:#f59e0b'>Porta 53 Fechada/Filtrada (-10)</span>; "
+         fi
+         if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt 0 ]]; then 
+             score_network=$((score_network - s_loss))
+             penalties+="<span style='color:#f59e0b'>Perda de Pacote ${s_loss}% (-${s_loss})</span>; "
+         fi
+         if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$PING_LATENCY_SLOW" ]]; then 
+             score_network=$((score_network - 5))
+             penalties+="<span style='color:#f59e0b'>Alta Latência ${s_lat}ms (-5)</span>; "
+         fi
+         
+         if [[ -n "$penalties" ]]; then
+             network_details_log+="<li style='margin-bottom:5px;'><strong>$ip</strong>: ${penalties%; }</li>"
+         fi
     done
     if [[ $score_network -lt 0 ]]; then score_network=0; fi
+    [[ -z "$network_details_log" ]] && network_details_log="<li><span style='color:#10b981'>Nenhuma penalidade detectada. Rede operando perfeitamente!</span></li>"
 
     # 2. Service Stability (Reliability & Consistency)
     # Penalties: Divergent(-5), Fail/Refused(-10) 
     local score_stability=100
-    # Deduct based on global counters populated during execution
-    score_stability=$(( score_stability - (CNT_REC_DIVERGENT * 5) ))
-    score_stability=$(( score_stability - (CNT_REC_FAIL * 10) ))
-    # Also consider zone divergence
-    score_stability=$(( score_stability - (CNT_ZONES_DIV * 5) ))
+    local stability_details_log=""
+    
+    # Analyze Divergences (Stats populate during record tests)
+    local pen_rec_div=$((CNT_REC_DIVERGENT * 5))
+    score_stability=$(( score_stability - pen_rec_div ))
+    if [[ $pen_rec_div -gt 0 ]]; then
+         stability_details_log+="<li style='margin-bottom:8px; color:#facc15'><strong>Divergência de Registros (-${pen_rec_div} pts)</strong>:<br>"
+         stability_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade: -5 pontos por ocorrência.</span><br>"
+         local count_div=0
+         for key in "${!STATS_RECORD_CONSISTENCY[@]}"; do
+             if [[ "${STATS_RECORD_CONSISTENCY[$key]}" == "DIVERGENT" ]]; then
+                  IFS='|' read -r d t g <<< "$key"
+                  stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$d</strong> ($t) @ $g</span><br>"
+                  count_div=$((count_div+1))
+                  [[ $count_div -ge 5 ]] && { stability_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
+             fi
+         done
+         stability_details_log+="</li>"
+    fi
+
+    # Analyze Resolution Failures
+    local pen_rec_fail=$((CNT_REC_FAIL * 10))
+    score_stability=$(( score_stability - pen_rec_fail ))
+    if [[ $pen_rec_fail -gt 0 ]]; then
+         stability_details_log+="<li style='margin-bottom:8px; color:#f87171'><strong>Falha de Resolução (-${pen_rec_fail} pts)</strong>:<br>"
+         stability_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade: -10 pontos por falha crítica (Timeout, Refused, Servfail, etc).</span><br>"
+         local count_fail=0
+         for key in "${!STATS_RECORD_RES[@]}"; do
+              local status="${STATS_RECORD_RES[$key]}"
+              # Catch ANY failure that explains why CNT_REC_FAIL incremented (aggregated) or just show individual server errors
+              # CNT_REC_FAIL is aggregated if NO servers answered. But we list individual errors here.
+              if [[ "$status" != "NOERROR" && "$status" != "NXDOMAIN" ]]; then
+                  IFS='|' read -r d t g s <<< "$key"
+                  stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$s</strong> falhou em $d ($status)</span><br>"
+                  count_fail=$((count_fail+1))
+                  [[ $count_fail -ge 10 ]] && { stability_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
+              fi
+         done
+         if [[ $count_fail -eq 0 ]]; then
+             stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>Erro de agregação: Todos os servidores falharam para um registro, mas o status individual não foi capturado corretamente. Verifique a tabela de registros.</span><br>"
+         fi
+         stability_details_log+="</li>"
+    fi
+
+    # Analyze Zone Divergences (SOA)
+    local pen_zone_div=$((CNT_ZONES_DIV * 5))
+    score_stability=$(( score_stability - pen_zone_div ))
+    if [[ $pen_zone_div -gt 0 ]]; then
+         stability_details_log+="<li style='margin-bottom:8px; color:#facc15'><strong>Divergência de Zona (-${pen_zone_div} pts)</strong>:<br>"
+         stability_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade: -5 pontos por zona dessincronizada.</span><br>"
+         
+         # Identify divergent zones by grouping SOAs
+         local -A domain_soas
+         for key in "${!STATS_ZONE_SOA[@]}"; do
+             IFS='|' read -r d g s <<< "$key"
+             local serial="${STATS_ZONE_SOA[$key]}"
+             if [[ "$serial" != "N/A" && "$serial" != "TIMEOUT" ]]; then
+                 domain_soas["$d"]+="$serial "
+             fi
+         done
+         
+         local count_zdiv=0
+         for d in "${!domain_soas[@]}"; do
+             local serials=$(echo "${domain_soas[$d]}" | tr ' ' '\n' | sort -u | wc -l)
+             if (( serials > 1 )); then
+                 stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$d</strong> possui SOAs distintos.</span><br>"
+                 count_zdiv=$((count_zdiv+1))
+                 [[ $count_zdiv -ge 5 ]] && { stability_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outras.</span><br>"; break; }
+             fi
+         done
+         unset domain_soas
+         stability_details_log+="</li>"
+    fi
+
     if [[ $score_stability -lt 0 ]]; then score_stability=0; fi
+    [[ -z "$stability_details_log" ]] && stability_details_log="<li><span style='color:#10b981'>Nenhuma instabilidade detectada. Respostas 100% consistentes!</span></li>"
 
     # 3. Security Posture (Risk Assessment)
     # Penalties: AXFR Open(-40), Version Exposed(-15), Recursion Open(-20)
     local score_security=100
-    if [[ $SEC_AXFR_RISK -gt 0 ]]; then score_security=$((score_security - 40)); fi
-    if [[ $SEC_REVEALED -gt 0 ]]; then score_security=$((score_security - 15)); fi
-    if [[ $SEC_REC_RISK -gt 0 ]]; then score_security=$((score_security - 20)); fi
+    local security_details_log=""
+    
+    # 3. Security Posture (Risk Assessment)
+    # Penalties: AXFR Open(-40), Version Exposed(-15), Recursion Open(-20)
+    local score_security=100
+    local security_details_log=""
+    
+    if [[ $SEC_AXFR_RISK -gt 0 ]]; then 
+        score_security=$((score_security - 40))
+        security_details_log+="<li style='margin-bottom:8px; color:#ef4444'><strong>Transferência de Zona (AXFR) (-40 pts)</strong>:<br>"
+        security_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade Única: -40 pontos se houver qualquer servidor vulnerável.</span><br>"
+        # Iterate to find vulnerable servers
+        local count_axfr=0
+        for key in "${!STATS_ZONE_AXFR[@]}"; do
+             if [[ "${STATS_ZONE_AXFR[$key]}" == "OPEN" || "${STATS_ZONE_AXFR[$key]}" == "TRANSFER_OK" || "${STATS_ZONE_AXFR[$key]}" == "ALLOWED" ]]; then 
+                  IFS='|' read -r d g s <<< "$key"
+                  security_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$s</strong> permitiu AXFR para <em>$d</em></span><br>"
+                  count_axfr=$((count_axfr+1))
+                  [[ $count_axfr -ge 5 ]] && { security_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
+             fi
+        done
+        security_details_log+="</li>"
+    fi
+    
+    if [[ $SEC_REVEALED -gt 0 ]]; then 
+        score_security=$((score_security - 15))
+        security_details_log+="<li style='margin-bottom:8px; color:#facc15'><strong>Divulgação de Versão (-15 pts)</strong>:<br>"
+        security_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade Única: -15 pontos por *privacy leak*.</span><br>"
+        local count_ver=0
+        for ip in "${!STATS_SERVER_VERSION[@]}"; do
+             if [[ "${STATS_SERVER_VERSION[$ip]}" != "HIDDEN" && "${STATS_SERVER_VERSION[$ip]}" != "TIMEOUT" ]]; then
+                  security_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$ip</strong>: \"${STATS_SERVER_VERSION[$ip]:0:20}...\"</span><br>"
+                  count_ver=$((count_ver+1))
+                  [[ $count_ver -ge 5 ]] && { security_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
+             fi
+        done
+        security_details_log+="</li>"
+    fi
+    
+    if [[ $SEC_REC_RISK -gt 0 ]]; then 
+        score_security=$((score_security - 20))
+        security_details_log+="<li style='margin-bottom:8px; color:#ef4444'><strong>Recursão Aberta (-20 pts)</strong>:<br>"
+        security_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade Única: -20 pontos. Risco alto de DDoS.</span><br>"
+        local count_rec=0
+         for ip in "${!STATS_SERVER_RECURSION[@]}"; do
+             if [[ "${STATS_SERVER_RECURSION[$ip]}" == "OPEN" ]]; then
+                  security_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$ip</strong> aceita consultas recursivas</span><br>"
+                  count_rec=$((count_rec+1))
+                  [[ $count_rec -ge 5 ]] && { security_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
+             fi
+        done
+        security_details_log+="</li>"
+    fi
     # Bonus/Penalty for DNSSEC logic could go here, but kept simple
     if [[ $score_security -lt 0 ]]; then score_security=0; fi
+    [[ -z "$security_details_log" ]] && security_details_log="<li><span style='color:#10b981'>Nenhum risco crítico de infraestrutura detectado (AXFR/Recursão/Versão).</span></li>"
 
     # 4. Modernity Capabilities (Feature Adoption)
     # Cumulative Score based on coverage ratio: EDNS, Cookies, DNSSEC, Encryption
     local score_modernity=0
+    local modernity_details_log=""
     local srv_total=${#UNIQUE_SERVERS[@]}
+    
     if [[ $srv_total -gt 0 ]]; then
          # Each category contributes up to 25 points based on % of servers
-         # EDNS
+         
+         # 1. EDNS
          local ratio_edns=$(( (EDNS_SUCCESS * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_edns))
+         modernity_details_log+="<li style='margin-bottom:8px;'><strong>EDNS0 (Score: +${ratio_edns}/25 pts)</strong>:<br>"
+         if [[ $ratio_edns -lt 25 ]]; then
+             local missing_edns=""
+             for ip in "${!UNIQUE_SERVERS[@]}"; do
+                 [[ "${STATS_SERVER_EDNS[$ip]}" != "OK" ]] && missing_edns+="$ip, "
+             done
+             modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente em: ${missing_edns%, }</span><br>"
+         else 
+             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Implementado em 100% dos servidores.</span><br>"
+         fi
+         modernity_details_log+="</li>"
          
-         # COOKIE
+         # 2. COOKIE
          local ratio_cookie=$(( (COOKIE_SUCCESS * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_cookie))
+         modernity_details_log+="<li style='margin-bottom:8px;'><strong>DNS Cookies (Score: +${ratio_cookie}/25 pts)</strong>:<br>"
+         if [[ $ratio_cookie -lt 25 ]]; then
+             local missing_cookie=""
+             for ip in "${!UNIQUE_SERVERS[@]}"; do
+                 [[ "${STATS_SERVER_COOKIE[$ip]}" != "OK" ]] && missing_cookie+="$ip, "
+             done
+             modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente em: ${missing_cookie%, }</span><br>"
+         else
+              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Implementado em 100% dos servidores.</span><br>"
+         fi
+         modernity_details_log+="</li>"
          
-         # DNSSEC Support (Server side validation capability)
+         # 3. DNSSEC Support
          local ratio_dnssec=$(( (DNSSEC_SUCCESS * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_dnssec))
+         modernity_details_log+="<li style='margin-bottom:8px;'><strong>Validação DNSSEC (Score: +${ratio_dnssec}/25 pts)</strong>:<br>"
+         if [[ $ratio_dnssec -lt 25 ]]; then
+             local missing_dnssec=""
+             for ip in "${!UNIQUE_SERVERS[@]}"; do
+                 [[ "${STATS_SERVER_DNSSEC[$ip]}" != "OK" ]] && missing_dnssec+="$ip, "
+             done
+             modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente/Falha em: ${missing_dnssec%, }</span><br>"
+         else
+             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Suportado por todos os servidores.</span><br>"
+         fi
+         modernity_details_log+="</li>"
 
-         # Encryption (DoT or TLS - Check whichever is higher or combine?) 
-         # Let's use DOT_SUCCESS or TLS_SUCCESS. If strict, sum them carefully? 
-         # Let's count max coverage of encryption.
+         # 4. Encryption (DoT etc)
          local enc_count=0
+         local missing_enc=""
          for ip in "${!UNIQUE_SERVERS[@]}"; do
              if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" || "${STATS_SERVER_PORT_853[$ip]}" == "OK" || "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
                  enc_count=$((enc_count+1))
+             else
+                 missing_enc+="$ip, "
              fi
          done
          local ratio_enc=$(( (enc_count * 25) / srv_total ))
          score_modernity=$((score_modernity + ratio_enc))
+         modernity_details_log+="<li style='margin-bottom:8px;'><strong>Criptografia (DoT/DoH/TLS) (Score: +${ratio_enc}/25 pts)</strong>:<br>"
+         if [[ $ratio_enc -lt 25 ]]; then
+              modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Não detectado em: ${missing_enc%, }</span><br>"
+         else
+              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Suporte a criptografia em todos os servidores.</span><br>"
+         fi
+         modernity_details_log+="</li>"
     fi
     if [[ $score_modernity -gt 100 ]]; then score_modernity=100; fi
 
@@ -2696,36 +2881,77 @@ generate_html_report_v2() {
             <!-- NEW METRICS GRID -->
             <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
                  <!-- 1. NETWORK -->
-                 <div class="card" style="border-top: 3px solid ${color_net}; display:flex; flex-direction:column; justify-content:space-between;">
+                 <div class="card" style="border-top: 3px solid ${color_net}; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; cursor:pointer;" onclick="showModal('network_details', 'Detalhes de Saúde da Rede')">
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">📡 Rede</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_net}; margin:10px 0;">${score_network}</div>
-                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Infra & Conectividade</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Avalia conectividade (Ping), disponibilidade TCP e latência. Penaliza falhas de conexão e perda de pacotes.</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Infra & Conectividade ℹ️</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Avalia conectividade (Ping), disponibilidade TCP e latência. Clique para ver detalhes das penalidades.</div>
                  </div>
                  
                  <!-- 2. STABILITY -->
-                 <div class="card" style="border-top: 3px solid ${color_stab}; display:flex; flex-direction:column; justify-content:space-between;">
+                 <div class="card" style="border-top: 3px solid ${color_stab}; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; cursor:pointer;" onclick="showModal('stability_details', 'Detalhes de Estabilidade')">
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">⚙️ Estabilidade</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_stab}; margin:10px 0;">${score_stability}</div>
-                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Consistência & DNS</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a consistência das respostas entre servidores e falhas de resolução (SERVFAIL/REFUSED).</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Consistência & DNS ℹ️</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a consistência das respostas entre servidores e falhas de resolução. Clique para ver penalidades.</div>
                  </div>
                  
                  <!-- 3. SECURITY -->
-                 <div class="card" style="border-top: 3px solid ${color_sec}; display:flex; flex-direction:column; justify-content:space-between;">
+                 <div class="card" style="border-top: 3px solid ${color_sec}; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; cursor:pointer;" onclick="showModal('security_details', 'Detalhes de Segurança')">
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🛡️ Segurança</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_sec}; margin:10px 0;">${score_security}</div>
-                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Riscos & Hardening</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Detecta riscos críticos como AXFR (Transferência de Zona) aberto, versão do BIND exposta e recursão indevida.</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Riscos & Hardening ℹ️</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Detecta riscos críticos como AXFR, versão exposta e recursão. Clique para ver detalhes.</div>
                  </div>
                  
                  <!-- 4. MODERNITY -->
-                 <div class="card" style="border-top: 3px solid ${color_mod}; display:flex; flex-direction:column; justify-content:space-between;">
+                 <div class="card" style="border-top: 3px solid ${color_mod}; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; cursor:pointer;" onclick="showModal('modernity_details', 'Detalhes de Capacidades')">
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🚀 Capacidades</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_mod}; margin:10px 0;">${score_modernity}</div>
-                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Features Modernas</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Pontua a adesão a padrões modernos: DNSSEC, Criptografia (DoT/TLS), EDNS e Cookies.</div>
+                     <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Features Modernas ℹ️</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Pontua adesão a DNSSEC, Criptografia, EDNS e Cookies. Clique para ver pontuação.</div>
                  </div>
+            </div>
+
+            <!-- HIDDEN LOGS FOR MODALS -->
+            <div id="log_network_details" style="display:none">
+                <div style="font-size:0.9rem; color:#cbd5e1;">
+                    <h3 style="color:#fff; margin-bottom:10px;">Relatório de Saúde (Rede)</h3>
+                    <p>A pontuação atual <strong>${score_network}/100</strong> foi calculada com base nos seguintes eventos:</p>
+                    <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
+                        $network_details_log
+                    </ul>
+                </div>
+            </div>
+            
+            <div id="log_stability_details" style="display:none">
+                <div style="font-size:0.9rem; color:#cbd5e1;">
+                    <h3 style="color:#fff; margin-bottom:10px;">Relatório de Estabilidade</h3>
+                    <p>A pontuação atual <strong>${score_stability}/100</strong> reflete a consistência das respostas:</p>
+                    <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
+                        $stability_details_log
+                    </ul>
+                </div>
+            </div>
+            
+            <div id="log_security_details" style="display:none">
+                <div style="font-size:0.9rem; color:#cbd5e1;">
+                    <h3 style="color:#fff; margin-bottom:10px;">Relatório de Segurança</h3>
+                    <p>A pontuação atual <strong>${score_security}/100</strong> avalia riscos críticos conhecidos:</p>
+                    <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
+                        $security_details_log
+                    </ul>
+                </div>
+            </div>
+            
+            <div id="log_modernity_details" style="display:none">
+                <div style="font-size:0.9rem; color:#cbd5e1;">
+                    <h3 style="color:#fff; margin-bottom:10px;">Relatório de Capacidades Modernas</h3>
+                    <p>A pontuação atual <strong>${score_modernity}/100</strong> indica a adoção de features:</p>
+                    <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
+                        $modernity_details_log
+                    </ul>
+                </div>
             </div>
 
             <!-- TERMINAL PARITY GRID -->
