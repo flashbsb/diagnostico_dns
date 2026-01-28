@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.1
+# Versão: 12.23.2
 # "Complete Scoring Transparency"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.1"
+SCRIPT_VERSION="12.23.2"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2788,17 +2788,27 @@ generate_html_report_v2() {
         :root { --bg-body: #0f172a; --bg-card: #1e293b; --text-main: #f8fafc; --text-muted: #94a3b8; --border: #334155; --accent: #3b82f6; }
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-body); color: var(--text-main); font-size: 14px; line-height: 1.5; height: 100vh; display: flex; overflow: hidden; }
-        aside { width: 260px; background: #020617; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; }
-        .logo { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
-        .nav-item { padding: 12px 15px; margin-bottom: 5px; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.2s; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+        aside { width: 260px; background: #020617; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; transition: width 0.3s ease; position:relative; }
+        aside.collapsed { width: 70px; padding: 20px 10px; }
+        aside.collapsed .nav-text, aside.collapsed .logo-text, aside.collapsed .footer-info { display: none; }
+        aside.collapsed .logo { justify-content: center; }
+        aside.collapsed .nav-item { justify-content: center; padding: 12px 0; }
+        
+        .toggle-btn { position: absolute; top: 20px; right: -12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); z-index: 10; transition: transform 0.3s; }
+        aside.collapsed .toggle-btn { transform: rotate(180deg); }
+
+        .logo { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; height: 30px; white-space: nowrap; overflow: hidden; }
+        .nav-item { padding: 12px 15px; margin-bottom: 5px; color: var(--text-muted); cursor: pointer; border-radius: 8px; transition: all 0.2s; font-weight: 500; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
         .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
         .nav-item.active { background: var(--accent); color: #fff; }
+        
         main { flex: 1; overflow-y: auto; padding: 30px; position: relative; }
         .page-header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
         h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 5px; }
         .subtitle { color: var(--text-muted); }
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
-        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); }
         .card-header { font-size: 0.9rem; font-weight: 700; color: #fff; text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px; }
         .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; }
         .stat-label { color: var(--text-muted); display:flex; gap:8px; align-items:center;}
@@ -2825,6 +2835,9 @@ generate_html_report_v2() {
         .summary-card { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 15px; margin-bottom: 20px; color:#fff; display: flex; gap: 20px; flex-wrap: wrap; }
     </style>
     <script>
+        function toggleSidebar() {
+            document.querySelector('aside').classList.toggle('collapsed');
+        }
         function toggleAllDetails(open) {
             const details = document.querySelectorAll('.tab-content.active details');
             details.forEach(el => {
@@ -2835,9 +2848,22 @@ generate_html_report_v2() {
 
         function openTab(id) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // Remove active from nav items - matching href-style behavior conceptually but using ID map
+            // Need to map tab ID to nav item index or selector. 
+            // Simplified: remove all active, then find the one with onclick matching or use data attribs.
+            // But here we rely on the `event` if passed, or just manual class management.
+            
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            
+            // Find nav item that calls this function with this ID
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                if(item.getAttribute('onclick').includes(id)) {
+                    item.classList.add('active');
+                }
+            });
+
             document.getElementById(id).classList.add('active');
-            event.currentTarget.classList.add('active');
             if(id === 'tab-dashboard' && window.myChart) { window.myChart.resize(); }
         }
         function showModal(id, title) {
@@ -2854,17 +2880,18 @@ generate_html_report_v2() {
 </head>
 <body>
     <aside>
-        <div class="logo"><span style="color:var(--accent)">DNS</span>Diag <span style="font-size:0.5em; opacity:0.5; margin-left:5px">v${SCRIPT_VERSION}</span></div>
+        <div class="toggle-btn" onclick="toggleSidebar()">‹</div>
+        <div class="logo"><span style="color:var(--accent)">DNS</span><span class="logo-text">Diag <span style="font-size:0.5em; opacity:0.5; margin-left:5px">v${SCRIPT_VERSION}</span></span></div>
         <nav>
-            <div class="nav-item active" onclick="openTab('tab-dashboard')">📊 Dashboard</div>
-            <div class="nav-item" onclick="openTab('tab-servers')">🖥️ Servidores</div>
-            <div class="nav-item" onclick="openTab('tab-zones')">🌍 Zonas</div>
-            <div class="nav-item" onclick="openTab('tab-records')">📝 Registros</div>
-            <div class="nav-item" onclick="openTab('tab-config')">⚙️ Bastidores</div>
-            <div class="nav-item" onclick="openTab('tab-help')">❓ Ajuda</div>
-            <div class="nav-item" onclick="openTab('tab-logs')">📜 Logs Verbos</div>
+            <div class="nav-item active" onclick="openTab('tab-dashboard')"><span>📊</span><span class="nav-text">Dashboard</span></div>
+            <div class="nav-item" onclick="openTab('tab-servers')"><span>🖥️</span><span class="nav-text">Servidores</span></div>
+            <div class="nav-item" onclick="openTab('tab-zones')"><span>🌍</span><span class="nav-text">Zonas</span></div>
+            <div class="nav-item" onclick="openTab('tab-records')"><span>📝</span><span class="nav-text">Registros</span></div>
+            <div class="nav-item" onclick="openTab('tab-config')"><span>⚙️</span><span class="nav-text">Bastidores</span></div>
+            <div class="nav-item" onclick="openTab('tab-help')"><span>❓</span><span class="nav-text">Ajuda</span></div>
+            <div class="nav-item" onclick="openTab('tab-logs')"><span>📜</span><span class="nav-text">Logs Verbos</span></div>
         </nav>
-        <div style="margin-top:auto; padding-top:20px; border-top:1px solid var(--border); font-size:0.75rem; color:#64748b;">
+        <div class="footer-info" style="margin-top:auto; padding-top:20px; border-top:1px solid var(--border); font-size:0.75rem; color:#64748b;">
             Executado por: <strong>$USER</strong><br>$TIMESTAMP
         </div>
     </aside>
@@ -2874,7 +2901,26 @@ generate_html_report_v2() {
             <div class="page-header">
                 <div><h1>Dashboard Executivo</h1><div class="subtitle">Visão unificada da execução (Paridade Terminal).</div></div>
             </div>
-            
+            <!-- NAV CARDS GRID -->
+            <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:20px;">
+                 <div class="card" onclick="openTab('tab-config')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">⚙️</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Geral</div><div style="font-size:1.2rem; font-weight:700;">Status</div></div>
+                 </div>
+                 <div class="card" onclick="openTab('tab-servers')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">🖥️</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Servidores</div><div style="font-size:1.2rem; font-weight:700;">${srv_count}</div></div>
+                 </div>
+                 <div class="card" onclick="openTab('tab-zones')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">🌍</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Zonas</div><div style="font-size:1.2rem; font-weight:700;">${zone_count}</div></div>
+                 </div>
+                 <div class="card" onclick="openTab('tab-records')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">📝</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Registros</div><div style="font-size:1.2rem; font-weight:700;">${rec_count}</div></div>
+                 </div>
+            </div>
+
             <!-- NEW METRICS GRID -->
             <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
                  <!-- 1. NETWORK -->
