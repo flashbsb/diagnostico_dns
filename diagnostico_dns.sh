@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.2
+# Versão: 12.23.3
 # "Complete Scoring Transparency"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.2"
+SCRIPT_VERSION="12.23.3"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -2879,7 +2879,7 @@ generate_html_report_v2() {
     </script>
 </head>
 <body>
-    <aside>
+    <aside class="collapsed">
         <div class="toggle-btn" onclick="toggleSidebar()">‹</div>
         <div class="logo"><span style="color:var(--accent)">DNS</span><span class="logo-text">Diag <span style="font-size:0.5em; opacity:0.5; margin-left:5px">v${SCRIPT_VERSION}</span></span></div>
         <nav>
@@ -2901,25 +2901,7 @@ generate_html_report_v2() {
             <div class="page-header">
                 <div><h1>Dashboard Executivo</h1><div class="subtitle">Visão unificada da execução (Paridade Terminal).</div></div>
             </div>
-            <!-- NAV CARDS GRID -->
-            <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:20px;">
-                 <div class="card" onclick="openTab('tab-config')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">⚙️</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Geral</div><div style="font-size:1.2rem; font-weight:700;">Status</div></div>
-                 </div>
-                 <div class="card" onclick="openTab('tab-servers')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">🖥️</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Servidores</div><div style="font-size:1.2rem; font-weight:700;">${srv_count}</div></div>
-                 </div>
-                 <div class="card" onclick="openTab('tab-zones')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">🌍</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Zonas</div><div style="font-size:1.2rem; font-weight:700;">${zone_count}</div></div>
-                 </div>
-                 <div class="card" onclick="openTab('tab-records')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
-                     <div style="font-size:1.8rem;">📝</div>
-                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Registros</div><div style="font-size:1.2rem; font-weight:700;">${rec_count}</div></div>
-                 </div>
-            </div>
+
 
             <!-- NEW METRICS GRID -->
             <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
@@ -2953,6 +2935,26 @@ generate_html_report_v2() {
                      <div style="font-size:2.5rem; font-weight:800; color:${color_mod}; margin:10px 0;">${score_modernity}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Features Modernas ℹ️</div>
                      <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Pontua adesão a DNSSEC, Criptografia, EDNS e Cookies. Clique para ver pontuação.</div>
+                 </div>
+            </div>
+
+            <!-- NAV CARDS GRID -->
+            <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:20px;">
+                 <div class="card" onclick="openTab('tab-config')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">⚙️</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Geral</div><div style="font-size:1.2rem; font-weight:700;">Status</div></div>
+                 </div>
+                 <div class="card" onclick="openTab('tab-servers')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">🖥️</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Servidores</div><div style="font-size:1.2rem; font-weight:700;">${srv_count}</div></div>
+                 </div>
+                 <div class="card" onclick="openTab('tab-zones')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">🌍</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Zonas</div><div style="font-size:1.2rem; font-weight:700;">${zone_count}</div></div>
+                 </div>
+                 <div class="card" onclick="openTab('tab-records')" style="padding:15px; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid var(--border); display:flex; align-items:center; gap:15px;">
+                     <div style="font-size:1.8rem;">📝</div>
+                     <div><div style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Registros</div><div style="font-size:1.2rem; font-weight:700;">${rec_count}</div></div>
                  </div>
             </div>
 
