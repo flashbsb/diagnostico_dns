@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.10
-# "Debug & Logging Fixes"
+# Versão: 12.23.18
+# "De-Duplicated Logs"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.10"
+SCRIPT_VERSION="12.23.18"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -460,7 +460,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Debug & Logging Fixes  ${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - De-Duplicated Logs     ${NC}         ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -566,9 +566,10 @@ log_section() {
 
 log_cmd_result() {
     local context="$1"; local cmd="$2"; local output="$3"; local time="$4"
+    local ts=$(date +"%Y-%m-%d %H:%M:%S")
     {
         echo "--------------------------------------------------------------------------------"
-        echo "CTX: $context | CMD: $cmd | TIME: ${time}ms"
+        echo "[$ts] CTX: $context | CMD: $cmd | TIME: ${time}ms"
         echo "OUTPUT:"
         echo "$output"
         echo "--------------------------------------------------------------------------------"
@@ -577,9 +578,9 @@ log_cmd_result() {
     [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     {
         echo "--------------------------------------------------------------------------------"
-        echo "CTX: $context | CMD: $cmd | TIME: ${time}ms"
+        echo "[$ts] CTX: $context | CMD: $cmd | TIME: ${time}ms"
         echo "OUTPUT:"
-    echo "$output"
+        echo "$output"
         echo "--------------------------------------------------------------------------------"
     } >> "$LOG_FILE_TEXT"
 }
@@ -998,7 +999,13 @@ validate_csv_files() {
     [[ $error_count -gt 0 ]] && exit 1
 }
 
-check_port_bash() { timeout "$3" bash -c "cat < /dev/tcp/$1/$2" &>/dev/null; return $?; }
+check_port_bash() {
+    local cmd="timeout $3 bash -c \"cat < /dev/tcp/$1/$2\""
+    log_entry "EXECUTING: $cmd"
+    eval "$cmd" &>/dev/null; local ret=$?
+    log_entry "OUTPUT: (Exit Code: $ret)"
+    return $ret
+}
 
 check_dnssec_validation() {
     # Check if server validates DNSSEC (AD flag)
@@ -1006,7 +1013,10 @@ check_dnssec_validation() {
     local out
     # Some older digs output "flags: qr rd ra ad" on one line, others different.
     # We grep loosely for "ad" in flags line or "ad;" in header.
-    out=$(dig @$ip ietf.org A +dnssec +time=3 +tries=1 2>&1)
+    local cmd="dig @$ip ietf.org A +dnssec +time=3 +tries=1"
+    log_entry "EXECUTING: $cmd"
+    out=$($cmd 2>&1)
+    log_entry "OUTPUT:\n$out"
     if echo "$out" | grep -q -E ";; flags:.* ad[ ;]"; then return 0; fi
     return 1
 }
@@ -1014,7 +1024,9 @@ check_dnssec_validation() {
 check_doh_avail() {
     # Check if server responds to DoH (port 443 TCP connect)
     # Using true > /dev/tcp... instead of cat < ... to avoid hang waiting for data
-    if timeout 2 bash -c "true > /dev/tcp/$1/443" 2>/dev/null; then return 0; fi
+    local cmd="timeout 2 bash -c \"true > /dev/tcp/$1/443\""
+    log_entry "EXECUTING: $cmd"
+    if eval "$cmd" 2>/dev/null; then return 0; fi
     return 1
 }
 
@@ -1022,8 +1034,16 @@ check_tls_handshake() {
     # Check SSL handshake on port 853
     local ip=$1
     if ! command -v openssl &>/dev/null; then return 2; fi
-    echo "Q" | timeout 3 openssl s_client -connect $ip:853 -brief &>/dev/null
-    return $?
+    
+    local cmd="echo 'Q' | timeout 3 openssl s_client -connect $ip:853 -brief"
+    log_entry "EXECUTING: $cmd"
+    
+    local out
+    out=$(echo "Q" | timeout 3 openssl s_client -connect $ip:853 -brief 2>&1)
+    local ret=$?
+    
+    log_entry "OUTPUT:\n$out"
+    return $ret
 }
 
 validate_connectivity() {
@@ -1032,8 +1052,12 @@ validate_connectivity() {
     
     local status=1
     if command -v nc &> /dev/null; then 
-        nc -z -w "$timeout" "$server" 53 2>/dev/null; status=$?
-        log_cmd_result "CONNECTIVITY $server" "nc -z -w $timeout $server 53" "Exit Code: $status" "0"
+        local cmd="nc -z -w $timeout $server 53"
+        log_entry "EXECUTING: $cmd"
+        eval "$cmd" 2>&1 | while read -r line; do log_entry "OUTPUT: $line"; done
+        # Re-run for status as pipe hides it or use complex logic. Simpler: run and verify.
+        eval "$cmd" 2>/dev/null; status=$?
+        log_cmd_result "CONNECTIVITY $server" "$cmd" "Exit Code: $status" "0"
     else 
         check_port_bash "$server" 53 "$timeout"; status=$?
         log_cmd_result "CONNECTIVITY $server" "timeout $timeout bash -c 'cat < /dev/tcp/$server/53'" "Exit Code: $status" "0"
@@ -1054,7 +1078,9 @@ prepare_chart_resources() {
     echo -ne "  ⏳ Baixando biblioteca gráfica (Chart.js)... "
     
     if command -v curl &>/dev/null; then
-         if curl -s -f -o "$TEMP_CHART_JS" "$chart_url"; then
+         local cmd="curl -s -f -o \"$TEMP_CHART_JS\" \"$chart_url\""
+         log_entry "EXECUTING: $cmd"
+         if $cmd; then
              # Validate file size AND content (must contain 'Chart')
              if [[ -s "$TEMP_CHART_JS" ]] && grep -q "Chart" "$TEMP_CHART_JS"; then
                  echo -e "${GREEN}OK${NC}"
@@ -1062,7 +1088,9 @@ prepare_chart_resources() {
              fi
          fi
     elif command -v wget &>/dev/null; then
-         if wget -q -O "$TEMP_CHART_JS" "$chart_url"; then
+         local cmd="wget -q -O \"$TEMP_CHART_JS\" \"$chart_url\""
+         log_entry "EXECUTING: $cmd"
+         if $cmd; then
              if [[ -s "$TEMP_CHART_JS" ]] && grep -q "Chart" "$TEMP_CHART_JS"; then
                  echo -e "${GREEN}OK${NC}"
                  return 0
@@ -3445,31 +3473,13 @@ log_tech_details() {
     local id=$1
     local title=$2
     local content=$3
+    local ts=$(date +"%Y-%m-%d %H:%M:%S")
     
     # 1. HTML Output
     # Sanitize content for HTML
     local safe_out=$(echo "$content" | sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g')
     echo "<div id=\"log_${id}\" style=\"display:none\">$safe_out</div>" >> "$TEMP_DETAILS"
     
-    # 2. Text/Console Log Output (if enabled)
-    if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
-        {
-            echo "--------------------------------------------------------------------------------"
-            echo "TECH DETAILS: $title"
-            echo "--------------------------------------------------------------------------------"
-            echo "$content"
-            echo "--------------------------------------------------------------------------------"
-        } >> "$LOG_FILE_TEXT"
-        
-        # Also log to TEMP_FULL_LOG for the HTML tab mirroring
-        {
-            echo "--------------------------------------------------------------------------------"
-            echo "TECH DETAILS: $title"
-            echo "--------------------------------------------------------------------------------"
-            echo "$content"
-            echo "--------------------------------------------------------------------------------"
-        } >> "$TEMP_FULL_LOG"
-    fi
 }
 
 check_tcp_dns() {
@@ -3482,14 +3492,21 @@ check_tcp_dns() {
     
     # Try nc first (netcat)
     if command -v nc >/dev/null; then
-        out=$(timeout "$TIMEOUT" nc -z -v -w "$TIMEOUT" "$host" "$port" 2>&1)
+        local cmd="timeout $TIMEOUT nc -z -v -w $TIMEOUT $host $port"
+        log_entry "EXECUTING: $cmd"
+        out=$($cmd 2>&1)
+        log_entry "OUTPUT:\n$out"
         ret=$?
     else
         # Fallback to bash /dev/tcp
-        if timeout "$TIMEOUT" bash -c "</dev/tcp/$host/$port" 2>/dev/null; then
+        local cmd="timeout $TIMEOUT bash -c \"</dev/tcp/$host/$port\""
+        log_entry "EXECUTING: $cmd"
+        if eval "$cmd" 2>/dev/null; then
+            log_entry "OUTPUT: Connection Succeeded (RC: 0)"
             out="Connection to $host $port port [tcp/*] succeeded!"
             ret=0
         else
+            log_entry "OUTPUT: Connection Failed (RC: Non-Zero)"
             out="Connection to $host $port port [tcp/*] failed: Connection refused or Timeout."
             ret=1
         fi
@@ -4468,7 +4485,9 @@ EOF
         STATS_SERVER_PING_STATUS[$ip]="SKIP"
         if [[ "$ENABLE_PING" == "true" ]]; then
             local cmd_ping="ping -c $PING_COUNT -W $PING_TIMEOUT $ip"
+            log_entry "EXECUTING: $cmd_ping"
             local out_ping=$($cmd_ping 2>&1)
+            log_entry "OUTPUT:\n$out_ping"
             
             # Extract Packet Loss
             # Extract Packet Loss (Handle floats like 66.6667% -> 66)
@@ -4535,7 +4554,10 @@ EOF
              echo -e "     🗺️  Tracing..."
              # Use -n to avoid DNS resolution delays, -w to limit wait
              local trace_out
-             trace_out=$(traceroute -n -m "$TRACE_MAX_HOPS" -w 3 "$ip" 2>&1)
+             local cmd_trace="traceroute -n -m $TRACE_MAX_HOPS -w 3 $ip"
+             log_entry "EXECUTING: $cmd_trace"
+             trace_out=$($cmd_trace 2>&1)
+             log_entry "OUTPUT:\n$trace_out"
              
              # Logic to determine status
              local last_line=$(echo "$trace_out" | tail -n 1)
@@ -4616,6 +4638,7 @@ EOF
         # 1.2 Attributes (Version, Recursion)
         if [[ "$CHECK_BIND_VERSION" == "true" ]]; then 
              local cmd_ver="dig @$ip version.bind chaos txt +time=$TIMEOUT"
+             log_entry "EXECUTING: $cmd_ver"
              local out_ver_full=$($cmd_ver 2>&1)
              # Extract short version for logic
              local out_ver=$(echo "$out_ver_full" | grep "TXT" | grep "version.bind" | awk -F'"' '{print $2}')
@@ -4640,6 +4663,7 @@ EOF
         
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
              local cmd_rec="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
+             log_entry "EXECUTING: $cmd_rec"
              local out_rec=$($cmd_rec 2>&1)
              log_tech_details "rec_$ip" "Recursion Check: $ip" "$out_rec"
 
@@ -4665,7 +4689,11 @@ EOF
 
         # 1.3 Capabilities (EDNS, Cookie)
         if [[ "$ENABLE_EDNS_CHECK" == "true" ]]; then
-             if dig +edns=0 +noall +comments @$ip $probe_target +time=$TIMEOUT | grep -q "EDNS: version: 0"; then
+             local cmd_edns="dig +edns=0 +noall +comments @$ip $probe_target +time=$TIMEOUT"
+             log_entry "EXECUTING: $cmd_edns"
+             local out_edns=$($cmd_edns 2>&1)
+             log_entry "OUTPUT:\n$out_edns"
+             if echo "$out_edns" | grep -q "EDNS: version: 0"; then
                  edns_res_html="<span class='badge status-ok'>OK</span>"
                  edns_res_term="${GREEN}OK${NC}"
                  STATS_SERVER_EDNS[$ip]="OK"
@@ -4682,7 +4710,11 @@ EOF
         fi
         
         if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
-             if dig +cookie +noall +comments @$ip $probe_target +time=$TIMEOUT | grep -q "COOKIE:"; then
+             local cmd_cookie="dig +cookie +noall +comments @$ip $probe_target +time=$TIMEOUT"
+             log_entry "EXECUTING: $cmd_cookie"
+             local out_cookie=$($cmd_cookie 2>&1)
+             log_entry "OUTPUT:\n$out_cookie"
+             if echo "$out_cookie" | grep -q "COOKIE:"; then
                  cookie_res_html="<span class='badge status-ok'>OK</span>"
                  cookie_res_term="${GREEN}OK${NC}"
                  STATS_SERVER_COOKIE[$ip]="OK"
@@ -4880,13 +4912,17 @@ EOF
                   fi
                   
                   # Log SOA
+                  local cmd_soa_raw="dig +short +time=$TIMEOUT @$srv $domain SOA"
+                  log_entry "EXECUTING: $cmd_soa_raw (captured for tech details)"
                   log_tech_details "soa_${domain}_${srv}" "SOA Check: $domain @ $srv" "$(dig +short @$srv $domain SOA 2>&1)"
                   
                   # AXFR
                   local axfr_stat="N/A"
                   local axfr_raw="SKIPPED"
                   if [[ "$ENABLE_AXFR_CHECK" == "true" ]]; then
-                      local out_axfr=$(dig @$srv $domain AXFR +time=$TIMEOUT +tries=1)
+                      local cmd_axfr="dig @$srv $domain AXFR +time=$TIMEOUT +tries=1"
+                      log_entry "EXECUTING: $cmd_axfr"
+                      local out_axfr=$($cmd_axfr)
                       if echo "$out_axfr" | grep -q "Refused" || echo "$out_axfr" | grep -q "Transfer failed"; then
                           axfr_stat="<span class='badge status-ok'>DENIED</span>"
                           axfr_raw="DENIED"
@@ -5080,7 +5116,9 @@ EOF
                          
                          # Uses full output to capture Status and Answer
                          local out_full
-                         out_full=$(dig +tries=1 +time=$TIMEOUT @$srv $target $rec_type 2>&1)
+                         local cmd_dig="dig +tries=1 +time=$TIMEOUT @$srv $target $rec_type"
+                         log_entry "EXECUTING: $cmd_dig"
+                         out_full=$($cmd_dig 2>&1)
                          local ret=$?
                          
                          # Log Raw Output
@@ -5241,8 +5279,7 @@ main() {
     if [[ "$ENABLE_PING" == "true" ]] && ! command -v ping &> /dev/null; then echo "Erro: 'ping' nao encontrado (necessario para -t/Ping)."; exit 1; fi
 
     
-    init_log_file
-    validate_csv_files
+
     
     interactive_configuration
     
@@ -5260,6 +5297,8 @@ main() {
     # NEW EXECUTION FLOW
     # ==========================
     init_html_parts
+    init_log_file
+    validate_csv_files
     write_html_header
     load_dns_groups
     
