@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.8
-# "Refined Scoring & Alerts"
+# Versão: 12.23.9
+# "Precision Logging"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.8"
+SCRIPT_VERSION="12.23.9"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -460,7 +460,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Refined Scoring        ${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Precision Logging      ${NC}         ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -601,25 +601,28 @@ init_log_file() {
     
     log_rotation "$LOG_FILE_TEXT"
     
-    {
-        echo "DNS DIAGNOSTIC TOOL v$SCRIPT_VERSION - FORENSIC LOG"
-        echo "Date: $START_TIME_HUMAN"
-        echo "  Config Dump:"
-        echo "  Files: Domains='$FILE_DOMAINS', Groups='$FILE_GROUPS'"
-        echo "  Timeout: $TIMEOUT, Sleep: $SLEEP, ConnCheck: $VALIDATE_CONNECTIVITY"
-        echo "  Consistency: $CONSISTENCY_CHECKS attempts"
-        echo "  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK"
-        echo "  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK"
-        echo "  Security: Version=$CHECK_BIND_VERSION, AXFR=$ENABLE_AXFR_CHECK, Recursion=$ENABLE_RECURSION_CHECK, SOA_Sync=$ENABLE_SOA_SERIAL_CHECK
+    local header_content="DNS DIAGNOSTIC TOOL v$SCRIPT_VERSION - FORENSIC LOG
+Date: $START_TIME_HUMAN
+  Config Dump:
+  Files: Domains='$FILE_DOMAINS', Groups='$FILE_GROUPS'
+  Timeout: $TIMEOUT, Sleep: $SLEEP, ConnCheck: $VALIDATE_CONNECTIVITY
+  Consistency: $CONSISTENCY_CHECKS attempts
+  Criteria: StrictIP=$STRICT_IP_CHECK, StrictOrder=$STRICT_ORDER_CHECK, StrictTTL=$STRICT_TTL_CHECK
+  Special Tests: TCP=$ENABLE_TCP_CHECK, DNSSEC=$ENABLE_DNSSEC_CHECK
+  Security: Version=$CHECK_BIND_VERSION, AXFR=$ENABLE_AXFR_CHECK, Recursion=$ENABLE_RECURSION_CHECK, SOA_Sync=$ENABLE_SOA_SERIAL_CHECK
+  Ping: Enabled=$ENABLE_PING, Count=$PING_COUNT, Timeout=$PING_TIMEOUT, LossLimit=$PING_PACKET_LOSS_LIMIT%
+  Analysis: LatencyThreshold=${LATENCY_WARNING_THRESHOLD}ms, Color=$COLOR_OUTPUT
+  Reports: Full=$ENABLE_FULL_REPORT, Simple=$ENABLE_SIMPLE_REPORT
+  Dig Opts: $DEFAULT_DIG_OPTIONS
+  Rec Dig Opts: $RECURSIVE_DIG_OPTIONS
+  Verbose Level: $VERBOSE_LEVEL
 "
-        echo "  Ping: Enabled=$ENABLE_PING, Count=$PING_COUNT, Timeout=$PING_TIMEOUT, LossLimit=$PING_PACKET_LOSS_LIMIT%"
-        echo "  Analysis: LatencyThreshold=${LATENCY_WARNING_THRESHOLD}ms, Color=$COLOR_OUTPUT"
-        echo "  Reports: Full=$ENABLE_FULL_REPORT, Simple=$ENABLE_SIMPLE_REPORT"
-        echo "  Dig Opts: $DEFAULT_DIG_OPTIONS"
-        echo "  Rec Dig Opts: $RECURSIVE_DIG_OPTIONS"
-        echo "  Verbose Level: $VERBOSE_LEVEL"
-        echo ""
-    } >> "$LOG_FILE_TEXT" # Append mode due to shared file
+    
+    # Write to permanent log
+    echo "$header_content" >> "$LOG_FILE_TEXT"
+    
+    # Write to temp buffer for HTML (so it appears in the tab)
+    echo "$header_content" >> "$TEMP_FULL_LOG"
     
     if [[ "$ENABLE_JSON_LOG" == "true" ]]; then
         log_rotation "$LOG_FILE_JSON"
@@ -2909,7 +2912,11 @@ generate_html_report_v2() {
             <div class="nav-item" onclick="openTab('tab-records')"><span>📝</span><span class="nav-text">Registros</span></div>
             <div class="nav-item" onclick="openTab('tab-config')"><span>⚙️</span><span class="nav-text">Bastidores</span></div>
             <div class="nav-item" onclick="openTab('tab-help')"><span>❓</span><span class="nav-text">Ajuda</span></div>
-            <div class="nav-item" onclick="openTab('tab-logs')"><span>📜</span><span class="nav-text">Logs Verbos</span></div>
+EOF
+    if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
+       echo '            <div class="nav-item" onclick="openTab('\''tab-logs'\'')"><span>📜</span><span class="nav-text">Logs Verbos</span></div>' >> "$target_file"
+    fi
+    cat >> "$target_file" << EOF
         </nav>
         <div class="footer-info" style="margin-top:auto; padding-top:20px; border-top:1px solid var(--border); font-size:0.75rem; color:#64748b;">
             Executado por: <strong>$USER</strong><br>$TIMESTAMP
@@ -3257,19 +3264,26 @@ EOF
                 <pre style="color:#e2e8f0;">$help_content</pre>
              </div>
         </div>
+EOF
+    if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
+        cat >> "$target_file" << EOF
                 <div id="tab-logs" class="tab-content">
               <div class="page-header"><h1>Logs Verbos (Execução Terminal)</h1></div>
               <div style="background:#0b1120; color:#e2e8f0; font-family:monospace; padding:20px; border-radius:8px; height:70vh; overflow:auto; white-space:pre-wrap; font-size:0.85rem; border:1px solid #334155;">
 EOF
-    if [[ -f "$TEMP_FULL_LOG" ]]; then 
-        # Sanitize HTML entities in log to prevent breaking the report
-        sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$TEMP_FULL_LOG" >> "$target_file"
-    else
-        echo "Log indisponível." >> "$target_file"
-    fi
-    cat >> "$target_file" << EOF
+        if [[ -f "$TEMP_FULL_LOG" ]]; then 
+            # Sanitize HTML entities in log to prevent breaking the report
+            sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$TEMP_FULL_LOG" >> "$target_file"
+        else
+            echo "Log indisponível." >> "$target_file"
+        fi
+        cat >> "$target_file" << EOF
               </div>
          </div>
+EOF
+    fi
+
+    cat >> "$target_file" << EOF
         
         <div id="logModal" class="modal">
             <div class="modal-content">
