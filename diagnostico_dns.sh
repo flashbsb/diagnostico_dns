@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.16.0
-# "HTML Footer & Disclaimer"
+# Versão: 12.18.0
+# "Dashboard Refresh & Metrics"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.16.0"
+SCRIPT_VERSION="12.18.0"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -439,7 +439,7 @@ EOF
 print_execution_summary() {
     clear
     echo -e "${BOLD}======================================================${NC}"
-    echo -e "${BOLD}   🔍 DIAGNÓSTICO DNS - EXECUTIVE REPORT (v${SCRIPT_VERSION})   ${NC}"
+    echo -e "${BLUE}   🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION (v${SCRIPT_VERSION})   ${NC}"
     echo -e "${BOLD}======================================================${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -1643,7 +1643,8 @@ generate_security_cards() {
     echo "        <div class=\"card\" style=\"--card-accent: var(--accent-primary); cursor:pointer;\" onclick=\"showInfoModal('VERSION PRIVACY', 'Verifica se o servidor revela sua versão de software (BIND, etc).')\">"
     echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🕵️</div>"
     echo "            <span class=\"card-label\">Version Privacy</span>"
-    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "            <span style=\"font-size:0.75rem; color:var(--text-secondary); margin-top:5px; margin-bottom:5px; display:block; min-height:2.4em;\">Verifica se o servidor revela sua versão de software (BIND, etc).</span>"
+    echo "            <div style=\"margin-top:5px; font-size:0.95rem;\">"
     echo "                 <span style=\"color:var(--accent-success);\">Hide:</span> <strong>${SEC_HIDDEN}</strong> <span style=\"color:#444\">|</span>"
     echo "                 <span style=\"color:var(--accent-danger);\">Rev:</span> <strong>${SEC_REVEALED}</strong>"
     echo "            </div>"
@@ -1653,7 +1654,8 @@ generate_security_cards() {
     echo "        <div class=\"card\" style=\"--card-accent: var(--accent-warning); cursor:pointer;\" onclick=\"showInfoModal('ZONE TRANSFER (AXFR)', 'Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.')\">"
     echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">📂</div>"
     echo "            <span class=\"card-label\">Zone Transfer</span>"
-    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "            <span style=\"font-size:0.75rem; color:var(--text-secondary); margin-top:5px; margin-bottom:5px; display:block; min-height:2.4em;\">Tenta realizar uma transferência de zona completa (AXFR) do domínio raiz.</span>"
+    echo "            <div style=\"margin-top:5px; font-size:0.95rem;\">"
     echo "                 <span style=\"color:var(--accent-success);\">Deny:</span> <strong>${SEC_AXFR_OK}</strong> <span style=\"color:#444\">|</span>"
     echo "                 <span style=\"color:var(--accent-danger);\">Allow:</span> <strong>${SEC_AXFR_RISK}</strong>"
     echo "            </div>"
@@ -1663,7 +1665,8 @@ generate_security_cards() {
     echo "        <div class=\"card\" style=\"--card-accent: var(--accent-danger); cursor:pointer;\" onclick=\"showInfoModal('RECURSION', 'Verifica se o servidor aceita consultas recursivas para domínios externos.')\">"
     echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🔄</div>"
     echo "            <span class=\"card-label\">Recursion</span>"
-    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "            <span style=\"font-size:0.75rem; color:var(--text-secondary); margin-top:5px; margin-bottom:5px; display:block; min-height:2.4em;\">Verifica se o servidor aceita consultas recursivas para domínios externos.</span>"
+    echo "            <div style=\"margin-top:5px; font-size:0.95rem;\">"
     echo "                 <span style=\"color:var(--accent-success);\">Close:</span> <strong>${SEC_REC_OK}</strong> <span style=\"color:#444\">|</span>"
     echo "                 <span style=\"color:var(--accent-danger);\">Open:</span> <strong>${SEC_REC_RISK}</strong>"
     echo "            </div>"
@@ -1673,7 +1676,8 @@ generate_security_cards() {
     echo "        <div class=\"card\" style=\"--card-accent: #8b5cf6; cursor:pointer;\" onclick=\"showInfoModal('DNSSEC', 'Validação da cadeia de confiança DNSSEC (RRSIG).')\">"
     echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🔐</div>"
     echo "            <span class=\"card-label\">DNSSEC Status</span>"
-    echo "            <div style=\"margin-top:10px; font-size:0.95rem;\">"
+    echo "            <span style=\"font-size:0.75rem; color:var(--text-secondary); margin-top:5px; margin-bottom:5px; display:block; min-height:2.4em;\">Validação da cadeia de confiança DNSSEC (RRSIG).</span>"
+    echo "            <div style=\"margin-top:5px; font-size:0.95rem;\">"
     echo "                 <span style=\"color:var(--accent-success);\">Valid:</span> <strong>${DNSSEC_SUCCESS}</strong> <span style=\"color:#444\">|</span>"
     echo "                 <span style=\"color:var(--accent-danger);\">Fail:</span> <strong>${DNSSEC_FAIL}</strong>"
     echo "            </div>"
@@ -1683,7 +1687,8 @@ generate_security_cards() {
     echo "        <div class=\"card\" style=\"--card-accent: var(--accent-primary); cursor:pointer;\" onclick=\"showInfoModal('MODERN STANDARDS', 'Suporte a EDNS0, Cookies, QNAME Minimization e Criptografia.')\">"
     echo "            <div style=\"font-size:1.5rem; margin-bottom:5px;\">🛡️</div>"
     echo "            <span class=\"card-label\">Modern Features</span>"
-    echo "            <div style=\"margin-top:10px; font-size:0.85rem; display:grid; grid-template-columns: 1fr 1fr; gap:5px;\">"
+    echo "            <span style=\"font-size:0.75rem; color:var(--text-secondary); margin-top:5px; margin-bottom:5px; display:block; min-height:2.4em;\">Suporte a EDNS0, Cookies, QNAME Minimization e Criptografia.</span>"
+    echo "            <div style=\"margin-top:5px; font-size:0.85rem; display:grid; grid-template-columns: 1fr 1fr; gap:5px;\">"
     echo "                 <div>EDNS: <strong style=\"color:var(--accent-success)\">${EDNS_SUCCESS}</strong></div>"
     echo "                 <div>DoT: <strong style=\"color:var(--accent-success)\">${DOT_SUCCESS}</strong></div>"
     echo "                 <div>QNAME: <strong style=\"color:var(--accent-success)\">${QNAME_SUCCESS}</strong></div>"
@@ -2695,6 +2700,7 @@ generate_html_report_v2() {
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">📡 Rede</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_net}; margin:10px 0;">${score_network}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Infra & Conectividade</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Avalia conectividade (Ping), disponibilidade TCP e latência. Penaliza falhas de conexão e perda de pacotes.</div>
                  </div>
                  
                  <!-- 2. STABILITY -->
@@ -2702,6 +2708,7 @@ generate_html_report_v2() {
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">⚙️ Estabilidade</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_stab}; margin:10px 0;">${score_stability}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Consistência & DNS</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a consistência das respostas entre servidores e falhas de resolução (SERVFAIL/REFUSED).</div>
                  </div>
                  
                  <!-- 3. SECURITY -->
@@ -2709,6 +2716,7 @@ generate_html_report_v2() {
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🛡️ Segurança</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_sec}; margin:10px 0;">${score_security}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Riscos & Hardening</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Detecta riscos críticos como AXFR (Transferência de Zona) aberto, versão do BIND exposta e recursão indevida.</div>
                  </div>
                  
                  <!-- 4. MODERNITY -->
@@ -2716,6 +2724,7 @@ generate_html_report_v2() {
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🚀 Capacidades</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_mod}; margin:10px 0;">${score_modernity}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Features Modernas</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Pontua a adesão a padrões modernos: DNSSEC, Criptografia (DoT/TLS), EDNS e Cookies.</div>
                  </div>
             </div>
 
@@ -2767,13 +2776,7 @@ generate_html_report_v2() {
                 const ctxStat = document.getElementById('chartStat');
                 if(ctxStat) { new Chart(ctxStat, { type: 'doughnut', data: { labels: ['Sucesso', 'Falha', 'Divergente'], datasets: [{ data: [$SUCCESS_TESTS, $FAILED_TESTS, $DIVERGENT_TESTS], backgroundColor: ['#10b981', '#ef4444', '#a855f7'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color:'#94a3b8' } } } } }); }
             </script>
-            <!-- METRIC DEFINITIONS -->
-            <div style="margin-top:30px; display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px; font-size:0.8rem; color:#94a3b8; border-top:1px solid #334155; padding-top:20px;">
-                <div><strong style="color:#fff">📡 Rede</strong><br>Avalia conectividade (Ping), disponibilidade TCP e latência. Penaliza falhas de conexão e perda de pacotes.</div>
-                <div><strong style="color:#fff">⚙️ Estabilidade</strong><br>Mede a consistência das respostas entre servidores e falhas de resolução (SERVFAIL/REFUSED).</div>
-                <div><strong style="color:#fff">🛡️ Segurança</strong><br>Detecta riscos críticos como AXFR (Transferência de Zona) aberto, versão do BIND exposta e recursão indevida.</div>
-                <div><strong style="color:#fff">🚀 Capacidades</strong><br>Pontua a adesão a padrões modernos: DNSSEC, Criptografia (DoT/TLS), EDNS e Cookies.</div>
-            </div>
+            <!-- METRIC DEFINITIONS (Removed as content moved to cards) -->
 
             <!-- DISCLAIMER -->
             <details style="margin-top:20px; background:rgba(0,0,0,0.2); border:1px solid #334155; border-radius:8px; font-size:0.85rem;">
@@ -4079,7 +4082,9 @@ EOF
             
             # Extract Packet Loss
             # Extract Packet Loss (Handle floats like 66.6667% -> 66)
-            local loss_pct=$(echo "$out_ping" | grep -oP '\d+(\.\d+)?(?=% packet loss)' | awk -F. '{print $1}')
+            # Extract Packet Loss (Robust)
+            local loss_pct=$(echo "$out_ping" | grep -o "[0-9.]*% packet loss" | head -1 | awk '{print $1}' | tr -d '%')
+            loss_pct=${loss_pct%%.*} # Handle floats
             [[ -z "$loss_pct" ]] && loss_pct=100
             STATS_SERVER_PING_LOSS[$ip]=$loss_pct
             
