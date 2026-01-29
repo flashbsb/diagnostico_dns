@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.54
-# "Proportional Scoring"
+# Versão: 12.23.55
+# "Score Definitions"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.54"
+SCRIPT_VERSION="12.23.55"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -465,7 +465,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Proportional Scoring       ${NC}      ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Score Definitions          ${NC}      ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -3190,7 +3190,7 @@ EOF
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">📡 Rede</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_net}; margin:10px 0;">${score_network}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Infra & Conectividade ℹ️</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Avalia conectividade (Ping), disponibilidade TCP e latência. Clique para ver detalhes das penalidades.</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a <strong>Saúde Média</strong> dos servidores (Ping, Portas, Latência). Clique para detalhes.</div>
                  </div>
                  
                  <!-- 2. STABILITY -->
@@ -3198,7 +3198,7 @@ EOF
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">⚙️ Estabilidade</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_stab}; margin:10px 0;">${score_stability}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Consistência & DNS ℹ️</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a consistência das respostas entre servidores e falhas de resolução. Clique para ver penalidades.</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Reflete a <strong>Taxa de Sucesso Global</strong> das consultas e consistência. Clique para ver falhas.</div>
                  </div>
                  
                  <!-- 3. SECURITY -->
@@ -3206,7 +3206,7 @@ EOF
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🛡️ Segurança</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_sec}; margin:10px 0;">${score_security}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Riscos & Hardening ℹ️</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Detecta riscos críticos como AXFR, versão exposta e recursão. Clique para ver detalhes.</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a <strong>Conformidade Média</strong> (AXFR, Versão, Recursão). Clique para detalhes.</div>
                  </div>
                  
                  <!-- 4. MODERNITY -->
@@ -3214,7 +3214,7 @@ EOF
                      <div style="font-size:0.9rem; color:#94a3b8; font-weight:600; text-transform:uppercase;">🚀 Capacidades</div>
                      <div style="font-size:2.5rem; font-weight:800; color:${color_mod}; margin:10px 0;">${score_modernity}</div>
                      <div style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:5px 10px; border-radius:4px; display:inline-block; width:fit-content;">Features Modernas ℹ️</div>
-                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Pontua adesão a DNSSEC, Criptografia, EDNS e Cookies. Clique para ver pontuação.</div>
+                     <div style="font-size:0.8rem; color:#cbd5e1; margin-top:10px; line-height:1.4;">Mede a <strong>Adoção Média</strong> de recursos (EDNS, TCP, DNSSEC). Clique para ver pontuação.</div>
                  </div>
             </div>
 
@@ -3224,7 +3224,7 @@ EOF
             <div id="log_network_details" style="display:none">
                 <div style="font-size:0.9rem; color:#cbd5e1;">
                     <h3 style="color:#fff; margin-bottom:10px;">Relatório de Saúde (Rede)</h3>
-                    <p>A pontuação atual <strong>${score_network}/100</strong> foi calculada com base nos seguintes eventos:</p>
+                    <p>A pontuação atual <strong>${score_network}/100</strong> representa a <strong>Saúde Média da Infraestrutura</strong>. Cada servidor é avaliado individualmente (100 pts) e perde pontos por falhas. A nota final é a média global.</p>
                     <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
                         $network_details_log
                     </ul>
@@ -3234,7 +3234,7 @@ EOF
             <div id="log_stability_details" style="display:none">
                 <div style="font-size:0.9rem; color:#cbd5e1;">
                     <h3 style="color:#fff; margin-bottom:10px;">Relatório de Estabilidade</h3>
-                    <p>A pontuação atual <strong>${score_stability}/100</strong> reflete a consistência das respostas:</p>
+                    <p>A pontuação atual <strong>${score_stability}/100</strong> representa o <strong>Índice de Sucesso Global</strong>. É calculada pela porcentagem de consultas bem-sucedidas (OK/NXDOMAIN) em relação ao total executado.</p>
                     <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
                         $stability_details_log
                     </ul>
@@ -3244,7 +3244,7 @@ EOF
             <div id="log_security_details" style="display:none">
                 <div style="font-size:0.9rem; color:#cbd5e1;">
                     <h3 style="color:#fff; margin-bottom:10px;">Relatório de Segurança</h3>
-                    <p>A pontuação atual <strong>${score_security}/100</strong> avalia riscos críticos conhecidos:</p>
+                    <p>A pontuação atual <strong>${score_security}/100</strong> representa a <strong>Taxa de Conformidade Média</strong>. Cada servidor pontua por boas práticas: Recursão Fechada (+40), AXFR Negado (+40) e Versão Oculta (+20).</p>
                     <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
                         $security_details_log
                     </ul>
@@ -3254,7 +3254,7 @@ EOF
             <div id="log_modernity_details" style="display:none">
                 <div style="font-size:0.9rem; color:#cbd5e1;">
                     <h3 style="color:#fff; margin-bottom:10px;">Relatório de Capacidades Modernas</h3>
-                    <p>A pontuação atual <strong>${score_modernity}/100</strong> indica a adoção de features:</p>
+                    <p>A pontuação atual <strong>${score_modernity}/100</strong> representa a <strong>Taxa de Adoção de Features</strong>. Cada servidor pontua por suportar recursos modernos: EDNS (+25), TCP (+25), DNSSEC (+25) e Criptografia (+25).</p>
                     <ul style="margin-left:20px; margin-top:10px; list-style-type: disc;">
                         $modernity_details_log
                     </ul>
