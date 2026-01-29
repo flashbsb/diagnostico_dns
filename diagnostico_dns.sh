@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.49
-# "Text Corrections"
+# Versão: 12.23.54
+# "Proportional Scoring"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.49"
+SCRIPT_VERSION="12.23.54"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -465,7 +465,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Text Corrections           ${NC}      ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Proportional Scoring       ${NC}      ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -2478,250 +2478,243 @@ generate_html_report_v2() {
     
     # 1. Network Health (Infra & Connectivity)
     # Penalties: Down(-20), TCP Fail(-10), Loss(-1% per %), Latency(>Threshold -5)
-    local score_network=100
+    local score_network=0
     local network_details_log=""
+    local net_total_servers=0
+    local net_sum_scores=0
+
     for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+         net_total_servers=$((net_total_servers + 1))
          local s_stat="${STATS_SERVER_PING_STATUS[$ip]}"
          local s_loss="${STATS_SERVER_PING_LOSS[$ip]%%%}"
          local s_tcp="${STATS_SERVER_PORT_53[$ip]}"
          local s_lat="${STATS_SERVER_PING_AVG[$ip]%%.*}" # int
          
+         local server_score=100
          local penalties=""
+         
          if [[ "$s_stat" == "FAIL" ]]; then 
-             score_network=$((score_network - 20))
-             penalties+="<span style='color:#ef4444'>Falha no Ping (-20)</span>; "
-         fi
-         if [[ "$s_tcp" == "CLOSED" || "$s_tcp" == "FILTERED" ]]; then 
-             score_network=$((score_network - 10))
-             penalties+="<span style='color:#f59e0b'>Porta 53 Fechada/Filtrada (-10)</span>; "
-         fi
-         if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt "$PING_PACKET_LOSS_LIMIT" ]]; then 
-             score_network=$((score_network - s_loss))
-             penalties+="<span style='color:#f59e0b'>Perda de Pacote ${s_loss}% (-${s_loss})</span>; "
-         fi
-         if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$LATENCY_WARNING_THRESHOLD" ]]; then 
-             score_network=$((score_network - 5))
-             penalties+="<span style='color:#f59e0b'>Alta Latência ${s_lat}ms (-5)</span>; "
+             server_score=0
+             penalties+="<span style='color:#ef4444'>Falha no Ping (Score 0)</span>; "
+         else
+             # Penalties applied to the 100 base
+             if [[ "$s_tcp" == "CLOSED" || "$s_tcp" == "FILTERED" ]]; then 
+                 server_score=$((server_score - 40))
+                 penalties+="<span style='color:#f59e0b'>Porta 53 Fechada (-40)</span>; "
+             fi
+             if [[ "$s_loss" =~ ^[0-9]+$ && "$s_loss" -gt "$PING_PACKET_LOSS_LIMIT" ]]; then 
+                 server_score=$((server_score - s_loss))
+                 penalties+="<span style='color:#f59e0b'>Perda de Pacote ${s_loss}% (-${s_loss})</span>; "
+             fi
+             if [[ "$s_lat" =~ ^[0-9]+$ && "$s_lat" -gt "$LATENCY_WARNING_THRESHOLD" ]]; then 
+                 server_score=$((server_score - 20))
+                 penalties+="<span style='color:#f59e0b'>Alta Latência ${s_lat}ms (-20)</span>; "
+             fi
+             [[ $server_score -lt 0 ]] && server_score=0
          fi
          
-         if [[ -n "$penalties" ]]; then
-             network_details_log+="<li style='margin-bottom:5px;'><strong>$ip</strong>: ${penalties%; }</li>"
+         net_sum_scores=$((net_sum_scores + server_score))
+
+         if [[ $server_score -lt 100 ]]; then
+             network_details_log+="<li style='margin-bottom:5px;'><strong>$ip</strong> (Health: $server_score%): ${penalties%; }</li>"
          fi
     done
-    if [[ $score_network -lt 0 ]]; then score_network=0; fi
-    [[ -z "$network_details_log" ]] && network_details_log="<li><span style='color:#10b981'>Nenhuma penalidade detectada. Rede operando perfeitamente!</span></li>"
+
+    if [[ $net_total_servers -gt 0 ]]; then
+        score_network=$((net_sum_scores / net_total_servers))
+    else
+        score_network=0
+    fi
+    
+    [[ -z "$network_details_log" ]] && network_details_log="<li><span style='color:#10b981'>Todos os servidores estão com saúde 100%. Rede perfeita!</span></li>"
 
     # 2. Service Stability (Reliability & Consistency)
     # Penalties: Divergent(-5), Fail/Refused(-10) 
-    local score_stability=100
+    # 2. Service Stability (Reliability & Consistency)
+    # New Logic: Success Rate Index (Queries + Consistency)
+    local score_stability=0
     local stability_details_log=""
     
-    # Analyze Divergences (Stats populate during record tests)
-    local pen_rec_div=$((CNT_REC_DIVERGENT * 5))
-    score_stability=$(( score_stability - pen_rec_div ))
-    if [[ $pen_rec_div -gt 0 ]]; then
-         stability_details_log+="<li style='margin-bottom:8px; color:#facc15'><strong>Divergência de Registros (-${pen_rec_div} pts)</strong>:<br>"
-         stability_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade: -5 pontos por ocorrência.</span><br>"
-         local count_div=0
-         for key in "${!STATS_RECORD_CONSISTENCY[@]}"; do
-             if [[ "${STATS_RECORD_CONSISTENCY[$key]}" == "DIVERGENT" ]]; then
-                  IFS='|' read -r d t g <<< "$key"
-                  stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$d</strong> ($t) @ $g</span><br>"
-                  count_div=$((count_div+1))
-                  [[ $count_div -ge 5 ]] && { stability_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
-             fi
-         done
-         stability_details_log+="</li>"
-    fi
-
-    # Analyze Resolution Failures
-    local pen_rec_fail=$((CNT_REC_FAIL * 10))
-    score_stability=$(( score_stability - pen_rec_fail ))
-    if [[ $pen_rec_fail -gt 0 ]]; then
-         stability_details_log+="<li style='margin-bottom:8px; color:#f87171'><strong>Falha de Resolução (-${pen_rec_fail} pts)</strong>:<br>"
-         stability_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade: -10 pontos por falha crítica (Timeout, Refused, Servfail, etc).</span><br>"
-         local count_fail=0
-         for key in "${!STATS_RECORD_RES[@]}"; do
-              local status="${STATS_RECORD_RES[$key]}"
-              # Catch ANY failure that explains why CNT_REC_FAIL incremented (aggregated) or just show individual server errors
-              # CNT_REC_FAIL is aggregated if NO servers answered. But we list individual errors here.
-              if [[ "$status" != "NOERROR" && "$status" != "NXDOMAIN" ]]; then
-                  IFS='|' read -r d t g s <<< "$key"
-                  stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$s</strong> falhou em $d ($status)</span><br>"
-                  count_fail=$((count_fail+1))
-                  [[ $count_fail -ge 10 ]] && { stability_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
-              fi
-         done
-         if [[ $count_fail -eq 0 ]]; then
-             stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>Erro de agregação: Todos os servidores falharam para um registro, mas o status individual não foi capturado corretamente. Verifique a tabela de registros.</span><br>"
+    local stab_total_items=0
+    local stab_good_items=0
+    
+    # 2a. Query Success Rate
+    local q_total=0
+    local q_ok=0
+    for key in "${!STATS_RECORD_RES[@]}"; do
+         q_total=$((q_total + 1))
+         local status="${STATS_RECORD_RES[$key]}"
+         if [[ "$status" == "NOERROR" || "$status" == "NXDOMAIN" ]]; then
+             q_ok=$((q_ok + 1))
+         else
+             IFS='|' read -r d t g s <<< "$key"
+             stability_details_log+="<li style='margin-bottom:2px; font-size:0.85em; color:#f87171'>Falha: <strong>$s</strong> ($status) em $d ($t)</li>"
          fi
-         stability_details_log+="</li>"
+    done
+    
+    # 2b. Consistency Rate
+    local c_total=0
+    local c_ok=0
+    for key in "${!STATS_RECORD_CONSISTENCY[@]}"; do
+        c_total=$((c_total + 1))
+        if [[ "${STATS_RECORD_CONSISTENCY[$key]}" == "CONSISTENT" ]]; then
+            c_ok=$((c_ok + 1))
+        else
+            IFS='|' read -r d t g <<< "$key"
+            stability_details_log+="<li style='margin-bottom:2px; font-size:0.85em; color:#facc15'>Divergência: <strong>$d</strong> ($t) @ $g</li>"
+        fi
+    done
+    
+    # 2c. Zone Consistency (SOA)
+    # We treat each Zone|Group as a consistency item
+    # Re-use STATS_ZONE_SOA to identify unique groups/zones
+    # This logic is a bit complex to normalize, let's stick to Record Consistency and Query Reliability
+    
+    stab_total_items=$((q_total + c_total))
+    stab_good_items=$((q_ok + c_ok))
+    
+    if [[ $stab_total_items -gt 0 ]]; then
+        score_stability=$(( (stab_good_items * 100) / stab_total_items ))
+    else
+        score_stability=100
     fi
-
-    # Analyze Zone Divergences (SOA)
-    local pen_zone_div=$((CNT_ZONES_DIV * 5))
-    score_stability=$(( score_stability - pen_zone_div ))
-    if [[ $pen_zone_div -gt 0 ]]; then
-         stability_details_log+="<li style='margin-bottom:8px; color:#facc15'><strong>Divergência de Zona (-${pen_zone_div} pts)</strong>:<br>"
-         stability_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade: -5 pontos por zona dessincronizada.</span><br>"
-         
-         # Identify divergent zones by grouping SOAs
-         local -A domain_soas
-         for key in "${!STATS_ZONE_SOA[@]}"; do
-             IFS='|' read -r d g s <<< "$key"
-             local serial="${STATS_ZONE_SOA[$key]}"
-             if [[ "$serial" != "N/A" && "$serial" != "TIMEOUT" ]]; then
-                 domain_soas["$d"]+="$serial "
-             fi
-         done
-         
-         local count_zdiv=0
-         for d in "${!domain_soas[@]}"; do
-             local serials=$(echo "${domain_soas[$d]}" | tr ' ' '\n' | sort -u | wc -l)
-             if (( serials > 1 )); then
-                 stability_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$d</strong> possui SOAs distintos.</span><br>"
-                 count_zdiv=$((count_zdiv+1))
-                 [[ $count_zdiv -ge 5 ]] && { stability_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outras.</span><br>"; break; }
-             fi
-         done
-         unset domain_soas
-         stability_details_log+="</li>"
-    fi
-
-    if [[ $score_stability -lt 0 ]]; then score_stability=0; fi
+    
     [[ -z "$stability_details_log" ]] && stability_details_log="<li><span style='color:#10b981'>Nenhuma instabilidade detectada. Respostas 100% consistentes!</span></li>"
 
     # 3. Security Posture (Risk Assessment)
-    # Penalties: AXFR Open(-40), Version Exposed(-15), Recursion Open(-20)
-    local score_security=100
-    local security_details_log=""
-    
     # 3. Security Posture (Risk Assessment)
-    # Penalties: AXFR Open(-40), Version Exposed(-15), Recursion Open(-20)
-    local score_security=100
+    # New Logic: Average Server Compliance Score (0-100)
+    # Components per Server: Recursion Closed(40), AXFR Denied(40), Version Hidden(20)
+    local score_security=0
     local security_details_log=""
     
-    if [[ $SEC_AXFR_RISK -gt 0 ]]; then 
-        score_security=$((score_security - 40))
-        security_details_log+="<li style='margin-bottom:8px; color:#ef4444'><strong>Transferência de Zona (AXFR) (-40 pts)</strong>:<br>"
-        security_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade Única: -40 pontos se houver qualquer servidor vulnerável.</span><br>"
-        # Iterate to find vulnerable servers
-        local count_axfr=0
-        for key in "${!STATS_ZONE_AXFR[@]}"; do
-             if [[ "${STATS_ZONE_AXFR[$key]}" == "OPEN" || "${STATS_ZONE_AXFR[$key]}" == "TRANSFER_OK" || "${STATS_ZONE_AXFR[$key]}" == "ALLOWED" ]]; then 
-                  IFS='|' read -r d g s <<< "$key"
-                  security_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$s</strong> permitiu AXFR para <em>$d</em></span><br>"
-                  count_axfr=$((count_axfr+1))
-                  [[ $count_axfr -ge 5 ]] && { security_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
-             fi
-        done
-        security_details_log+="</li>"
-    fi
+    # 3a. Pre-calculate AXFR Risks per IP
+    local -A risk_axfr_ips
+    for key in "${!STATS_ZONE_AXFR[@]}"; do
+         local status="${STATS_ZONE_AXFR[$key]}"
+         if [[ "$status" == "OPEN" || "$status" == "TRANSFER_OK" || "$status" == "ALLOWED" ]]; then 
+              IFS='|' read -r d g s <<< "$key"
+              risk_axfr_ips["$s"]=1
+         fi
+    done
     
-    if [[ $SEC_REVEALED -gt 0 ]]; then 
-        score_security=$((score_security - 15))
-        security_details_log+="<li style='margin-bottom:8px; color:#facc15'><strong>Divulgação de Versão (-15 pts)</strong>:<br>"
-        security_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade Única: -15 pontos por *privacy leak*.</span><br>"
-        local count_ver=0
-        for ip in "${!STATS_SERVER_VERSION[@]}"; do
-             if [[ "${STATS_SERVER_VERSION[$ip]}" != "HIDDEN" && "${STATS_SERVER_VERSION[$ip]}" != "TIMEOUT" ]]; then
-                  security_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$ip</strong>: \"${STATS_SERVER_VERSION[$ip]:0:20}...\"</span><br>"
-                  count_ver=$((count_ver+1))
-                  [[ $count_ver -ge 5 ]] && { security_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
-             fi
-        done
-        security_details_log+="</li>"
-    fi
+    local sec_sum_scores=0
+    local sec_total_servers=0
     
-    if [[ $SEC_REC_RISK -gt 0 ]]; then 
-        score_security=$((score_security - 20))
-        security_details_log+="<li style='margin-bottom:8px; color:#ef4444'><strong>Recursão Aberta (-20 pts)</strong>:<br>"
-        security_details_log+="<span style='font-size:0.8em; color:#cbd5e1'>Penalidade Única: -20 pontos. Risco alto de DDoS.</span><br>"
-        local count_rec=0
-         for ip in "${!STATS_SERVER_RECURSION[@]}"; do
-             if [[ "${STATS_SERVER_RECURSION[$ip]}" == "OPEN" ]]; then
-                  security_details_log+="<span style='font-size:0.85em; opacity:0.8'>&bull; <strong>$ip</strong> aceita consultas recursivas</span><br>"
-                  count_rec=$((count_rec+1))
-                  [[ $count_rec -ge 5 ]] && { security_details_log+="<span style='font-size:0.8em; font-style:italic'>...e outros.</span><br>"; break; }
-             fi
-        done
-        security_details_log+="</li>"
+    for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+        sec_total_servers=$((sec_total_servers + 1))
+        local s_sec_score=0
+        local issues=""
+        
+        # Recursion (40 pts)
+        local rec="${STATS_SERVER_RECURSION[$ip]}"
+        if [[ "$rec" != "OPEN" ]]; then
+            s_sec_score=$((s_sec_score + 40))
+        else
+            issues+="Recursion Open; "
+        fi
+        
+        # AXFR (40 pts)
+        if [[ -z "${risk_axfr_ips[$ip]}" ]]; then
+            s_sec_score=$((s_sec_score + 40))
+        else
+            issues+="AXFR Allowed; "
+        fi
+        
+        # Version (20 pts)
+        local ver="${STATS_SERVER_VERSION[$ip]}"
+        if [[ "$ver" == "HIDDEN" || "$ver" == "TIMEOUT" ]]; then
+            s_sec_score=$((s_sec_score + 20))
+        else
+            issues+="Version Exposed; "
+        fi
+        
+        sec_sum_scores=$((sec_sum_scores + s_sec_score))
+        
+        if [[ $s_sec_score -lt 100 ]]; then
+             security_details_log+="<li style='margin-bottom:2px; font-size:0.85em; color:#facc15'><strong>$ip</strong> (Score: $s_sec_score%): ${issues%; }</li>"
+        fi
+    done
+    
+    if [[ $sec_total_servers -gt 0 ]]; then
+        score_security=$((sec_sum_scores / sec_total_servers))
+    else
+        score_security=0
     fi
-    # Bonus/Penalty for DNSSEC logic could go here, but kept simple
-    if [[ $score_security -lt 0 ]]; then score_security=0; fi
-    [[ -z "$security_details_log" ]] && security_details_log="<li><span style='color:#10b981'>Nenhum risco crítico de infraestrutura detectado (AXFR/Recursão/Versão).</span></li>"
+ 
+    [[ -z "$security_details_log" ]] && security_details_log="<li><span style='color:#10b981'>Nenhum risco crítico de infraestrutura detectado. 100% de Conformidade!</span></li>"
 
     # 4. Modernity Capabilities (Feature Adoption)
-    # Cumulative Score based on coverage ratio: EDNS, Cookies, DNSSEC, Encryption
+    # New Logic: Average Feature Adoption Rate (0-100)
+    # Components per Server: EDNS(25), TCP(25), DNSSEC(25), Encryption(25)
     local score_modernity=0
     local modernity_details_log=""
-    local srv_total=${#UNIQUE_SERVERS[@]}
     
-    if [[ $srv_total -gt 0 ]]; then
-         # Recalculate counts locally for accuracy (iterating unique servers)
-         local cnt_edns=0; local missing_edns=""
-         local cnt_cookie=0; local missing_cookie=""
-         local cnt_dnssec=0; local missing_dnssec=""
-         local cnt_enc=0; local missing_enc=""
-
-         for ip in "${!UNIQUE_SERVERS[@]}"; do
-             if [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]]; then cnt_edns=$((cnt_edns+1)); else missing_edns+="$ip, "; fi
-             if [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]]; then cnt_cookie=$((cnt_cookie+1)); else missing_cookie+="$ip, "; fi
-             if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then cnt_dnssec=$((cnt_dnssec+1)); else missing_dnssec+="$ip, "; fi
-             if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" || "${STATS_SERVER_PORT_853[$ip]}" == "OK" || "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
-                 cnt_enc=$((cnt_enc+1)); else missing_enc+="$ip, "; fi
-         done
-
-         # 1. EDNS
-         local ratio_edns=$(( (cnt_edns * 25) / srv_total ))
-         score_modernity=$((score_modernity + ratio_edns))
-         modernity_details_log+="<li style='margin-bottom:8px;'><strong>EDNS0 (Score: +${ratio_edns}/25 pts)</strong>:<br>"
-         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Presente em $cnt_edns de $srv_total servidores.</span><br>"
-         if [[ $cnt_edns -lt $srv_total ]]; then
-             modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente em: ${missing_edns%, }</span><br>"
-         else 
-             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
-         fi
-         modernity_details_log+="</li>"
-         
-         # 2. COOKIE
-         local ratio_cookie=$(( (cnt_cookie * 25) / srv_total ))
-         score_modernity=$((score_modernity + ratio_cookie))
-         modernity_details_log+="<li style='margin-bottom:8px;'><strong>DNS Cookies (Score: +${ratio_cookie}/25 pts)</strong>:<br>"
-         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Presente em $cnt_cookie de $srv_total servidores.</span><br>"
-         if [[ $cnt_cookie -lt $srv_total ]]; then
-             modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente em: ${missing_cookie%, }</span><br>"
-         else
-              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
-         fi
-         modernity_details_log+="</li>"
-         
-         # 3. DNSSEC
-         local ratio_dnssec=$(( (cnt_dnssec * 25) / srv_total ))
-         score_modernity=$((score_modernity + ratio_dnssec))
-         modernity_details_log+="<li style='margin-bottom:8px;'><strong>Validação DNSSEC (Score: +${ratio_dnssec}/25 pts)</strong>:<br>"
-         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Validando em $cnt_dnssec de $srv_total servidores.</span><br>"
-         if [[ $cnt_dnssec -lt $srv_total ]]; then
-             modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Ausente/Falha em: ${missing_dnssec%, }</span><br>"
-         else
-             modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
-         fi
-         modernity_details_log+="</li>"
-
-         # 4. Encryption
-         local ratio_enc=$(( (cnt_enc * 25) / srv_total ))
-         score_modernity=$((score_modernity + ratio_enc))
-         modernity_details_log+="<li style='margin-bottom:8px;'><strong>Criptografia (DoT/DoH/TLS) (Score: +${ratio_enc}/25 pts)</strong>:<br>"
-         modernity_details_log+="<span style='font-size:0.85em; opacity:0.8'>Suportado em $cnt_enc de $srv_total servidores.</span><br>"
-         if [[ $cnt_enc -lt $srv_total ]]; then
-              modernity_details_log+="<span style='font-size:0.85em; opacity:0.8; color:#facc15'>Não detectado em: ${missing_enc%, }</span><br>"
-         else
-              modernity_details_log+="<span style='font-size:0.85em; color:#10b981'>Full Compliance (100%).</span><br>"
-         fi
-         modernity_details_log+="</li>"
+    local mod_total_servers=0
+    local mod_sum_scores=0
+    
+    for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
+        mod_total_servers=$((mod_total_servers + 1))
+        local s_mod_score=0
+        local miss_feat=""
+        
+        # 1. TCP Support (RFC 7766) - 25 pts
+        local tcp="${STATS_SERVER_PORT_53[$ip]}"
+        if [[ "$tcp" == "OPEN" ]]; then
+             s_mod_score=$((s_mod_score + 25))
+        else
+             miss_feat+="No-TCP; "
+        fi
+        
+        # 2. EDNS0 Support - 25 pts
+        local edns="${STATS_SERVER_EDNS[$ip]}"
+        if [[ "$edns" == "OK" ]]; then
+             s_mod_score=$((s_mod_score + 25))
+        else
+             miss_feat+="No-EDNS; "
+        fi
+        
+        # 3. DNSSEC Awareness - 25 pts
+        # (Assuming STATS_SERVER_DNSSEC is populated by server tests, or fallback if unknown)
+        # If not explicitly tested, we might default to 0 to encourage testing?
+        # Let's check if variable is set.
+        local dnssec="${STATS_SERVER_DNSSEC[$ip]}"
+        if [[ "$dnssec" == "OK" ]]; then
+             s_mod_score=$((s_mod_score + 25))
+        elif [[ "$dnssec" == "FAIL" ]]; then
+             miss_feat+="No-DNSSEC; "
+        else
+             # If UNKNOWN/NA, maybe partial credit or 0? 
+             # Let's give 0 to be strict + note.
+             miss_feat+="DNSSEC-Unknown; "
+        fi
+        
+        # 4. Encryption (DoT/DoH) - 25 pts
+        local tls="${STATS_SERVER_TLS[$ip]}"
+        local doh="${STATS_SERVER_DOH[$ip]}"
+        local p853="${STATS_SERVER_PORT_853[$ip]}"
+        if [[ "$tls" == "OK" || "$doh" == "OK" || "$p853" == "OPEN" ]]; then
+             s_mod_score=$((s_mod_score + 25))
+        else
+             miss_feat+="No-Encryption; "
+        fi
+        
+        mod_sum_scores=$((mod_sum_scores + s_mod_score))
+        
+        if [[ $s_mod_score -lt 100 ]]; then
+             modernity_details_log+="<li style='margin-bottom:2px; font-size:0.85em; color:#facc15'><strong>$ip</strong> (Adoption: $s_mod_score%): ${miss_feat%; }</li>"
+        fi
+    done
+    
+    if [[ $mod_total_servers -gt 0 ]]; then
+        score_modernity=$((mod_sum_scores / mod_total_servers))
     else
-         modernity_details_log="<li><span style='color:#94a3b8'>Nenhum servidor identificado para análise de capacidades.</span></li>"
+        score_modernity=0
     fi
+     
+    [[ -z "$modernity_details_log" ]] && modernity_details_log="<li><span style='color:#10b981'>Infraestrutura 100% Moderna (EDNS/TCP/DNSSEC/Enc)!</span></li>"
+
+
     if [[ $score_modernity -gt 100 ]]; then score_modernity=100; fi
 
     # Helper function for grading color
@@ -2952,7 +2945,7 @@ generate_html_report_v2() {
              zone_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
                 <summary style='background:#1e293b; padding:12px 15px; cursor:pointer; font-weight:600; color:#fff;'>🌍 $domain <span style='font-size:0.8em; color:${soa_color}; font-weight:600; margin-left:10px;'>Consensus SOA: $most_frequent_soa</span></summary>
                 <table style='width:100%'>
-                <thead style='background:#0f172a'><tr><th>Grupo</th><th>Servidor</th><th>SOA Serial</th><th>AXFR Policy</th><th>DNSSEC Sig</th></tr></thead>
+                <thead style='background:#0f172a'><tr><th>Grupo</th><th>Servidor</th><th>SOA Serial</th><th>AXFR Policy</th><th>DNSSEC Sig</th><th>Tempo de Resposta</th></tr></thead>
                 <tbody>"
 
              for grp in "${grp_list[@]}"; do
@@ -2960,6 +2953,8 @@ generate_html_report_v2() {
                        local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
                        local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
                        local dnssec="${STATS_ZONE_DNSSEC[$domain|$grp|$srv]:-UNSIGNED}"
+                       local qt="${STATS_ZONE_TIME[$domain|$grp|$srv]}"
+                       [[ -z "$qt" ]] && qt="-"
                        
                        # LIDs
                        local lid_soa="${LIDS_ZONE_SOA[$domain|$grp|$srv]}"
@@ -2981,6 +2976,8 @@ generate_html_report_v2() {
                        [[ "$dnssec" == "SIGNED" ]] && dnssec_cls="bg-ok"
                        [[ "$dnssec" == "UNSIGNED" ]] && dnssec_cls="bg-warn" # Or neutral
 
+                       local qt_hex=$(get_dns_timing_hex "$qt")
+
                        
                        local safe_dom=${domain//./_}; local safe_srv=${srv//./_}
                        zone_rows+="<tr>
@@ -2988,6 +2985,7 @@ generate_html_report_v2() {
                             <td style='font-family:monospace'><span class='badge $soa_cls log-trigger' style='cursor:pointer' data-lid='$lid_soa' data-title='SOA $domain ($srv)' title='Click to view SOA log'>$soa</span></td>
                             <td><span class='badge $axfr_cls log-trigger' style='cursor:pointer' data-lid='$lid_axfr' data-title='AXFR $domain ($srv)' title='Click to view AXFR log'>$axfr</span></td>
                             <td><span class='badge $dnssec_cls log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $domain ($srv)' title='Click to view DNSSEC log'>$dnssec</span></td>
+                            <td style='color:${qt_hex}; font-weight:bold; cursor:pointer;' class='log-trigger' data-lid='$lid_soa' data-title='SOA Query Time $domain ($srv)' title='Click to view details'>${qt}$([[ "$qt" != "-" ]] && echo "ms")</td>
                         </tr>"
                   done
              done
@@ -3030,11 +3028,19 @@ generate_html_report_v2() {
 
              local r_status="${STATS_RECORD_RES[$key]}"; local r_ans="${STATS_RECORD_ANSWER[$key]}"; local r_lat="${STATS_RECORD_LATENCY[$key]}"
              local r_cons="${STATS_RECORD_CONSISTENCY[$r_dom|$r_type|$r_grp]}"; local st_cls="bg-neutral"
-             [[ "$r_status" == "NOERROR" ]] && st_cls="bg-ok"; [[ "$r_status" == "NXDOMAIN" ]] && st_cls="bg-warn"; [[ "$r_status" != "NOERROR" && "$r_status" != "NXDOMAIN" ]] && st_cls="bg-fail"
+             local r_lid="${LIDS_RECORD_RES[$key]}"
+             local qt_hex=$(get_dns_timing_hex "$r_lat")
+             local r_conn_check="ms"; [[ "$r_lat" == "-" ]] && { r_lat="-"; r_conn_check=""; }
+             
+             local r_cons="${STATS_RECORD_CONSISTENCY[$r_dom|$r_type|$r_grp]}"; local st_cls="bg-neutral"
+             local r_display_status="$r_status"
+             [[ "$r_status" == "NOERROR" ]] && { st_cls="bg-ok"; r_display_status="OK"; }
+             [[ "$r_status" == "NXDOMAIN" ]] && { st_cls="bg-warn"; r_display_status="NX"; }
+             [[ "$r_status" != "NOERROR" && "$r_status" != "NXDOMAIN" ]] && { st_cls="bg-fail"; r_display_status="FAIL ($r_status)"; }
              local cons_badge=""; [[ "$r_cons" == "DIVERGENT" ]] && cons_badge="<span class='badge bg-fail'>DIV</span>"
              local safe_dom=${r_dom//./_}; local safe_srv=${r_srv//./_}
              
-             record_rows+="<tr style='border-bottom: 1px solid #334155;'><td style='padding:8px;'>$r_srv <span style='font-size:0.8em;opacity:0.6'>($r_grp)</span> $cons_badge</td><td style='padding:8px;'><span class='badge $st_cls'>$r_status</span></td><td style='padding:8px;'><div style='max-height:60px; overflow-y:auto; font-family:monospace; font-size:0.85em; white-space:pre-wrap; color:#e2e8f0;'>$r_ans</div></td><td style='padding:8px;'>${r_lat}ms</td></tr>"
+             record_rows+="<tr style='border-bottom: 1px solid #334155;'><td style='padding:8px;'>$r_srv <span style='font-size:0.8em;opacity:0.6'>($r_grp)</span> $cons_badge</td><td style='padding:8px;'><span class='badge $st_cls log-trigger' style='cursor:pointer' data-lid='$r_lid'>$r_display_status</span></td><td style='padding:8px;'><div class='log-trigger' data-lid='$r_lid' style='max-height:60px; overflow-y:auto; font-family:monospace; font-size:0.85em; white-space:pre-wrap; color:#e2e8f0; cursor:pointer;'>$r_ans</div></td><td style='padding:8px; color:${qt_hex}; font-weight:bold; cursor:pointer;' class='log-trigger' data-lid='$r_lid'>${r_lat}${r_conn_check}</td></tr>"
         done < "$tmp_rec_keys.sorted"
         
         # Close Final Tags
@@ -4355,8 +4361,8 @@ generate_hierarchical_stats() {
                   local g_soa=""
                   for srv in ${DNS_GROUPS[$grp]}; do
                        local s_soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
-                        local s_qt="${STATS_ZONE_TIME[$domain|$grp|$srv]}"; [[ -z "$s_qt" ]] && s_qt="-" || s_qt="${s_qt}ms"
-                                               printf "       %-20s : %-12s | %-10s\n" "• ${grp} ($srv)" "$s_soa" "$s_qt"
+                       local s_qt="${STATS_ZONE_TIME[$domain|$grp|$srv]}"; [[ "$s_qt" == "-" || -z "$s_qt" ]] && s_qt="-" || s_qt="${s_qt}ms"
+                       printf "       %-20s : %-12s | %-10s\n" "• ${grp} ($srv)" "$s_soa" "$s_qt"
                   done
              done
              echo ""
@@ -5260,7 +5266,7 @@ EOF
                   log_entry "EXECUTING: $cmd_soa_raw"
                   local out_soa_raw=$($cmd_soa_raw 2>&1)
                   local qt_soa=$(echo "$out_soa_raw" | grep "Query time:" | awk '{print $4}')
-                  [[ -z "$qt_soa" ]] && qt_soa=0
+                  [[ -z "$qt_soa" ]] && qt_soa="-"
                   SERVER_SOA_TIME[$srv]="$qt_soa"
                   STATS_ZONE_TIME["$domain|$grp|$srv"]="$qt_soa"
                   [[ -z "$out_soa_raw" ]] && out_soa_raw="(No Output)"
@@ -5430,6 +5436,7 @@ run_record_tests() {
     declare -gA STATS_RECORD_LATENCY  
     declare -gA STATS_RECORD_CONSISTENCY # Per Record|Group -> CONSISTENT/DIVERGENT
     declare -gA STATS_RECORD_DIV_COUNT   # Per Record|Group -> Number of unique answers
+    declare -gA LIDS_RECORD_RES          # LIDs for clickability
     
     # START RECORD HTML SECTION
     cat >> "$TEMP_SECTION_RECORD" << EOF
@@ -5498,6 +5505,7 @@ EOF
                          local safe_target=${target//./_}
                          local safe_srv=${srv//./_}
                          log_tech_details "rec_${safe_target}_${rec_type}_${safe_srv}" "DIG: $target ($rec_type) @ $srv" "$out_full"
+                         LIDS_RECORD_RES["$target|$rec_type|$grp|$srv"]=$(cat "$TEMP_LID")
                          
                          # Extract status
                          local status="UNKNOWN"
@@ -5534,7 +5542,7 @@ EOF
     
                          # Extract Latency
                          local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
-                         [[ -z "$dur" ]] && dur=0
+                          [[ -z "$dur" ]] && dur="-"
                          STATS_RECORD_LATENCY["$target|$rec_type|$grp|$srv"]="$dur"
                          
                          # Extract short answer for display (Badge Title & Terminal)
@@ -5570,7 +5578,7 @@ EOF
                          if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
                              local csv_ts=$(date "+%Y-%m-%d %H:%M:%S")
                              local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
-                             [[ -z "$dur" ]] && dur=0
+                              [[ -z "$dur" ]] && dur="-"
                              
                              # Clean answer snippet (remove newlines/special chars)
                              local clean_ans=$(echo "${answer_data}" | tr -d '\n\r;' | cut -c1-100)
@@ -5581,7 +5589,7 @@ EOF
                          # --- JSON EXPORT (Restored) ---
                          if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
                              local dur=$(echo "$out_full" | grep "Query time:" | awk '{print $4}')
-                             [[ -z "$dur" ]] && dur=0
+                              [[ -z "$dur" ]] && dur=0
                              echo "{ \"domain\": \"$target\", \"group\": \"$grp\", \"server\": \"$srv\", \"record\": \"$rec_type\", \"status\": \"$status\", \"latency_ms\": $dur }," >> "$TEMP_JSON_DNS"
                          fi
     
