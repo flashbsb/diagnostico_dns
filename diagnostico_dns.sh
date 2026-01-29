@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.18
-# "De-Duplicated Logs"
+# Versão: 12.23.20
+# "Empty Output Catch"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.18"
+SCRIPT_VERSION="12.23.20"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -460,7 +460,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - De-Duplicated Logs     ${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Empty Output Catch     ${NC}         ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -1026,7 +1026,11 @@ check_doh_avail() {
     # Using true > /dev/tcp... instead of cat < ... to avoid hang waiting for data
     local cmd="timeout 2 bash -c \"true > /dev/tcp/$1/443\""
     log_entry "EXECUTING: $cmd"
-    if eval "$cmd" 2>/dev/null; then return 0; fi
+    if eval "$cmd" 2>/dev/null; then 
+        log_entry "OUTPUT: Connection Succeeded (RC: 0)"
+        return 0
+    fi
+    log_entry "OUTPUT: Connection Failed (RC: Non-Zero)"
     return 1
 }
 
@@ -1042,6 +1046,8 @@ check_tls_handshake() {
     out=$(echo "Q" | timeout 3 openssl s_client -connect $ip:853 -brief 2>&1)
     local ret=$?
     
+    # If empty, it likely timed out or failed silently, try to give context
+    [[ -z "$out" ]] && out="(No Output - Likely Timeout or Con Refused)"
     log_entry "OUTPUT:\n$out"
     return $ret
 }
@@ -3495,6 +3501,7 @@ check_tcp_dns() {
         local cmd="timeout $TIMEOUT nc -z -v -w $TIMEOUT $host $port"
         log_entry "EXECUTING: $cmd"
         out=$($cmd 2>&1)
+        [[ -z "$out" ]] && out="(No Output)"
         log_entry "OUTPUT:\n$out"
         ret=$?
     else
@@ -4640,6 +4647,7 @@ EOF
              local cmd_ver="dig @$ip version.bind chaos txt +time=$TIMEOUT"
              log_entry "EXECUTING: $cmd_ver"
              local out_ver_full=$($cmd_ver 2>&1)
+             log_entry "OUTPUT:\n$out_ver_full"
              # Extract short version for logic
              local out_ver=$(echo "$out_ver_full" | grep "TXT" | grep "version.bind" | awk -F'"' '{print $2}')
              
@@ -4665,6 +4673,7 @@ EOF
              local cmd_rec="dig @$ip google.com A +recurse +time=$TIMEOUT +tries=1"
              log_entry "EXECUTING: $cmd_rec"
              local out_rec=$($cmd_rec 2>&1)
+             log_entry "OUTPUT:\n$out_rec"
              log_tech_details "rec_$ip" "Recursion Check: $ip" "$out_rec"
 
              if echo "$out_rec" | grep -q "status: REFUSED" || echo "$out_rec" | grep -q "recursion requested but not available"; then
@@ -4692,6 +4701,7 @@ EOF
              local cmd_edns="dig +edns=0 +noall +comments @$ip $probe_target +time=$TIMEOUT"
              log_entry "EXECUTING: $cmd_edns"
              local out_edns=$($cmd_edns 2>&1)
+             [[ -z "$out_edns" ]] && out_edns="(No Output)"
              log_entry "OUTPUT:\n$out_edns"
              if echo "$out_edns" | grep -q "EDNS: version: 0"; then
                  edns_res_html="<span class='badge status-ok'>OK</span>"
@@ -4713,6 +4723,7 @@ EOF
              local cmd_cookie="dig +cookie +noall +comments @$ip $probe_target +time=$TIMEOUT"
              log_entry "EXECUTING: $cmd_cookie"
              local out_cookie=$($cmd_cookie 2>&1)
+             [[ -z "$out_cookie" ]] && out_cookie="(No Output)"
              log_entry "OUTPUT:\n$out_cookie"
              if echo "$out_cookie" | grep -q "COOKIE:"; then
                  cookie_res_html="<span class='badge status-ok'>OK</span>"
