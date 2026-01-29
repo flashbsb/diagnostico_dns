@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.44
-# "Query Time Integration"
+# Versão: 12.23.49
+# "Text Corrections"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.44"
+SCRIPT_VERSION="12.23.49"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -183,6 +183,8 @@ LOG_FILE_CSV_REC="$LOG_OUTPUT_DIR/${LOG_PREFIX}_v${SCRIPT_VERSION}_${TIMESTAMP}_
 # Default Configuration (Respects Config File)
 # 0=Quiet, 1=Summary, 2=Verbose (Cmds), 3=Debug (Outs)
 VERBOSE_LEVEL=${VERBOSE_LEVEL:-1}
+DNS_LATENCY_WARNING_THRESHOLD=${DNS_LATENCY_WARNING_THRESHOLD:-300}
+DNS_LATENCY_MIN_THRESHOLD=${DNS_LATENCY_MIN_THRESHOLD:-3}
 
 
 # Extra Features Defaults
@@ -463,7 +465,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Fix DNSSEC Zone Log    ${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Text Corrections           ${NC}      ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -515,7 +517,8 @@ print_execution_summary() {
     fi
 
     echo -e "\n${PURPLE}[6. CONFIG AVANÇADA]${NC}"
-    echo -e "  ⚠️  Limiar Latência : ${LATENCY_WARNING_THRESHOLD}ms"
+    echo -e "  ⚠️  Limiar Latência (Ping) : ${LATENCY_WARNING_THRESHOLD}ms"
+    echo -e "  ⚠️  Limiar Latência (DNS)  : ${DNS_LATENCY_WARNING_THRESHOLD}ms (Purple < ${DNS_LATENCY_MIN_THRESHOLD}ms)"
     echo -e "  🛠️  Dig (Std)       : ${GRAY}${DEFAULT_DIG_OPTIONS}${NC}"
     echo -e "  🛠️  Dig (Rec)       : ${GRAY}${RECURSIVE_DIG_OPTIONS}${NC}"
     echo -e "  📢 Verbose All      : ${VERBOSE_LEVEL} (0-3)"
@@ -801,7 +804,9 @@ interactive_configuration() {
         ask_variable "Dig Options (Padrão/Iterativo)" "DEFAULT_DIG_OPTIONS"
         ask_variable "Dig Options (Recursivo)" "RECURSIVE_DIG_OPTIONS"
         
-        ask_variable "Limiar de Alerta de Latência (ms)" "LATENCY_WARNING_THRESHOLD"
+        ask_variable "Limiar de Alerta de Latência Ping (ms)" "LATENCY_WARNING_THRESHOLD"
+        ask_variable "Limiar de Alerta de Latência DNS (ms) [Default: 300]" "DNS_LATENCY_WARNING_THRESHOLD"
+        ask_variable "Limiar Mínimo de Latência DNS (ms) [Default: 3]" "DNS_LATENCY_MIN_THRESHOLD"
         ask_variable "Limite tolerável de Perda de Pacotes (%)" "PING_PACKET_LOSS_LIMIT"
         ask_boolean "Habilitar Cores no Terminal?" "COLOR_OUTPUT"
         
@@ -903,6 +908,8 @@ save_config_to_file() {
     
     # Analysis
     sed -i "s|^LATENCY_WARNING_THRESHOLD=.*|LATENCY_WARNING_THRESHOLD=$LATENCY_WARNING_THRESHOLD|" "$CONFIG_FILE"
+    sed -i "s|^DNS_LATENCY_WARNING_THRESHOLD=.*|DNS_LATENCY_WARNING_THRESHOLD=$DNS_LATENCY_WARNING_THRESHOLD|" "$CONFIG_FILE"
+    sed -i "s|^DNS_LATENCY_MIN_THRESHOLD=.*|DNS_LATENCY_MIN_THRESHOLD=$DNS_LATENCY_MIN_THRESHOLD|" "$CONFIG_FILE"
     sed -i "s|^PING_PACKET_LOSS_LIMIT=.*|PING_PACKET_LOSS_LIMIT=$PING_PACKET_LOSS_LIMIT|" "$CONFIG_FILE"
     update_conf_key "COLOR_OUTPUT" "$COLOR_OUTPUT"
     
@@ -1132,6 +1139,38 @@ prepare_chart_resources() {
     ENABLE_CHARTS="false"
     rm -f "$TEMP_CHART_JS"
     return 1
+}
+
+# Helper for DNS Timings Color (Terminal)
+get_dns_timing_color() {
+    local val=$1
+    # Remove non-numeric
+    val=${val//[^0-9]/}
+    [[ -z "$val" ]] && echo "$NC" && return
+    
+    if (( val < DNS_LATENCY_MIN_THRESHOLD )); then
+        echo "$PURPLE"
+    elif (( val > DNS_LATENCY_WARNING_THRESHOLD )); then
+        echo "$RED"
+    else
+        echo "$GREEN"
+    fi
+}
+
+# Helper for DNS Timings Color (HTML Hex)
+get_dns_timing_hex() {
+    local val=$1
+    val=${val//[^0-9]/}
+    [[ -z "$val" ]] && echo "#94a3b8" && return
+    
+    # Purple: #a855f7, Red: #ef4444, Green: #22c55e
+    if (( val < DNS_LATENCY_MIN_THRESHOLD )); then
+        echo "#a855f7"
+    elif (( val > DNS_LATENCY_WARNING_THRESHOLD )); then
+        echo "#ef4444"
+    else
+        echo "#22c55e"
+    fi
 }
 
 # ==============================================
@@ -4185,8 +4224,8 @@ generate_hierarchical_stats() {
         echo -e "\n${BLUE}${BOLD}2. TESTES DE ZONA (SOA & AXFR)${NC}"
         
         # Header (Widths adjusted to match colorized rows: 30 | 29 | 15 | 29 | 15 )
-        printf "  %-30s | %-20s | %-16s | %-20s | %-15s\n" "ZONA" "SOA CONSENSUS" "SOA SERIAL" "AXFR SECURITY" "DNSSEC"
-        echo -e "  ${GRAY}-----------------------------------------------------------------------------------------------------------------${NC}"
+        printf "  %-30s | %-20s | %-16s | %-15s | %-20s | %-15s\n" "ZONA" "SOA CONSENSUS" "SOA SERIAL" "AVG QUERY TIME" "AXFR SECURITY" "DNSSEC"
+        echo -e "  ${GRAY}------------------------------------------------------------------------------------------------------------------------------------${NC}"
 
         # Global Summary Counters (Reset)
         declare -g CNT_ZONES_OK=0
@@ -4288,7 +4327,26 @@ generate_hierarchical_stats() {
         # AXFR: 20 visual -> 29 raw
         # DNSSEC: 15 visual -> 24 raw
         
-        printf "  %-30s | %-29s | %-24s | %-29s | %-24s\n" "$domain" "$soa_display" "$soa_val" "$axfr_display" "$dnssec_display"
+        # Calc Avg Zone Time
+        local z_avg_str="-"
+        local z_sum=0
+        local z_cnt=0
+        for grp in "${grp_list[@]}"; do
+             for srv in ${DNS_GROUPS[$grp]}; do
+                  local t="${STATS_ZONE_TIME[$domain|$grp|$srv]}"
+                  if [[ "$t" =~ ^[0-9]+$ ]]; then
+                       z_sum=$((z_sum + t))
+                       z_cnt=$((z_cnt + 1))
+                  fi
+             done
+        done
+        if [[ $z_cnt -gt 0 ]]; then
+             local z_avg=$((z_sum / z_cnt))
+             local z_col=$(get_dns_timing_color "$z_avg")
+             z_avg_str="${z_col}${z_avg}ms${NC}"
+        fi
+
+        printf "  %-30s | %-29s | %-24s | %-24s | %-29s | %-24s\n" "$domain" "$soa_display" "$soa_val" "$z_avg_str" "$axfr_display" "$dnssec_display"
         
         # 3. Detail on Divergence (SOA)
         if [[ "$soa_consistent" == "false" ]]; then
@@ -4297,7 +4355,8 @@ generate_hierarchical_stats() {
                   local g_soa=""
                   for srv in ${DNS_GROUPS[$grp]}; do
                        local s_soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
-                       printf "       %-20s : %s\n" "• ${grp} ($srv)" "$s_soa" 
+                        local s_qt="${STATS_ZONE_TIME[$domain|$grp|$srv]}"; [[ -z "$s_qt" ]] && s_qt="-" || s_qt="${s_qt}ms"
+                                               printf "       %-20s : %-12s | %-10s\n" "• ${grp} ($srv)" "$s_soa" "$s_qt"
                   done
              done
              echo ""
@@ -4318,8 +4377,10 @@ generate_hierarchical_stats() {
         echo -e "\n${BLUE}${BOLD}3. TESTES DE REGISTROS (Resolução & Consistência)${NC}"
         
         # Header
-        printf "  %-30s | %-6s | %-16s | %-24s | %-40s\n" "RECORD" "TYPE" "STATUS" "CONSISTENCY" "ANSWERS"
-        echo -e "  ${GRAY}------------------------------------------------------------------------------------------------------------------------------------${NC}"
+        # Header
+        # Header
+        printf "  %-30s | %-6s | %-16s | %-16s | %-24s | %-40s\n" "RECORD" "TYPE" "STATUS" "AVG QUERY TIME" "CONSISTENCY" "ANSWERS"
+        echo -e "  ${GRAY}-----------------------------------------------------------------------------------------------------------------------------------------------------------${NC}"
 
         # Global Summary Counters (Reset)
         declare -g CNT_REC_FULL_OK=0
@@ -4350,12 +4411,27 @@ generate_hierarchical_stats() {
                 local is_consistent=true
                 local answers_summary=""
                 
+                # Latency Aggregates (Records)
+                local rec_lat_sum=0
+                local rec_lat_cnt=0
+                local rec_lat_min=999999
+                local rec_lat_max=0
+                
                 # Collect Data
                 for grp in "${grp_list[@]}"; do
                     for srv in ${DNS_GROUPS[$grp]}; do
                          total_servers=$((total_servers+1))
                          local st="${STATS_RECORD_RES[$target|$rec_type|$grp|$srv]}"
                          local ans="${STATS_RECORD_ANSWER[$target|$rec_type|$grp|$srv]}"
+                         local lat="${STATS_RECORD_LATENCY[$target|$rec_type|$grp|$srv]}"
+                         
+                         [[ -z "$lat" ]] && lat=0
+                         if [[ "$st" == "NOERROR" || "$st" == "NXDOMAIN" ]]; then
+                                 rec_lat_sum=$(awk -v s="$rec_lat_sum" -v v="$lat" 'BEGIN {print s+v}')
+                                 rec_lat_cnt=$((rec_lat_cnt+1))
+                                 if (( $(echo "$lat < $rec_lat_min" | bc -l) )); then rec_lat_min=$lat; fi
+                                 if (( $(echo "$lat > $rec_lat_max" | bc -l) )); then rec_lat_max=$lat; fi
+                         fi
                          
                          if [[ "$st" == "NOERROR" ]]; then
                              total_ok=$((total_ok+1))
@@ -4412,7 +4488,15 @@ generate_hierarchical_stats() {
                      ans_fmt="${GRAY}No Answer${NC}"
                 fi
                 
-                printf "  %-30s | %-6s | %-25s | %-33s | %s\n" "$target" "$rec_type" "$status_fmt" "$cons_fmt" "$ans_fmt"
+                # Calculate Latency Display
+                local lat_display="-"
+                if [[ $rec_lat_cnt -gt 0 ]]; then
+                     local r_avg=$(awk -v s="$rec_lat_sum" -v c="$rec_lat_cnt" 'BEGIN {printf "%.0f", s/c}')
+                     local c_lat=$(get_dns_timing_color "$r_avg")
+                     lat_display="${c_lat}${r_avg}ms${NC}"
+                fi
+                
+                printf "  %-30s | %-6s | %-25s | %-25s | %-33s | %s\n" "$target" "$rec_type" "$status_fmt" "$lat_display" "$cons_fmt" "$ans_fmt"
                 
                 # Expansion for inconsistencies
                 if [[ $total_ok -gt 0 && "$is_consistent" == "false" ]]; then
@@ -4489,12 +4573,41 @@ print_final_terminal_summary() {
      echo -e "  🔄 SOA Sync        : ${GREEN}${CNT_ZONES_OK:-0} Consistentes${NC} / ${RED}${CNT_ZONES_DIV:-0} Divergentes${NC}"
      echo -e "  🌍 AXFR            : ${GREEN}${SEC_AXFR_OK:-0} Bloqueados${NC} / ${RED}${SEC_AXFR_RISK:-0} Expostos${NC}"
      echo -e "  🔐 Assinaturas     : ${GREEN}${ZONE_SEC_SIGNED:-0} Assinadas${NC} / ${RED}${ZONE_SEC_UNSIGNED:-0} Falhas (Missing)${NC}"
+
+     # Calc Avg Latency for Zones
+     local zone_lat_sum=0
+     local zone_lat_cnt=0
+     for k in "${!STATS_ZONE_TIME[@]}"; do
+          zone_lat_sum=$(awk -v s="$zone_lat_sum" -v v="${STATS_ZONE_TIME[$k]}" 'BEGIN {print s+v}')
+          zone_lat_cnt=$((zone_lat_cnt+1))
+     done
+     if [[ $zone_lat_cnt -gt 0 ]]; then
+          local z_avg=$(awk -v s="$zone_lat_sum" -v c="$zone_lat_cnt" 'BEGIN {printf "%.0f", s/c}')
+          local z_col=$(get_dns_timing_color "$z_avg")
+          echo -e "  ⏱️  Tempo Médio de Resposta (DNS): ${z_col}${z_avg}ms${NC}"
+     fi
      
      echo -e "\n${BLUE}${BOLD}REGISTROS:${NC}"
      local rec_ok=$((CNT_NOERROR))
      echo -e "  ✅ Sucessos        : ${GREEN}${CNT_REC_FULL_OK:-0} OK${NC} / ${YELLOW}${CNT_REC_PARTIAL:-0} Parcial${NC}"
      echo -e "  🚫 Resultados      : ${RED}${CNT_REC_FAIL:-0} Falhas${NC} / ${YELLOW}${CNT_REC_NXDOMAIN:-0} NXDOMAIN${NC}"
      echo -e "  ⚠️  Consistência    : ${GREEN}${CNT_REC_CONSISTENT:-0} Sincronizados${NC} / ${RED}${CNT_REC_DIVERGENT:-0} Divergentes${NC}"
+     
+     # Calc Avg Latency for Records
+     local rec_lat_sum=0
+     local rec_lat_cnt=0
+     for k in "${!STATS_RECORD_LATENCY[@]}"; do
+          # Check if numeric
+          if [[ "${STATS_RECORD_LATENCY[$k]}" =~ ^[0-9]+$ ]]; then
+            rec_lat_sum=$(awk -v s="$rec_lat_sum" -v v="${STATS_RECORD_LATENCY[$k]}" 'BEGIN {print s+v}')
+            rec_lat_cnt=$((rec_lat_cnt+1))
+          fi
+     done
+     if [[ $rec_lat_cnt -gt 0 ]]; then
+          local r_avg=$(awk -v s="$rec_lat_sum" -v c="$rec_lat_cnt" 'BEGIN {printf "%.0f", s/c}')
+          local r_col=$(get_dns_timing_color "$r_avg")
+          echo -e "  ⏱️  Tempo Médio de Resposta (DNS): ${r_col}${r_avg}ms${NC}"
+     fi
      
      # Log to text file
      if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
@@ -5011,7 +5124,8 @@ EOF
         [[ "$ENABLE_DOH_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
 
         # ADD ROW
-        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td>${qt_dns}ms</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
+        local qt_hex_srv=$(get_dns_timing_hex "$qt_dns")
+        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td style='color:${qt_hex_srv}; font-weight:bold;'>${qt_dns}ms</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
         # CSV Export Server
         if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -5062,13 +5176,14 @@ run_zone_tests() {
     local zone_count=0
     [[ -f "$FILE_DOMAINS" ]] && zone_count=$(grep -vE '^\s*#|^\s*$' "$FILE_DOMAINS" | wc -l)
     echo "  Identificadas ${zone_count} zonas únicas para teste."
-    echo "  Legend: [SOA] [AXFR] [DNSSEC]"
+    echo "  Legend: [SOA] [Query Time] [AXFR] [DNSSEC]"
     
     # Global Stats Arrays
     declare -gA STATS_ZONE_AXFR
     declare -gA STATS_ZONE_SOA
     declare -gA STATS_ZONE_DNSSEC
     # LIDs for Zone
+    declare -gA STATS_ZONE_TIME         # [domain|grp|srv] -> ms
     declare -gA LIDS_ZONE_SOA
     declare -gA LIDS_ZONE_AXFR
     declare -gA LIDS_ZONE_DNSSEC
@@ -5085,9 +5200,9 @@ run_zone_tests() {
                     <th>Grupo</th>
                     <th>Servidor</th>
                     <th>SOA Serial</th>
-                    <th>Tempo Resp.</th>
                     <th>AXFR Status</th>
                     <th>DNSSEC Sig</th>
+                    <th>Tempo de Resposta</th>
                 </tr>
             </thead>
             <tbody>
@@ -5147,6 +5262,7 @@ EOF
                   local qt_soa=$(echo "$out_soa_raw" | grep "Query time:" | awk '{print $4}')
                   [[ -z "$qt_soa" ]] && qt_soa=0
                   SERVER_SOA_TIME[$srv]="$qt_soa"
+                  STATS_ZONE_TIME["$domain|$grp|$srv"]="$qt_soa"
                   [[ -z "$out_soa_raw" ]] && out_soa_raw="(No Output)"
                   log_entry "OUTPUT:\n$out_soa_raw"
                   log_tech_details "soa_${domain}_${srv}" "SOA Check: $domain @ $srv" "$out_soa_raw"
@@ -5243,7 +5359,9 @@ EOF
                       fi
                  fi
                  
-                 echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${qt_soa}ms</td><td>${SERVER_AXFR[$srv]}</td><td>${sig_html}</td></tr>" >> "$TEMP_SECTION_ZONE"
+                 # Get Color for Query Time (HTML)
+                 local qt_hex=$(get_dns_timing_hex "$qt_soa")
+                 echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${SERVER_AXFR[$srv]}</td><td>${sig_html}</td><td style='color:${qt_hex}; font-weight:bold;'>${qt_soa}ms</td></tr>" >> "$TEMP_SECTION_ZONE"
                  
                  # CSV Export Zone
                  if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -5257,7 +5375,11 @@ EOF
                  local term_soa="$serial"
                  [[ "$serial" == "$first_serial" ]] && term_soa="${GREEN}$serial${NC}" || term_soa="${RED}$serial${NC}"
                  [[ "$serial" == "TIMEOUT" ]] && term_soa="${YELLOW}TIMEOUT${NC}"
-                  term_soa="$term_soa [${qt_soa}ms]"
+                 
+                 # Colorize terminal timing
+                  # Colorize terminal timing
+                 local qt_term_color=$(get_dns_timing_color "$qt_soa")
+                  local term_qt="[${qt_term_color}${qt_soa}ms${NC}]"
                  
                  local term_axfr="${SERVER_AXFR[$srv]}"
                  # Simple AXFR status for term
@@ -5274,7 +5396,7 @@ EOF
                       fi
                  fi
                  
-                 echo -e "     🏢 Grupo: $grp -> $srv : SOA[$term_soa] AXFR[$term_axfr] $term_sig"
+                 echo -e "     🏢 Grupo: $grp -> $srv : SOA[$term_soa] $term_qt AXFR[$term_axfr] $term_sig"
              done
          done
     done < "$FILE_DOMAINS"
@@ -5300,7 +5422,7 @@ run_record_tests() {
      fi
     [[ -z "$rec_count" ]] && rec_count=0
     echo "  Identificados ${rec_count} registros únicos para teste."
-    echo -e "  Legend: [Status] [Inconsistency=Differs from Group]"
+    echo -e "  Legend: [Status] [Query Time] [Inconsistency=Differs from Group]"
     
     # Global Stats Arrays for Records
     declare -gA STATS_RECORD_RES      # Status code
@@ -5424,18 +5546,22 @@ EOF
                          fi
                          
                          # Generate HTML & Counters
+                         local qt_term_color=$(get_dns_timing_color "$dur")
+                         local qt_html_hex=$(get_dns_timing_hex "$dur")
+                         local qt_html_span="<span style='color:${qt_html_hex}; font-weight:bold;'>${dur}ms</span>"
+                         
                          local term_line=""
                          if [[ "$status" == "NOERROR" ]]; then
-                             results_html+="<span class='badge status-ok' title='$srv: $badge_title'>$srv: OK (${dur}ms)</span> "
-                             term_line="     💻 $srv ($grp) : ${GREEN}OK${NC} [${dur}ms]$term_extra"
+                             results_html+="<span class='badge status-ok' title='$srv: $badge_title'>$srv: OK ($qt_html_span)</span> "
+                             term_line="     💻 $srv ($grp) : ${GREEN}OK${NC} [${qt_term_color}${dur}ms${NC}]$term_extra"
                              SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
                          elif [[ "$status" == "NXDOMAIN" ]]; then
-                             results_html+="<span class='badge status-warn' title='$srv: NXDOMAIN'>$srv: NX (${dur}ms)</span> "
-                             term_line="     💻 $srv ($grp) : ${YELLOW}NXDOMAIN${NC} [${dur}ms]"
+                             results_html+="<span class='badge status-warn' title='$srv: NXDOMAIN'>$srv: NX ($qt_html_span)</span> "
+                             term_line="     💻 $srv ($grp) : ${YELLOW}NXDOMAIN${NC} [${qt_term_color}${dur}ms${NC}]"
                              SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
                          else
-                             results_html+="<span class='badge status-fail' title='$srv: $status'>$srv: ERR (${dur}ms)</span> "
-                             term_line="     💻 $srv ($grp) : ${RED}FAIL ($status)${NC} [${dur}ms]"
+                             results_html+="<span class='badge status-fail' title='$srv: $status'>$srv: ERR ($qt_html_span)</span> "
+                             term_line="     💻 $srv ($grp) : ${RED}FAIL ($status)${NC} [${qt_term_color}${dur}ms${NC}]"
                              FAILED_TESTS=$((FAILED_TESTS + 1))
                          fi
                          term_output_buffer+=("$term_line")
