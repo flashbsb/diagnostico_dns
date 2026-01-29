@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.20
-# "Empty Output Catch"
+# Versão: 12.23.44
+# "Query Time Integration"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.20"
+SCRIPT_VERSION="12.23.44"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -258,6 +258,9 @@ init_html_parts() {
     TEMP_FULL_LOG="$LOG_OUTPUT_DIR/temp_full_log_${SESSION_ID}.txt"
     > "$TEMP_FULL_LOG"
     
+    TEMP_LID="$LOG_OUTPUT_DIR/temp_lid_${SESSION_ID}.txt"
+    > "$TEMP_LID"
+    
     # Init CSV
     if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
         echo "Timestamp;Server;Groups;PingStatus;Latency;Jitter;Loss;Port53;Port853;Version;Recursion;EDNS;Cookie;DNSSEC;DoH;TLS" > "$LOG_FILE_CSV_SRV"
@@ -460,7 +463,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Empty Output Catch     ${NC}         ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Fix DNSSEC Zone Log    ${NC}         ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -539,11 +542,20 @@ print_execution_summary() {
 log_entry() {
     local msg="$1"
     local ts=$(date +"%Y-%m-%d %H:%M:%S")
-    # Always log to temp buffer for HTML
-    echo -e "[$ts] $msg" >> "$TEMP_FULL_LOG"
+    # Generate Unique Log ID (8 hex chars)
+    local lid=$(printf "%04x%04x" $RANDOM $RANDOM)
+    # Export LID for capturing (File based for subshell persistence)
+    echo "$lid" > "$TEMP_LID"
+    declare -g LAST_LID="$lid"
+    
+    # Sanitize msg for HTML before wrapping
+    local safe_msg=$(echo "$msg" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    
+    # Always log to temp buffer for HTML (wrapped in div for grounding)
+    echo -e "<div id=\"lid_$lid\">[$ts] [LID:$lid] $safe_msg</div>" >> "$TEMP_FULL_LOG"
     
     [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
-    echo -e "[$ts] $msg" >> "$LOG_FILE_TEXT"
+    echo -e "[$ts] [LID:$lid] $msg" >> "$LOG_FILE_TEXT"
 }
 
 log_section() {
@@ -567,18 +579,29 @@ log_section() {
 log_cmd_result() {
     local context="$1"; local cmd="$2"; local output="$3"; local time="$4"
     local ts=$(date +"%Y-%m-%d %H:%M:%S")
+    local lid=$(printf "%04x%04x" $RANDOM $RANDOM)
+    # Export LID for capturing (File based for subshell persistence)
+    echo "$lid" > "$TEMP_LID"
+    declare -g LAST_LID="$lid"
+    declare -g LAST_LOG_CONTENT="CTX: $context | CMD: $cmd | TIME: ${time}ms\nOUTPUT:\n$output"
+    
+    # Sanitize output for HTML
+    local safe_output=$(echo "$output" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    
     {
+        echo "<div id=\"lid_$lid\">"
         echo "--------------------------------------------------------------------------------"
-        echo "[$ts] CTX: $context | CMD: $cmd | TIME: ${time}ms"
+        echo "[$ts] [LID:$lid] CTX: $context | CMD: $cmd | TIME: ${time}ms"
         echo "OUTPUT:"
-        echo "$output"
+        echo "$safe_output"
         echo "--------------------------------------------------------------------------------"
+        echo "</div>"
     } >> "$TEMP_FULL_LOG"
 
     [[ "$ENABLE_LOG_TEXT" != "true" ]] && return
     {
         echo "--------------------------------------------------------------------------------"
-        echo "[$ts] CTX: $context | CMD: $cmd | TIME: ${time}ms"
+        echo "[$ts] [LID:$lid] CTX: $context | CMD: $cmd | TIME: ${time}ms"
         echo "OUTPUT:"
         echo "$output"
         echo "--------------------------------------------------------------------------------"
@@ -1969,32 +1992,101 @@ cat > "$TEMP_MODAL" << EOF
     <div id="logModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div id="modalTitle">Detalhes do Log</div>
+                <div id="mTitle">Detalhes do Log</div>
                 <span class="close-btn" onclick="closeModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <div id="modalText"></div>
+                <div id="mBody"></div>
             </div>
         </div>
     </div>
     
     <script>
         function showInfoModal(title, description) {
-            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('mTitle').innerText = title;
             
-            var modalText = document.getElementById('modalText');
+            var modalBody = document.getElementById('mBody');
             // Construct a nicer layout
             var niceHtml = '<div class="info-header"><div class="info-icon">ℹ️</div><div class="info-title">' + title + '</div></div>';
             niceHtml += '<div class="info-body">' + description + '</div>';
             
-            modalText.innerHTML = niceHtml;
-            modalText.className = 'modal-info-content';
+            modalBody.innerHTML = niceHtml;
+            modalBody.className = 'modal-body modal-info-content'; // Add class for styling if needed, keep modal-body base
             
             document.getElementById('logModal').style.display = 'block';
         }
 
         // Reuse existing closeModal function or ensure it exists in main JS
-        // (Assuming main structure has closeModal logic, but we should ensure compatibility)
+        
+        // Event Delegation for Log Triggers
+        document.addEventListener('click', function(e) {
+            // Traverse up in case click is on an icon inside the badge
+            var target = e.target.closest('.log-trigger');
+            if (target) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                var lid = target.getAttribute('data-lid');
+                var title = target.getAttribute('data-title');
+                
+                if (lid) {
+                   showMetricLog(lid, title);
+                } else {
+                   console.error("Clicked log-trigger but no data-lid found");
+                }
+            }
+        });
+
+        function showMetricLog(lid, title) {
+            if(!lid) { console.error("Empty LID"); return; }
+            lid = lid.toString().trim();
+            if(lid == "") { console.error("Blank LID"); return; }
+            
+            console.log("Opening Log via Delegation: " + lid);
+            
+            // Find content
+            var el = document.getElementById('lid_' + lid);
+            if(!el) {
+                alert("Error: Log ID not found in report (lid_" + lid + ").");
+                console.error("Element not found: lid_" + lid);
+                return;
+            }
+            
+            var content = el.innerHTML;
+            
+            var modalBody = document.getElementById('mBody');
+            var modalTitle = document.getElementById('mTitle');
+            var modal = document.getElementById('logModal');
+            
+            if(!modalBody || !modalTitle || !modal) {
+                 alert("Error: Modal elements missing from DOM.");
+                 return;
+            }
+            
+            modalTitle.innerHTML = "📝 Log: " + title + " <span class='badge bg-neutral'>" + lid + "</span>";
+            
+            var html = "<div style='background:#0f172a; padding:10px; border-radius:6px; font-family:monospace; font-size:0.85em; white-space:pre-wrap; color:#e2e8f0; border:1px solid #334155; max-height:400px; overflow-y:auto;'>" + content + "</div>";
+            html += "<div style='margin-top:10px; text-align:right;'><button class='btn-tech' onclick=\"goToLogTab('" + lid + "')\">📂 Ver no Log Completo</button></div>";
+            
+            modalBody.innerHTML = html;
+            modal.style.display = 'block';
+        }
+    
+    function goToLogTab(lid) {
+        document.getElementById('logModal').style.display = 'none'; // Changed to logModal
+        openTab('tab-logs');
+        // Wait for tab switch
+        setTimeout(function() {
+            var el = document.getElementById('lid_' + lid);
+            if(el) {
+                el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                el.style.backgroundColor = '#1e293b';
+                setTimeout(function(){ el.style.backgroundColor = 'transparent'; }, 2000);
+            }
+        }, 300);
+    }
+    
+    // Close Modal Logic, but we should ensure compatibility)
     </script>
 EOF
 }
@@ -2628,7 +2720,7 @@ generate_html_report_v2() {
     local glob_lat_cnt=0
     for ip in "${!STATS_SERVER_PING_AVG[@]}"; do
         local val=${STATS_SERVER_PING_AVG[$ip]}
-        val=${val%%.*} # Integer part only for math
+        val=${val%%.*} # int part only for math
         if [[ "$val" =~ ^[0-9]+$ ]] && [[ "$val" -gt 0 ]]; then
             glob_lat_sum=$((glob_lat_sum + val))
             glob_lat_cnt=$((glob_lat_cnt + 1))
@@ -2685,7 +2777,7 @@ generate_html_report_v2() {
             </summary>
             <table style='width:100%; border-collapse:collapse;'>
             <thead style='background:#0f172a;'>
-               <tr><th style='width:25%'>Servidor</th><th style='width:20%'>Latência</th><th>Config & Features</th><th style='width:15%; text-align:right'>Detalhamento</th></tr>
+               <tr><th style='width:35%'>Servidor</th><th style='width:25%'>Latência</th><th>Config & Features</th></tr>
             </thead>
             <tbody>"
             
@@ -2716,14 +2808,73 @@ generate_html_report_v2() {
             fi
 
             local safe_ip=${ip//./_}
+            local lid_lat="${LIDS_SERVER_PING[$ip]}"
+            local lid_ver="${LIDS_SERVER_VERSION[$ip]}"
+            local lid_rec="${LIDS_SERVER_RECURSION[$ip]}"
+            local lid_edns="${LIDS_SERVER_EDNS[$ip]}"
+            local lid_cookie="${LIDS_SERVER_COOKIE[$ip]}"
+            local lid_dnssec="${LIDS_SERVER_DNSSEC[$ip]}"
+            local lid_doh="${LIDS_SERVER_DOH[$ip]}"
+            local lid_tls="${LIDS_SERVER_TLS[$ip]}"
+            
+            # Interactive Badges (Event Delegation)
+            # Latency
+            local lat_html="<span class='badge $lat_class log-trigger' style='cursor:pointer' data-lid='$lid_lat' data-title='Latency $ip' title='Click to view ping log'>${lat}ms</span>"
+            
+            # Update Capability Badges with data-attributes
+            # Update Capability Badges with data-attributes
+            local caps=""
+            
+            # TCP53
+            local lid_p53="${LIDS_SERVER_PORT53[$ip]}"
+            if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then
+                 caps+="<span class='badge ok-bg log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 checks'>TCP53</span>"
+            else
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 failure'>TCP53</span>"
+            fi
+            
+            # DoT (853)
+            local lid_p853="${LIDS_SERVER_PORT853[$ip]}"
+            if [[ "${STATS_SERVER_PORT_853[$ip]}" == "OPEN" ]]; then
+                 caps+="<span class='badge ok-bg log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT (Port 853) checks'>DoT</span>"
+            elif [[ "${STATS_SERVER_PORT_853[$ip]}" == "CLOSED" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT failure'>DoT</span>"
+            fi
+            
+            # DNSSEC
+            if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then
+                 caps+="<span class='badge ok-bg log-trigger' style='color:#a855f7; cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC validation'>DNSSEC</span>"
+            elif [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC failure'>DNSSEC</span>"
+            fi
+            
+            # DoH
+            if [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip' title='Click to view DoH checks'>DoH</span>"
+            elif [[ "${STATS_SERVER_DOH[$ip]}" == "FAIL" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip' title='Click to view DoH failure'>DoH</span>"
+            fi
+            
+            # TLS (Handshake)
+            if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]]; then
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS handshake'>TLS</span>"
+            elif [[ "${STATS_SERVER_TLS[$ip]}" == "FAIL" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS failure'>TLS</span>"
+            fi
+            
+            [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie stats'>COOKIE</span>"
+            [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS stats'>EDNS</span>"
+            
+            # Version & Recursion Badges
+            # Version
+            ver_st="<span class='badge $ver_cls log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip' title='Click to view Version check'>VER: $ver_st</span>"
+            # Recursion
+            rec_st="<span class='badge $rec_cls log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip' title='Click to view Recursion check'>REC: $rec_st</span>"
+            
             server_rows+="<tr>
                 <td><div style='font-weight:bold; color:#fff'>$ip</div></td>
-                <td><span class='badge $lat_class'>${lat}ms</span> <div style='font-size:0.75em; font-weight:600; color:$loss_color'>Loss: $loss</div></td>
-                <td><div style='margin-bottom:4px;'><span class='badge $ver_cls'>VER: $ver_st</span> <span class='badge $rec_cls'>REC: $rec_st</span></div><div style='display:flex; gap:5px; flex-wrap:wrap; opacity:0.8'>$caps</div></td>
-                <td style='text-align:right'>
-                    <button class='btn-tech' onclick=\"showModal('ver_${safe_ip}', 'BIND ($ip)')\">VER</button>
-                    <button class='btn-tech' onclick=\"showModal('rec_${safe_ip}', 'REC ($ip)')\">REC</button>
-                </td>
+                <td>$lat_html <div class='log-trigger' style='font-size:0.75em; font-weight:600; color:$loss_color; cursor:pointer' data-lid='$lid_lat' data-title='Latency $ip' title='Click to view ping log'>Loss: $loss</div></td>
+                <td><div style='margin-bottom:4px;'>$ver_st $rec_st</div><div style='display:flex; gap:5px; flex-wrap:wrap; opacity:0.8'>$caps</div></td>
             </tr>"
         done
         server_rows+="</tbody></table></details>"
@@ -2745,23 +2896,40 @@ generate_html_report_v2() {
                        [[ -n "$s" && "$s" != "N/A" ]] && soa_counts["$s"]=$((soa_counts["$s"]+1))
                   done
              done
+             local soa_divergence="false"
+             local unique_soas=0
              for s in "${!soa_counts[@]}"; do
+                 unique_soas=$((unique_soas+1))
                  if (( soa_counts["$s"] > max_count )); then max_count=${soa_counts["$s"]}; most_frequent_soa="$s"; fi
              done
+             [[ $unique_soas -gt 1 ]] && soa_divergence="true"
              unset soa_counts
+
+             local soa_color="#22c55e" # Green
+             if [[ "$soa_divergence" == "true" || "$most_frequent_soa" == "TIMEOUT" || "$most_frequent_soa" == "ERR" || "$most_frequent_soa" == "N/A" ]]; then
+                 soa_color="#ef4444" # Red
+             fi
              
              zone_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
-                <summary style='background:#1e293b; padding:12px 15px; cursor:pointer; font-weight:600; color:#fff;'>🌍 $domain <span style='font-size:0.8em; color:#94a3b8; font-weight:400; margin-left:10px;'>Consensus SOA: $most_frequent_soa</span></summary>
+                <summary style='background:#1e293b; padding:12px 15px; cursor:pointer; font-weight:600; color:#fff;'>🌍 $domain <span style='font-size:0.8em; color:${soa_color}; font-weight:600; margin-left:10px;'>Consensus SOA: $most_frequent_soa</span></summary>
                 <table style='width:100%'>
-                <thead style='background:#0f172a'><tr><th>Grupo</th><th>Servidor</th><th>SOA Serial</th><th>AXFR Policy</th><th>Logs</th></tr></thead>
+                <thead style='background:#0f172a'><tr><th>Grupo</th><th>Servidor</th><th>SOA Serial</th><th>AXFR Policy</th><th>DNSSEC Sig</th></tr></thead>
                 <tbody>"
 
              for grp in "${grp_list[@]}"; do
                   for srv in ${DNS_GROUPS[$grp]}; do
                        local soa="${STATS_ZONE_SOA[$domain|$grp|$srv]}"
                        local axfr="${STATS_ZONE_AXFR[$domain|$grp|$srv]}"
+                       local dnssec="${STATS_ZONE_DNSSEC[$domain|$grp|$srv]:-UNSIGNED}"
+                       
+                       # LIDs
+                       local lid_soa="${LIDS_ZONE_SOA[$domain|$grp|$srv]}"
+                       local lid_axfr="${LIDS_ZONE_AXFR[$domain|$grp|$srv]}"
+                       local lid_dnssec="${LIDS_ZONE_DNSSEC[$domain|$grp|$srv]}"
+                       
                        local soa_cls="bg-neutral"; [[ "$soa" == "$most_frequent_soa" ]] && soa_cls="bg-ok" || soa_cls="bg-fail"
                        [[ "$most_frequent_soa" == "" ]] && soa_cls="bg-warn" 
+                       
                        local axfr_cls="bg-fail"
                        if [[ "$axfr" == "DENIED" || "$axfr" == "REFUSED" ]]; then 
                            axfr_cls="bg-ok"
@@ -2769,12 +2937,18 @@ generate_html_report_v2() {
                            axfr_cls="bg-warn"
                        fi
                        
+                       # DNSSEC Badge
+                       local dnssec_cls="bg-neutral"
+                       [[ "$dnssec" == "SIGNED" ]] && dnssec_cls="bg-ok"
+                       [[ "$dnssec" == "UNSIGNED" ]] && dnssec_cls="bg-warn" # Or neutral
+
+                       
                        local safe_dom=${domain//./_}; local safe_srv=${srv//./_}
                        zone_rows+="<tr>
                             <td>$grp</td><td>$srv</td>
-                            <td style='font-family:monospace'><span class='badge $soa_cls'>$soa</span></td>
-                            <td><span class='badge $axfr_cls'>$axfr</span></td>
-                            <td><button class='btn-tech' onclick=\"showModal('soa_${safe_dom}_${safe_srv}','SOA $domain @ $srv')\">SOA</button> <button class='btn-tech' onclick=\"showModal('axfr_${safe_dom}_${safe_srv}','AXFR $domain @ $srv')\">AXFR</button></td>
+                            <td style='font-family:monospace'><span class='badge $soa_cls log-trigger' style='cursor:pointer' data-lid='$lid_soa' data-title='SOA $domain ($srv)' title='Click to view SOA log'>$soa</span></td>
+                            <td><span class='badge $axfr_cls log-trigger' style='cursor:pointer' data-lid='$lid_axfr' data-title='AXFR $domain ($srv)' title='Click to view AXFR log'>$axfr</span></td>
+                            <td><span class='badge $dnssec_cls log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $domain ($srv)' title='Click to view DNSSEC log'>$dnssec</span></td>
                         </tr>"
                   done
              done
@@ -2812,7 +2986,7 @@ generate_html_report_v2() {
                  
                  cur_type="$r_type"
                  # Open Type (Wrapped in Div for Indent)
-                 record_rows+="<div style='padding:5px 15px;'><details style='margin-bottom:5px; border:1px solid #475569; border-radius:6px;' open><summary style='background:#334155; padding:5px 10px; cursor:pointer; font-size:0.9em; font-weight:600;'>Tipo: <span style='color:#facc15'>$cur_type</span></summary><div class='table-responsive'><table style='width:100%; font-size:0.9em; border-collapse: collapse;'><thead><tr style='background:#0f172a; color:#94a3b8; text-align:left;'><th style='padding:8px;'>Server</th><th style='padding:8px;'>Status</th><th style='padding:8px;'>Resposta</th><th style='padding:8px;'>Latência</th><th style='padding:8px;'>Log</th></tr></thead><tbody>"
+                 record_rows+="<div style='padding:5px 15px;'><details style='margin-bottom:5px; border:1px solid #475569; border-radius:6px;' open><summary style='background:#334155; padding:5px 10px; cursor:pointer; font-size:0.9em; font-weight:600;'>Tipo: <span style='color:#facc15'>$cur_type</span></summary><div class='table-responsive'><table style='width:100%; font-size:0.9em; border-collapse: collapse;'><thead><tr style='background:#0f172a; color:#94a3b8; text-align:left;'><th style='padding:8px;'>Server</th><th style='padding:8px;'>Status</th><th style='padding:8px;'>Resposta</th><th style='padding:8px;'>Tempo de Resposta</th></tr></thead><tbody>"
              fi
 
              local r_status="${STATS_RECORD_RES[$key]}"; local r_ans="${STATS_RECORD_ANSWER[$key]}"; local r_lat="${STATS_RECORD_LATENCY[$key]}"
@@ -2821,7 +2995,7 @@ generate_html_report_v2() {
              local cons_badge=""; [[ "$r_cons" == "DIVERGENT" ]] && cons_badge="<span class='badge bg-fail'>DIV</span>"
              local safe_dom=${r_dom//./_}; local safe_srv=${r_srv//./_}
              
-             record_rows+="<tr style='border-bottom: 1px solid #334155;'><td style='padding:8px;'>$r_srv <span style='font-size:0.8em;opacity:0.6'>($r_grp)</span> $cons_badge</td><td style='padding:8px;'><span class='badge $st_cls'>$r_status</span></td><td style='padding:8px;'><div style='max-height:60px; overflow-y:auto; font-family:monospace; font-size:0.85em; white-space:pre-wrap; color:#e2e8f0;'>$r_ans</div></td><td style='padding:8px;'>${r_lat}ms</td><td style='padding:8px;'><button class='btn-tech' onclick=\"showModal('rec_${safe_dom}_${r_type}_${safe_srv}','DIG $r_dom ($r_type)')\">LOG</button></td></tr>"
+             record_rows+="<tr style='border-bottom: 1px solid #334155;'><td style='padding:8px;'>$r_srv <span style='font-size:0.8em;opacity:0.6'>($r_grp)</span> $cons_badge</td><td style='padding:8px;'><span class='badge $st_cls'>$r_status</span></td><td style='padding:8px;'><div style='max-height:60px; overflow-y:auto; font-family:monospace; font-size:0.85em; white-space:pre-wrap; color:#e2e8f0;'>$r_ans</div></td><td style='padding:8px;'>${r_lat}ms</td></tr>"
         done < "$tmp_rec_keys.sorted"
         
         # Close Final Tags
@@ -2940,15 +3114,15 @@ generate_html_report_v2() {
         <div class="toggle-btn" onclick="toggleSidebar()">‹</div>
         <div class="logo"><span style="color:var(--accent)">DNS</span><span class="logo-text">Diag <span style="font-size:0.5em; opacity:0.5; margin-left:5px">v${SCRIPT_VERSION}</span></span></div>
         <nav>
-            <div class="nav-item active" onclick="openTab('tab-dashboard')"><span>📊</span><span class="nav-text">Dashboard</span></div>
-            <div class="nav-item" onclick="openTab('tab-servers')"><span>🖥️</span><span class="nav-text">Servidores</span></div>
-            <div class="nav-item" onclick="openTab('tab-zones')"><span>🌍</span><span class="nav-text">Zonas</span></div>
-            <div class="nav-item" onclick="openTab('tab-records')"><span>📝</span><span class="nav-text">Registros</span></div>
-            <div class="nav-item" onclick="openTab('tab-config')"><span>⚙️</span><span class="nav-text">Bastidores</span></div>
-            <div class="nav-item" onclick="openTab('tab-help')"><span>❓</span><span class="nav-text">Ajuda</span></div>
+            <div class="nav-item active" onclick="openTab('tab-dashboard')" title="Dashboard"><span>📊</span><span class="nav-text">Dashboard</span></div>
+            <div class="nav-item" onclick="openTab('tab-servers')" title="Servidores & Infra"><span>🖥️</span><span class="nav-text">Servidores</span></div>
+            <div class="nav-item" onclick="openTab('tab-zones')" title="Detalhes de Zonas & SOA"><span>🌍</span><span class="nav-text">Zonas</span></div>
+            <div class="nav-item" onclick="openTab('tab-records')" title="Validação de Registros"><span>📝</span><span class="nav-text">Registros</span></div>
+            <div class="nav-item" onclick="openTab('tab-config')" title="Configuração & Ambiente"><span>⚙️</span><span class="nav-text">Bastidores</span></div>
+            <div class="nav-item" onclick="openTab('tab-help')" title="Glossário & Ajuda"><span>❓</span><span class="nav-text">Ajuda</span></div>
 EOF
     if [[ "$ENABLE_LOG_TEXT" == "true" ]]; then
-       echo '            <div class="nav-item" onclick="openTab('\''tab-logs'\'')"><span>📜</span><span class="nav-text">Logs Verbos</span></div>' >> "$target_file"
+       echo '            <div class="nav-item" onclick="openTab('\''tab-logs'\'')" title="Logs Completos"><span>📜</span><span class="nav-text">Logs Verbos</span></div>' >> "$target_file"
     fi
     cat >> "$target_file" << EOF
         </nav>
@@ -3049,7 +3223,7 @@ EOF
                     <div class="card-header">GERAL</div>
                     <div class="stat-row"><span class="stat-label">⏱️ Duração</span> <span class="stat-val">${TOTAL_DURATION}s</span></div>
                     <div class="stat-row"><span class="stat-label">🧪 Execuções</span> <span class="stat-val">${total_exec}</span></div>
-                    <div class="stat-row" style="margin-left:10px; font-size:0.8em; color:#94a3b8"><span class="stat-label">Sry / Zone / Rec</span> <span>${CNT_TESTS_SRV} / ${CNT_TESTS_ZONE} / ${CNT_TESTS_REC}</span></div>
+                    <div class="stat-row" style="margin-left:10px; font-size:0.8em; color:#94a3b8"><span class="stat-label">Srv / Zone / Rec</span> <span>${CNT_TESTS_SRV} / ${CNT_TESTS_ZONE} / ${CNT_TESTS_REC}</span></div>
                     <div class="stat-row"><span class="stat-label">🔢 Escopo</span> <span class="stat-val">${srv_count} Srv | ${zone_count} Zones | ${rec_count} Rec</span></div>
                 </div>
 
@@ -3306,8 +3480,8 @@ EOF
               <div style="background:#0b1120; color:#e2e8f0; font-family:monospace; padding:20px; border-radius:8px; height:70vh; overflow:auto; white-space:pre-wrap; font-size:0.85rem; border:1px solid #334155;">
 EOF
         if [[ -f "$TEMP_FULL_LOG" ]]; then 
-            # Sanitize HTML entities in log to prevent breaking the report
-            sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$TEMP_FULL_LOG" >> "$target_file"
+            # Content is already sanitized in log_entry/log_cmd_result
+            cat "$TEMP_FULL_LOG" >> "$target_file"
         else
             echo "Log indisponível." >> "$target_file"
         fi
@@ -3317,14 +3491,12 @@ EOF
 EOF
     fi
 
+    
+    # Generate Modal Content
+    generate_modal_html
+    if [[ -f "$TEMP_MODAL" ]]; then cat "$TEMP_MODAL" >> "$target_file"; fi
+
     cat >> "$target_file" << EOF
-        
-        <div id="logModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header"><div id="mTitle">Log</div><span style="cursor:pointer;" onclick="closeModal()">×</span></div>
-                <div id="mBody" class="modal-body"></div>
-            </div>
-        </div>
         
         <div style="display:none">
 EOF
@@ -3483,7 +3655,7 @@ log_tech_details() {
     
     # 1. HTML Output
     # Sanitize content for HTML
-    local safe_out=$(echo "$content" | sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g')
+    local safe_out=$(echo "$content" | sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\&gt;/g')
     echo "<div id=\"log_${id}\" style=\"display:none\">$safe_out</div>" >> "$TEMP_DETAILS"
     
 }
@@ -3769,7 +3941,7 @@ generate_hierarchical_stats() {
 
             # Global Aggregates (Loss)
             if [[ -n "${STATS_SERVER_PING_LOSS[$ip]}" && "${STATS_SERVER_PING_LOSS[$ip]}" != "-" ]]; then
-                G_LOSS_SUM=$(echo "$G_LOSS_SUM + $loss" | bc)
+                G_LOSS_SUM=$(awk -v s="$G_LOSS_SUM" -v v="$loss" 'BEGIN {print s+v}')
                 G_LOSS_CNT=$((G_LOSS_CNT + 1))
             fi
              
@@ -4094,7 +4266,7 @@ generate_hierarchical_stats() {
         # SOA Cons: 20 visual -> 29 raw
         # Wait, \e[32m is 5 chars. \e[0m is 4 chars. Total 9 invis chars. 
         # Text "✅ SYNC". Length 7. 7+9 = 16.
-        # printf %-29s pads it to 29. Visual length 29-9 = 20. Match Header 20. Correct.
+        # printf %-29s pads it to 29. Visual length 29-9 = 20. Correct.
         
         # SOA Val:
         # Text "1234567890". Color 9. 19 chars.
@@ -4420,6 +4592,19 @@ run_server_tests() {
     declare -gA STATS_SERVER_DNSSEC
     declare -gA STATS_SERVER_DOH
     declare -gA STATS_SERVER_TLS
+    
+    # LID Capture Arrays for Interactive Metrics
+    declare -gA LIDS_SERVER_PING
+    declare -gA LIDS_SERVER_TRACE
+    declare -gA LIDS_SERVER_PORT53
+    declare -gA LIDS_SERVER_PORT853
+    declare -gA LIDS_SERVER_VERSION
+    declare -gA LIDS_SERVER_RECURSION
+    declare -gA LIDS_SERVER_EDNS
+    declare -gA LIDS_SERVER_COOKIE
+    declare -gA LIDS_SERVER_DNSSEC
+    declare -gA LIDS_SERVER_DOH
+    declare -gA LIDS_SERVER_TLS
     declare -gA STATS_SERVER_HOPS
 
 
@@ -4435,7 +4620,7 @@ run_server_tests() {
                     <th>Servidor</th>
                     <th>Grupos</th>
                     <th>Ping (ICMP)</th>
-                    <th>Latência (Avg/Jit/Loss)</th>
+                    <th>Latência (ICMP)</th><th>Tempo Resp. (DNS)</th>
                     <th>Hops</th>
                     <th>Porta 53</th>
                     <th>Porta 853 (ABS)</th>
@@ -4489,12 +4674,18 @@ EOF
         
         
         # Ping with Stats Extraction
+            local qt_dns="N/A"
+            local cmd_qt="dig +time=$TIMEOUT @$ip . SOA"
+            local out_qt=$($cmd_qt 2>&1)
+            qt_dns=$(echo "$out_qt" | grep "Query time:" | awk "{print $4}")
+            [[ -z "$qt_dns" ]] && qt_dns="0"
         STATS_SERVER_PING_STATUS[$ip]="SKIP"
         if [[ "$ENABLE_PING" == "true" ]]; then
             local cmd_ping="ping -c $PING_COUNT -W $PING_TIMEOUT $ip"
             log_entry "EXECUTING: $cmd_ping"
             local out_ping=$($cmd_ping 2>&1)
             log_entry "OUTPUT:\n$out_ping"
+            LIDS_SERVER_PING[$ip]=$(cat "$TEMP_LID")
             
             # Extract Packet Loss
             # Extract Packet Loss (Handle floats like 66.6667% -> 66)
@@ -4565,6 +4756,7 @@ EOF
              log_entry "EXECUTING: $cmd_trace"
              trace_out=$($cmd_trace 2>&1)
              log_entry "OUTPUT:\n$trace_out"
+             LIDS_SERVER_TRACE[$ip]=$(cat "$TEMP_LID")
              
              # Logic to determine status
              local last_line=$(echo "$trace_out" | tail -n 1)
@@ -4606,11 +4798,14 @@ EOF
              fi
              
              log_tech_details "trace_${ip}" "Traceroute: $ip" "$trace_out"
-             hops_html="<button class='btn-tech' onclick=\"showLog('trace_${ip}')\">${hops_html/button/span}</button>"
+             local lid_trace="${LIDS_SERVER_TRACE[$ip]}" # Use proper LID
+             if [[ -z "$lid_trace" ]]; then lid_trace="trace_${ip}"; fi # Fallback if empty (though logic suggests it shouldn't be)
+             hops_html="<button class='btn-tech log-trigger' data-lid='$lid_trace' data-title='Trace $ip'>${hops_html/button/span}</button>"
         fi
         
         # Port 53
         if check_tcp_dns "$ip" 53 "port53_$ip"; then 
+            LIDS_SERVER_PORT53[$ip]=$(cat "$TEMP_LID")
             tcp53_res_html="<span class='badge status-ok'>OPEN</span>"
             tcp53_res_term="${GREEN}OPEN${NC}"
             STATS_SERVER_PORT_53[$ip]="OPEN"
@@ -4619,12 +4814,14 @@ EOF
             tcp53_res_html="<span class='badge status-fail'>CLOSED</span>"
             tcp53_res_term="${RED}CLOSED${NC}"
             STATS_SERVER_PORT_53[$ip]="CLOSED"
+            LIDS_SERVER_PORT53[$ip]=$(cat "$TEMP_LID") # Added this line
             TCP_FAIL=$((TCP_FAIL+1)); CACHE_TCP_STATUS[$ip]="FAIL"
         fi
         
         # Port 853
         if [[ "$ENABLE_DOT_CHECK" == "true" ]]; then
              if check_tcp_dns "$ip" 853 "port853_$ip"; then 
+                 LIDS_SERVER_PORT853[$ip]=$(cat "$TEMP_LID") # Changed from "$LAST_LID"
                  tls853_res_html="<span class='badge status-ok'>OPEN</span>"
                  tls853_res_term="${GREEN}OK${NC}"
                  STATS_SERVER_PORT_853[$ip]="OPEN"
@@ -4634,6 +4831,7 @@ EOF
                  tls853_res_html="<span class='badge status-fail'>CLOSED</span>"
                  tls853_res_term="${RED}FAIL${NC}"
                  STATS_SERVER_PORT_853[$ip]="CLOSED"
+                 LIDS_SERVER_PORT853[$ip]=$(cat "$TEMP_LID") # Added this line
                  CACHE_TLS_STATUS[$ip]="FAIL"
                  DOT_FAIL=$((DOT_FAIL+1))
              fi
@@ -4648,18 +4846,20 @@ EOF
              log_entry "EXECUTING: $cmd_ver"
              local out_ver_full=$($cmd_ver 2>&1)
              log_entry "OUTPUT:\n$out_ver_full"
+             LIDS_SERVER_VERSION[$ip]=$(cat "$TEMP_LID")
              # Extract short version for logic
              local out_ver=$(echo "$out_ver_full" | grep "TXT" | grep "version.bind" | awk -F'"' '{print $2}')
              
              log_tech_details "ver_$ip" "Bind Version Check: $ip" "$out_ver_full"
+             local lid_ver="${LIDS_SERVER_VERSION[$ip]}" # Captured above
              
              if [[ -z "$out_ver" || "$out_ver" == "" ]]; then 
-                 ver_res_html="<span class='badge status-ok' style='cursor:pointer' onclick=\"showLog('ver_$ip')\">HIDDEN</span>"
+                 ver_res_html="<span class='badge status-ok log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip'>HIDDEN</span>"
                  ver_res_term="${GREEN}HIDDEN${NC}"
                  STATS_SERVER_VERSION[$ip]="HIDDEN"
                  SEC_HIDDEN=$((SEC_HIDDEN+1))
              else 
-                 ver_res_html="<span class='badge status-fail' style='cursor:pointer' onclick=\"showLog('ver_$ip')\" title='$out_ver'>REVEA.</span>"
+                 ver_res_html="<span class='badge status-fail log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip' title='$out_ver'>REVEA.</span>"
                  ver_res_term="${RED}REVEALED${NC}"
                  STATS_SERVER_VERSION[$ip]="REVEALED"
                  SEC_REVEALED=$((SEC_REVEALED+1))
@@ -4674,20 +4874,23 @@ EOF
              log_entry "EXECUTING: $cmd_rec"
              local out_rec=$($cmd_rec 2>&1)
              log_entry "OUTPUT:\n$out_rec"
-             log_tech_details "rec_$ip" "Recursion Check: $ip" "$out_rec"
+             LIDS_SERVER_RECURSION[$ip]=$(cat "$TEMP_LID")
+             local lid_rec="${LIDS_SERVER_RECURSION[$ip]}"
+             log_tech_details "rec_$ip" "Recursion Check: $ip" "$out_rec" # Legacy wrapper/log call, we use $lid_rec for the badge
 
              if echo "$out_rec" | grep -q "status: REFUSED" || echo "$out_rec" | grep -q "recursion requested but not available"; then
-                 rec_res_html="<span class='badge status-ok' style='cursor:pointer' onclick=\"showLog('rec_$ip')\">CLOSED</span>"
+                 rec_res_html="<span class='badge status-ok log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>CLOSED</span>"
                  rec_res_term="${GREEN}CLOSED${NC}"
                  STATS_SERVER_RECURSION[$ip]="CLOSED"
                  SEC_REC_OK=$((SEC_REC_OK+1))
              elif echo "$out_rec" | grep -q "status: NOERROR"; then
-                 rec_res_html="<span class='badge status-fail' style='cursor:pointer' onclick=\"showLog('rec_$ip')\">OPEN</span>"
+                 rec_res_html="<span class='badge status-fail log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>OPEN</span>"
                  rec_res_term="${RED}OPEN${NC}"
                  STATS_SERVER_RECURSION[$ip]="OPEN"
                  SEC_REC_RISK=$((SEC_REC_RISK+1))
              else
-                 rec_res_html="<span class='badge status-warn' style='cursor:pointer' onclick=\"showLog('rec_$ip')\">UNK</span>"
+                 # Timeout or other error
+                 rec_res_html="<span class='badge status-warn log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>UNK</span>"
                  rec_res_term="${YELLOW}UNK${NC}"
                  STATS_SERVER_RECURSION[$ip]="UNKNOWN"
              fi
@@ -4700,9 +4903,10 @@ EOF
         if [[ "$ENABLE_EDNS_CHECK" == "true" ]]; then
              local cmd_edns="dig +edns=0 +noall +comments @$ip $probe_target +time=$TIMEOUT"
              log_entry "EXECUTING: $cmd_edns"
-             local out_edns=$($cmd_edns 2>&1)
+             local out_edns=$($cmd_edns 2>&1) # Corrected variable name from out_dnssec
              [[ -z "$out_edns" ]] && out_edns="(No Output)"
              log_entry "OUTPUT:\n$out_edns"
+             LIDS_SERVER_EDNS[$ip]=$(cat "$TEMP_LID") # Corrected to TEMP_LID
              if echo "$out_edns" | grep -q "EDNS: version: 0"; then
                  edns_res_html="<span class='badge status-ok'>OK</span>"
                  edns_res_term="${GREEN}OK${NC}"
@@ -4725,6 +4929,7 @@ EOF
              local out_cookie=$($cmd_cookie 2>&1)
              [[ -z "$out_cookie" ]] && out_cookie="(No Output)"
              log_entry "OUTPUT:\n$out_cookie"
+             LIDS_SERVER_COOKIE[$ip]=$(cat "$TEMP_LID")
              if echo "$out_cookie" | grep -q "COOKIE:"; then
                  cookie_res_html="<span class='badge status-ok'>OK</span>"
                  cookie_res_term="${GREEN}OK${NC}"
@@ -4746,10 +4951,12 @@ EOF
                  STATS_SERVER_DNSSEC[$ip]="NA"
                  dnssec_res_html="<span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span>"
              elif check_dnssec_validation "$ip"; then
+                 LIDS_SERVER_DNSSEC[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DNSSEC[$ip]="OK"
                  DNSSEC_SUCCESS=$((DNSSEC_SUCCESS+1))
                  dnssec_res_html="<span class='badge status-ok'>VALIDATING</span>"
              else
+                 LIDS_SERVER_DNSSEC[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DNSSEC[$ip]="FAIL" 
                  DNSSEC_FAIL=$((DNSSEC_FAIL+1))
                  dnssec_res_html="<span class='badge status-fail'>FAIL</span>"
@@ -4758,10 +4965,12 @@ EOF
         
         if [[ "$ENABLE_DOH_CHECK" == "true" ]]; then
              if check_doh_avail "$ip"; then
+                 LIDS_SERVER_DOH[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DOH[$ip]="OK"
                  DOH_SUCCESS=$((DOH_SUCCESS+1))
                  doh_res_html="<span class='badge status-ok'>AVAILABLE</span>"
              else
+                 LIDS_SERVER_DOH[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DOH[$ip]="FAIL"
                  DOH_FAIL=$((DOH_FAIL+1))
                  doh_res_html="<span class='badge status-fail'>FAIL</span>"
@@ -4770,10 +4979,12 @@ EOF
         
         if [[ "$ENABLE_TLS_CHECK" == "true" ]]; then
              if check_tls_handshake "$ip"; then
+                 LIDS_SERVER_TLS[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_TLS[$ip]="OK"
                  TLS_SUCCESS=$((TLS_SUCCESS+1))
                  tls_res_html="<span class='badge status-ok'>OK</span>"
              else
+                 LIDS_SERVER_TLS[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_TLS[$ip]="FAIL"
                  TLS_FAIL=$((TLS_FAIL+1))
                  tls_res_html="<span class='badge status-fail'>FAIL</span>"
@@ -4800,7 +5011,7 @@ EOF
         [[ "$ENABLE_DOH_CHECK" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
 
         # ADD ROW
-        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
+        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td>${qt_dns}ms</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
         # CSV Export Server
         if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -4857,6 +5068,10 @@ run_zone_tests() {
     declare -gA STATS_ZONE_AXFR
     declare -gA STATS_ZONE_SOA
     declare -gA STATS_ZONE_DNSSEC
+    # LIDs for Zone
+    declare -gA LIDS_ZONE_SOA
+    declare -gA LIDS_ZONE_AXFR
+    declare -gA LIDS_ZONE_DNSSEC
     
     # START ZONE HTML SECTION
     cat >> "$TEMP_SECTION_ZONE" << EOF
@@ -4870,6 +5085,7 @@ run_zone_tests() {
                     <th>Grupo</th>
                     <th>Servidor</th>
                     <th>SOA Serial</th>
+                    <th>Tempo Resp.</th>
                     <th>AXFR Status</th>
                     <th>DNSSEC Sig</th>
                 </tr>
@@ -4900,6 +5116,7 @@ EOF
              declare -A SERVER_SERIALS
              declare -A SERVER_AXFR
              declare -A SERVER_DNSSEC_SIG
+             declare -A SERVER_SOA_TIME
              
              for srv in $srvs; do
                   # SOA
@@ -4923,9 +5140,17 @@ EOF
                   fi
                   
                   # Log SOA
-                  local cmd_soa_raw="dig +short +time=$TIMEOUT @$srv $domain SOA"
-                  log_entry "EXECUTING: $cmd_soa_raw (captured for tech details)"
-                  log_tech_details "soa_${domain}_${srv}" "SOA Check: $domain @ $srv" "$(dig +short @$srv $domain SOA 2>&1)"
+                  # Log SOA
+                  local cmd_soa_raw="dig +time=$TIMEOUT @$srv $domain SOA"
+                  log_entry "EXECUTING: $cmd_soa_raw"
+                  local out_soa_raw=$($cmd_soa_raw 2>&1)
+                  local qt_soa=$(echo "$out_soa_raw" | grep "Query time:" | awk '{print $4}')
+                  [[ -z "$qt_soa" ]] && qt_soa=0
+                  SERVER_SOA_TIME[$srv]="$qt_soa"
+                  [[ -z "$out_soa_raw" ]] && out_soa_raw="(No Output)"
+                  log_entry "OUTPUT:\n$out_soa_raw"
+                  log_tech_details "soa_${domain}_${srv}" "SOA Check: $domain @ $srv" "$out_soa_raw"
+                  LIDS_ZONE_SOA["$domain|$grp|$srv"]=$(cat "$TEMP_LID")
                   
                   # AXFR
                   local axfr_stat="N/A"
@@ -4934,6 +5159,8 @@ EOF
                       local cmd_axfr="dig @$srv $domain AXFR +time=$TIMEOUT +tries=1"
                       log_entry "EXECUTING: $cmd_axfr"
                       local out_axfr=$($cmd_axfr)
+                      [[ -z "$out_axfr" ]] && out_axfr="(No Output)"
+                      log_entry "OUTPUT:\n$out_axfr"
                       if echo "$out_axfr" | grep -q "Refused" || echo "$out_axfr" | grep -q "Transfer failed"; then
                           axfr_stat="<span class='badge status-ok'>DENIED</span>"
                           axfr_raw="DENIED"
@@ -4950,6 +5177,7 @@ EOF
                       CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
                       # Log AXFR
                       log_tech_details "axfr_${domain}_${srv}" "AXFR Check: $domain @ $srv" "$out_axfr"
+                      LIDS_ZONE_AXFR["$domain|$grp|$srv"]=$(cat "$TEMP_LID")
                   fi
                   
                   # DNSSEC Signature Check (Smart Detection)
@@ -4961,6 +5189,13 @@ EOF
                             is_signed_zone="true"
                        fi
                        CNT_TESTS_ZONE=$((CNT_TESTS_ZONE+1))
+                       # Log DNSSEC
+                       local cmd_dnssec_zone="dig +dnssec +noall +answer @$srv $domain SOA +time=$TIMEOUT"
+                       log_entry "EXECUTING: $cmd_dnssec_zone"
+                       log_entry "OUTPUT:\n$out_sig"
+                       
+                       log_tech_details "dnssec_zone_${domain}_${srv}" "Zone DNSSEC Check: $domain @ $srv" "$out_sig"
+                       LIDS_ZONE_DNSSEC["$domain|$grp|$srv"]=$(cat "$TEMP_LID") 
                   fi
                   SERVER_DNSSEC_SIG[$srv]="$sig_res"
                   
@@ -4974,6 +5209,8 @@ EOF
              # Add Rows
              for srv in $srvs; do
                  local serial=${SERVER_SERIALS[$srv]}
+                  local qt_soa=${SERVER_SOA_TIME[$srv]}
+                  [[ -z "$qt_soa" ]] && qt_soa=0
                  local ser_html="$serial"
                  if [[ "$ENABLE_SOA_SERIAL_CHECK" == "true" ]]; then
                      if [[ "$serial" == "TIMEOUT" ]]; then
@@ -5006,7 +5243,7 @@ EOF
                       fi
                  fi
                  
-                 echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${SERVER_AXFR[$srv]}</td><td>${sig_html}</td></tr>" >> "$TEMP_SECTION_ZONE"
+                 echo "<tr><td>$domain</td><td>$grp</td><td>$srv</td><td>$ser_html</td><td>${qt_soa}ms</td><td>${SERVER_AXFR[$srv]}</td><td>${sig_html}</td></tr>" >> "$TEMP_SECTION_ZONE"
                  
                  # CSV Export Zone
                  if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -5020,6 +5257,7 @@ EOF
                  local term_soa="$serial"
                  [[ "$serial" == "$first_serial" ]] && term_soa="${GREEN}$serial${NC}" || term_soa="${RED}$serial${NC}"
                  [[ "$serial" == "TIMEOUT" ]] && term_soa="${YELLOW}TIMEOUT${NC}"
+                  term_soa="$term_soa [${qt_soa}ms]"
                  
                  local term_axfr="${SERVER_AXFR[$srv]}"
                  # Simple AXFR status for term
@@ -5130,6 +5368,8 @@ EOF
                          local cmd_dig="dig +tries=1 +time=$TIMEOUT @$srv $target $rec_type"
                          log_entry "EXECUTING: $cmd_dig"
                          out_full=$($cmd_dig 2>&1)
+                         [[ -z "$out_full" ]] && out_full="(No Output)"
+                         log_entry "OUTPUT:\n$out_full"
                          local ret=$?
                          
                          # Log Raw Output
@@ -5186,16 +5426,16 @@ EOF
                          # Generate HTML & Counters
                          local term_line=""
                          if [[ "$status" == "NOERROR" ]]; then
-                             results_html+="<span class='badge status-ok' title='$srv: $badge_title'>$srv: OK</span> "
-                             term_line="     💻 $srv ($grp) : ${GREEN}OK${NC}$term_extra"
+                             results_html+="<span class='badge status-ok' title='$srv: $badge_title'>$srv: OK (${dur}ms)</span> "
+                             term_line="     💻 $srv ($grp) : ${GREEN}OK${NC} [${dur}ms]$term_extra"
                              SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
                          elif [[ "$status" == "NXDOMAIN" ]]; then
-                             results_html+="<span class='badge status-warn' title='$srv: NXDOMAIN'>$srv: NX</span> "
-                             term_line="     💻 $srv ($grp) : ${YELLOW}NXDOMAIN${NC}"
+                             results_html+="<span class='badge status-warn' title='$srv: NXDOMAIN'>$srv: NX (${dur}ms)</span> "
+                             term_line="     💻 $srv ($grp) : ${YELLOW}NXDOMAIN${NC} [${dur}ms]"
                              SUCCESS_TESTS=$((SUCCESS_TESTS + 1))
                          else
-                             results_html+="<span class='badge status-fail' title='$srv: $status'>$srv: ERR</span> "
-                             term_line="     💻 $srv ($grp) : ${RED}FAIL ($status)${NC}"
+                             results_html+="<span class='badge status-fail' title='$srv: $status'>$srv: ERR (${dur}ms)</span> "
+                             term_line="     💻 $srv ($grp) : ${RED}FAIL ($status)${NC} [${dur}ms]"
                              FAILED_TESTS=$((FAILED_TESTS + 1))
                          fi
                          term_output_buffer+=("$term_line")
@@ -5256,7 +5496,7 @@ main() {
     START_TIME_EPOCH=$(date +%s); START_TIME_HUMAN=$(date +"%d/%m/%Y %H:%M:%S")
 
     # Define cleanup trap
-    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$LOG_OUTPUT_DIR/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" "$TEMP_SECTION_SERVER" "$TEMP_SECTION_ZONE" "$TEMP_SECTION_RECORD" "$TEMP_FULL_LOG" 2>/dev/null' EXIT
+    trap 'rm -f "$TEMP_HEADER" "$TEMP_STATS" "$TEMP_MATRIX" "$TEMP_DETAILS" "$TEMP_PING" "$TEMP_TRACE" "$TEMP_CONFIG" "$TEMP_TIMING" "$TEMP_MODAL" "$TEMP_DISCLAIMER" "$TEMP_SERVICES" "$LOG_OUTPUT_DIR/temp_help_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_obj_summary_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_svc_table_${SESSION_ID}.html" "$TEMP_TRACE_SIMPLE" "$TEMP_PING_SIMPLE" "$TEMP_MATRIX_SIMPLE" "$TEMP_SERVICES_SIMPLE" "$LOG_OUTPUT_DIR/temp_domain_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_group_body_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_security_simple_${SESSION_ID}.html" "$LOG_OUTPUT_DIR/temp_sec_rows_${SESSION_ID}.html" "$TEMP_JSON_Ping" "$TEMP_JSON_DNS" "$TEMP_JSON_Sec" "$TEMP_JSON_Trace" "$TEMP_JSON_DOMAINS" "$LOG_OUTPUT_DIR/temp_chart_${SESSION_ID}.js" "$TEMP_HEALTH_MAP" "$TEMP_SECTION_SERVER" "$TEMP_SECTION_ZONE" "$TEMP_SECTION_RECORD" "$TEMP_FULL_LOG" "$TEMP_LID" 2>/dev/null' EXIT
 
     while getopts ":n:g:lhyjstdxrTVZMvq" opt; do case ${opt} in 
         n) FILE_DOMAINS=$OPTARG ;; 
