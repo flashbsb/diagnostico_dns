@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.65
-# "Status Standardization & Fixes"
+# Versão: 12.23.67
+# "HTML Textual Status & Fixes (Final)"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.65"
+SCRIPT_VERSION="12.23.67"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -465,7 +465,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Status Standardization & Fixes     ${NC}      ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - HTML Textual Status & Fixes (Final)     ${NC}      ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -2870,50 +2870,72 @@ generate_html_report_v2() {
             local caps=""
             
             # TCP53
+            # TCP53
             local lid_p53="${LIDS_SERVER_PORT53[$ip]}"
             if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 checks'>TCP53</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 checks'>TCP53: OPEN</span>"
+            else
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip'>TCP53: CLOSED</span>"
             fi
             
             # DoT (853)
+            # DoT (853)
             local lid_p853="${LIDS_SERVER_PORT853[$ip]}"
             if [[ "${STATS_SERVER_PORT_853[$ip]}" == "OPEN" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT (Port 853) checks'>DoT</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT (Port 853) checks'>DoT: OPEN</span>"
+            else
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip'>DoT: CLOSED</span>"
             fi
             
             # DNSSEC
             if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC validation'>DNSSEC</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC validation'>DNSSEC: OK</span>"
             elif [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]]; then
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC failure'>DNSSEC</span>"
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC failure'>DNSSEC: FAIL</span>"
+            elif [[ "${STATS_SERVER_DNSSEC[$ip]}" == "UNSUPP" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip'>DNSSEC: UNSUPP</span>"
+            else
+                 caps+="<span class='badge bg-neutral'>DNSSEC: SKIP</span>"
             fi
             
             # DoH
             if [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip' title='Click to view DoH checks'>DoH</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip' title='Click to view DoH checks'>DoH: OK</span>"
             elif [[ "${STATS_SERVER_DOH[$ip]}" == "FAIL" ]]; then
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip' title='Click to view DoH failure'>DoH</span>"
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip' title='Click to view DoH failure'>DoH: FAIL</span>"
+            elif [[ "${STATS_SERVER_DOH[$ip]}" == "UNSUPP" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_doh' data-title='DoH $ip'>DoH: UNSUPP</span>"
+            else
+                 caps+="<span class='badge bg-neutral'>DoH: SKIP</span>"
             fi
             
             # TLS (Handshake)
             if [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS handshake'>TLS</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS handshake'>TLS: OK</span>"
             elif [[ "${STATS_SERVER_TLS[$ip]}" == "FAIL" ]]; then
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS failure'>TLS</span>"
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS failure'>TLS: FAIL</span>"
+            elif [[ "${STATS_SERVER_TLS[$ip]}" == "UNSUPP" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip'>TLS: UNSUPP</span>"
+            else
+                 caps+="<span class='badge bg-neutral'>TLS: SKIP</span>"
             fi
             
             # Cookie
             if [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie stats'>COOKIE</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie stats'>COOKIE: OK</span>"
+            elif [[ "${STATS_SERVER_COOKIE[$ip]}" == "UNSUPP" ]]; then
+                 caps+="<span class='badge bg-neutral log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie stats'>COOKIE: UNSUPP</span>"
             else
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie failure'>COOKIE</span>"
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie failure'>COOKIE: FAIL</span>"
             fi
 
             # EDNS
             if [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]]; then
-                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS stats'>EDNS</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS stats'>EDNS: OK</span>"
+            elif [[ "${STATS_SERVER_EDNS[$ip]}" == "UNSUPP" ]]; then
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS stats'>EDNS: UNSUPP</span>"
             else
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS failure'>EDNS</span>"
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS failure'>EDNS: FAIL</span>"
             fi
             
             # Version & Recursion Badges
@@ -4812,7 +4834,7 @@ EOF
         local tcp53_res_html="<span class='badge neutral'>N/A</span>"
         local tcp53_res_term="${GRAY}N/A${NC}"
         local tls853_res_html="<span class='badge neutral'>N/A</span>"
-        local tls853_res_term="${GRAY}N/A${NC}"
+        local dot_res_term="${GRAY}N/A${NC}"
         local ver_res_html="<span class='badge neutral'>N/A</span>"
         local ver_res_term="${GRAY}N/A${NC}"
         local rec_res_html="<span class='badge neutral'>N/A</span>"
@@ -4959,12 +4981,12 @@ EOF
         # Port 53
         if check_tcp_dns "$ip" 53 "port53_$ip"; then 
             LIDS_SERVER_PORT53[$ip]=$(cat "$TEMP_LID")
-            tcp53_res_html="<span class='badge status-ok'>OPEN</span>"
+            tcp53_res_html="<span class='badge status-ok'>TCP53: OPEN</span>"
             tcp53_res_term="${GREEN}OPEN${NC}"
             STATS_SERVER_PORT_53[$ip]="OPEN"
             TCP_SUCCESS=$((TCP_SUCCESS+1)); CACHE_TCP_STATUS[$ip]="OK"
         else 
-            tcp53_res_html="<span class='badge status-fail'>CLOSED</span>"
+            tcp53_res_html="<span class='badge status-fail'>TCP53: CLOSED</span>"
             tcp53_res_term="${RED}CLOSED${NC}"
             STATS_SERVER_PORT_53[$ip]="CLOSED"
             LIDS_SERVER_PORT53[$ip]=$(cat "$TEMP_LID") # Added this line
@@ -4975,14 +4997,14 @@ EOF
         if [[ "$ENABLE_DOT_CHECK" == "true" ]]; then
              if check_tcp_dns "$ip" 853 "port853_$ip"; then 
                  LIDS_SERVER_PORT853[$ip]=$(cat "$TEMP_LID") # Changed from "$LAST_LID"
-                 tls853_res_html="<span class='badge status-ok'>OPEN</span>"
-                 tls853_res_term="${GREEN}OPEN${NC}"
+                 dot_res_html="<span class='badge status-ok'>DoT: OPEN</span>"
+                 dot_res_term="${GREEN}OPEN${NC}"
                  STATS_SERVER_PORT_853[$ip]="OPEN"
                  CACHE_TLS_STATUS[$ip]="OK"
                  DOT_SUCCESS=$((DOT_SUCCESS+1))
              else 
-                 tls853_res_html="<span class='badge status-fail'>CLOSED</span>"
-                 tls853_res_term="${RED}CLOSED${NC}"
+                 dot_res_html="<span class='badge status-fail'>DoT: CLOSED</span>"
+                 dot_res_term="${RED}CLOSED${NC}"
                  STATS_SERVER_PORT_853[$ip]="CLOSED"
                  LIDS_SERVER_PORT853[$ip]=$(cat "$TEMP_LID") # Added this line
                  CACHE_TLS_STATUS[$ip]="FAIL"
@@ -4990,7 +5012,7 @@ EOF
              fi
         else
              STATS_SERVER_PORT_853[$ip]="SKIPPED"
-             tls853_res_term="${GRAY}SKIP${NC}"
+             dot_res_term="${GRAY}SKIP${NC}"
         fi
 
         # 1.2 Attributes (Version, Recursion)
@@ -5007,12 +5029,12 @@ EOF
              local lid_ver="${LIDS_SERVER_VERSION[$ip]}" # Captured above
              
              if [[ -z "$out_ver" || "$out_ver" == "" ]]; then 
-                 ver_res_html="<span class='badge status-ok log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip'>HIDDEN</span>"
+                 ver_res_html="<span class='badge status-ok log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip'>VER: HIDDEN</span>"
                  ver_res_term="${GREEN}HIDDEN${NC}"
                  STATS_SERVER_VERSION[$ip]="HIDDEN"
                  SEC_HIDDEN=$((SEC_HIDDEN+1))
              else 
-                 ver_res_html="<span class='badge status-fail log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip' title='$out_ver'>REVEA.</span>"
+                 ver_res_html="<span class='badge status-fail log-trigger' style='cursor:pointer' data-lid='$lid_ver' data-title='Version $ip' title='$out_ver'>VER: REVEA.</span>"
                  ver_res_term="${RED}REVEALED${NC}"
                  STATS_SERVER_VERSION[$ip]="REVEALED"
                  SEC_REVEALED=$((SEC_REVEALED+1))
@@ -5020,7 +5042,7 @@ EOF
         else
              STATS_SERVER_VERSION[$ip]="SKIPPED"
              ver_res_term="${GRAY}SKIP${NC}"
-             ver_res_html="<span class='badge neutral'>SKIP</span>"
+             ver_res_html="<span class='badge neutral'>VER: SKIP</span>"
         fi
         
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
@@ -5033,25 +5055,25 @@ EOF
              log_tech_details "rec_$ip" "Recursion Check: $ip" "$out_rec" # Legacy wrapper/log call, we use $lid_rec for the badge
 
              if echo "$out_rec" | grep -q "status: REFUSED" || echo "$out_rec" | grep -q "recursion requested but not available"; then
-                 rec_res_html="<span class='badge status-ok log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>CLOSED</span>"
+                 rec_res_html="<span class='badge status-ok log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>REC: CLOSED</span>"
                  rec_res_term="${GREEN}CLOSED${NC}"
                  STATS_SERVER_RECURSION[$ip]="CLOSED"
                  SEC_REC_OK=$((SEC_REC_OK+1))
              elif echo "$out_rec" | grep -q "status: NOERROR"; then
-                 rec_res_html="<span class='badge status-fail log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>OPEN</span>"
+                 rec_res_html="<span class='badge status-fail log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>REC: OPEN</span>"
                  rec_res_term="${RED}OPEN${NC}"
                  STATS_SERVER_RECURSION[$ip]="OPEN"
                  SEC_REC_RISK=$((SEC_REC_RISK+1))
              else
                  # Timeout or other error
-                 rec_res_html="<span class='badge status-warn log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>UNK</span>"
+                 rec_res_html="<span class='badge status-warn log-trigger' style='cursor:pointer' data-lid='$lid_rec' data-title='Recursion $ip'>REC: UNK</span>"
                  rec_res_term="${YELLOW}UNK${NC}"
                  STATS_SERVER_RECURSION[$ip]="UNKNOWN"
              fi
         else
              STATS_SERVER_RECURSION[$ip]="SKIPPED"
              rec_res_term="${GRAY}SKIP${NC}"
-             rec_res_html="<span class='badge neutral'>SKIP</span>"
+             rec_res_html="<span class='badge neutral'>REC: SKIP</span>"
         fi
 
         # 1.3 Capabilities (EDNS, Cookie)
@@ -5063,12 +5085,12 @@ EOF
              log_entry "OUTPUT:\n$out_edns"
              LIDS_SERVER_EDNS[$ip]=$(cat "$TEMP_LID") # Corrected to TEMP_LID
              if echo "$out_edns" | grep -q "EDNS: version: 0"; then
-                 edns_res_html="<span class='badge status-ok'>OK</span>"
+                 edns_res_html="<span class='badge status-ok'>EDNS: OK</span>"
                  edns_res_term="${GREEN}OK${NC}"
                  STATS_SERVER_EDNS[$ip]="OK"
                  EDNS_SUCCESS=$((EDNS_SUCCESS+1)); CACHE_EDNS_STATUS[$ip]="OK"
              else 
-                 edns_res_html="<span class='badge status-fail'>UNSUPP</span>"
+                 edns_res_html="<span class='badge status-fail'>EDNS: UNSUPP</span>"
                  edns_res_term="${RED}UNSUPP${NC}"
                  STATS_SERVER_EDNS[$ip]="UNSUPP"
                  EDNS_FAIL=$((EDNS_FAIL+1)); CACHE_EDNS_STATUS[$ip]="FAIL"
@@ -5076,7 +5098,7 @@ EOF
         else
              STATS_SERVER_EDNS[$ip]="SKIPPED"
              edns_res_term="${GRAY}SKIP${NC}"
-             edns_res_html="<span class='badge neutral'>SKIP</span>"
+             edns_res_html="<span class='badge neutral'>EDNS: SKIP</span>"
         fi
         
         if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
@@ -5087,12 +5109,12 @@ EOF
              log_entry "OUTPUT:\n$out_cookie"
              LIDS_SERVER_COOKIE[$ip]=$(cat "$TEMP_LID")
              if echo "$out_cookie" | grep -q "COOKIE:"; then
-                 cookie_res_html="<span class='badge status-ok'>OK</span>"
+                 cookie_res_html="<span class='badge status-ok'>COOKIE: OK</span>"
                  cookie_res_term="${GREEN}OK${NC}"
                  STATS_SERVER_COOKIE[$ip]="OK"
                  COOKIE_SUCCESS=$((COOKIE_SUCCESS+1)); CACHE_COOKIE_STATUS[$ip]="OK"
              else 
-                 cookie_res_html="<span class='badge status-neutral'>UNSUPP</span>"
+                 cookie_res_html="<span class='badge status-neutral'>COOKIE: UNSUPP</span>"
                  cookie_res_term="${YELLOW}UNSUPP${NC}"
                  STATS_SERVER_COOKIE[$ip]="UNSUPP"
                  COOKIE_FAIL=$((COOKIE_FAIL+1)); CACHE_COOKIE_STATUS[$ip]="UNSUPP"
@@ -5105,21 +5127,21 @@ EOF
              # If CLOSED (Authoritative), it won't validate, so mark N/A.
              if [[ "${STATS_SERVER_RECURSION[$ip]}" == "CLOSED" ]]; then
                  STATS_SERVER_DNSSEC[$ip]="UNSUPP"
-                 dnssec_res_html="<span class='badge status-fail' title='Authoritative (Non-Recursive)'>UNSUPP</span>"
+                 dnssec_res_html="<span class='badge status-fail' title='Authoritative (Non-Recursive)'>DNSSEC: UNSUPP</span>"
              elif check_dnssec_validation "$ip"; then
                  LIDS_SERVER_DNSSEC[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DNSSEC[$ip]="OK"
                  DNSSEC_SUCCESS=$((DNSSEC_SUCCESS+1))
-                 dnssec_res_html="<span class='badge status-ok'>OK</span>"
+                 dnssec_res_html="<span class='badge status-ok'>DNSSEC: OK</span>"
              else
                  LIDS_SERVER_DNSSEC[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DNSSEC[$ip]="UNSUPP" 
                  DNSSEC_FAIL=$((DNSSEC_FAIL+1))
-                 dnssec_res_html="<span class='badge status-fail'>UNSUPP</span>"
+                 dnssec_res_html="<span class='badge status-fail'>DNSSEC: UNSUPP</span>"
              fi
         else 
              STATS_SERVER_DNSSEC[$ip]="SKIP"
-             dnssec_res_html="<span class='badge neutral'>SKIP</span>"
+             dnssec_res_html="<span class='badge neutral'>DNSSEC: SKIP</span>"
         fi
         
         if [[ "$ENABLE_DOH_CHECK" == "true" ]]; then
@@ -5127,16 +5149,16 @@ EOF
                  LIDS_SERVER_DOH[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DOH[$ip]="OK"
                  DOH_SUCCESS=$((DOH_SUCCESS+1))
-                 doh_res_html="<span class='badge status-ok'>OK</span>"
+                 doh_res_html="<span class='badge status-ok'>DoH: OK</span>"
              else
                  LIDS_SERVER_DOH[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DOH[$ip]="UNSUPP"
                  DOH_FAIL=$((DOH_FAIL+1))
-                 doh_res_html="<span class='badge status-fail'>UNSUPP</span>"
+                 doh_res_html="<span class='badge status-fail'>DoH: UNSUPP</span>"
              fi
         else 
              STATS_SERVER_DOH[$ip]="SKIP"
-             doh_res_html="<span class='badge neutral'>SKIP</span>"
+             doh_res_html="<span class='badge neutral'>DoH: SKIP</span>"
         fi
         
         if [[ "$ENABLE_TLS_CHECK" == "true" ]]; then
@@ -5144,16 +5166,16 @@ EOF
                  LIDS_SERVER_TLS[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_TLS[$ip]="OK"
                  TLS_SUCCESS=$((TLS_SUCCESS+1))
-                 tls_res_html="<span class='badge status-ok'>OK</span>"
+                 tls_res_html="<span class='badge status-ok'>TLS: OK</span>"
              else
                  LIDS_SERVER_TLS[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_TLS[$ip]="UNSUPP"
                  TLS_FAIL=$((TLS_FAIL+1))
-                 tls_res_html="<span class='badge status-fail'>UNSUPP</span>"
+                 tls_res_html="<span class='badge status-fail'>TLS: UNSUPP</span>"
              fi
         else 
              STATS_SERVER_TLS[$ip]="SKIP"
-             tls_res_html="<span class='badge neutral'>SKIP</span>"
+             tls_res_html="<span class='badge neutral'>TLS: SKIP</span>"
         fi
         
         # Ping Count
@@ -5177,7 +5199,7 @@ EOF
 
         # ADD ROW
         local qt_hex_srv=$(get_dns_timing_hex "$qt_dns")
-        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td style='color:${qt_hex_srv}; font-weight:bold;'>${qt_dns}ms</td><td>$tcp53_res_html</td><td>$tls853_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
+        echo "<tr><td>$ip</td><td>$grps</td><td>$ping_res_html</td><td>$hops_html</td><td>$lat_stats</td><td style='color:${qt_hex_srv}; font-weight:bold;'>${qt_dns}ms</td><td>$tcp53_res_html</td><td>$dot_res_html</td><td>$ver_res_html</td><td>$rec_res_html</td><td>$edns_res_html</td><td>$cookie_res_html</td><td>$dnssec_res_html</td><td>$doh_res_html</td><td>$tls_res_html</td></tr>" >> "$TEMP_SECTION_SERVER"
         
         # CSV Export Server
         if [[ "$ENABLE_CSV_REPORT" == "true" ]]; then
@@ -5201,7 +5223,7 @@ EOF
         [[ "${STATS_SERVER_TLS[$ip]}" == "FAIL" ]] && tls_term="${RED}FAIL${NC}"
         [[ "${STATS_SERVER_TLS[$ip]}" == "UNSUPP" ]] && tls_term="${RED}UNSUPP${NC}"
 
-        echo -e "     Ping:${ping_res_term} | TCP53:${tcp53_res_term} | DoT_TCP853:${tls853_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term} | DNSSEC:${dnssec_term} | DoH:${doh_term} | TLS:${tls_term}"
+        echo -e "     Ping:${ping_res_term} | TCP53:${tcp53_res_term} | DoT_TCP853:${dot_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term} | DNSSEC:${dnssec_term} | DoH:${doh_term} | TLS:${tls_term}"
 
         # --- JSON Export (Ping) ---
         if [[ "$ENABLE_JSON_REPORT" == "true" ]]; then
