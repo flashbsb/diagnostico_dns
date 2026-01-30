@@ -2,11 +2,11 @@
 
 # ==============================================
 # SCRIPT DIAGNÓSTICO DNS - EXECUTIVE EDITION
-# Versão: 12.23.55
-# "Score Definitions"
+# Versão: 12.23.65
+# "Status Standardization & Fixes"
 
 # --- CONFIGURAÇÕES GERAIS ---
-SCRIPT_VERSION="12.23.55"
+SCRIPT_VERSION="12.23.65"
 
 # Carrega configurações externas
 CONFIG_FILE_NAME="diagnostico.conf"
@@ -465,7 +465,7 @@ print_execution_summary() {
     clear
     echo -e "${CYAN}######################################################${NC}"
     echo -e "${CYAN}#${NC} ${BOLD}  🔍 DIAGNÓSTICO DNS - EXECUTIVE EDITION           ${NC}${CYAN}#${NC}"
-    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Score Definitions          ${NC}      ${CYAN}#${NC}"
+    echo -e "${CYAN}#${NC}       ${GRAY}v${SCRIPT_VERSION} - Status Standardization & Fixes     ${NC}      ${CYAN}#${NC}"
     echo -e "${CYAN}######################################################${NC}"
     
     echo -e "${BLUE}[1. GERAL]${NC}"
@@ -2794,13 +2794,20 @@ generate_html_report_v2() {
              if [[ -z "${ACTIVE_GROUPS_CALC[$clean_key]}" ]]; then continue; fi
         fi
         
-        local g_total=0; local g_avg_lat=0; local g_lat_sum=0
+        local g_total=0; local g_avg_lat=0; local g_lat_sum=0; local g_lat_count=0
         for ip in ${DNS_GROUPS[$grp]}; do
              g_total=$((g_total+1))
-             local lat=${STATS_SERVER_PING_AVG[$ip]%%.*} # Int
-             [[ "$lat" =~ ^[0-9]+$ ]] && g_lat_sum=$((g_lat_sum + lat))
+             local loss_check="${STATS_SERVER_PING_LOSS[$ip]:-0}"
+             local loss_check_clean=$(echo "$loss_check" | tr -d '%')
+             if [[ "$loss_check_clean" != "100" ]]; then
+                 local lat=${STATS_SERVER_PING_AVG[$ip]%%.*} # Int
+                 if [[ "$lat" =~ ^[0-9]+$ ]]; then
+                    g_lat_sum=$((g_lat_sum + lat))
+                    g_lat_count=$((g_lat_count + 1))
+                 fi
+             fi
         done
-        [[ $g_total -gt 0 ]] && g_avg_lat=$((g_lat_sum / g_total))
+        [[ $g_lat_count -gt 0 ]] && g_avg_lat=$((g_lat_sum / g_lat_count))
         
         server_rows+="<details open style='margin-bottom:15px; border:1px solid #334155; border-radius:8px; overflow:hidden;'>
             <summary style='background:#1e293b; padding:12px 15px; cursor:pointer; font-weight:600; color:#fff; display:flex; justify-content:space-between;'>
@@ -2820,13 +2827,6 @@ generate_html_report_v2() {
             if (( $(echo "$lat > 100" | bc -l 2>/dev/null) )); then lat_class="bg-warn"; fi
             if [[ "$loss" != "0%" && "$loss" != "0" ]]; then lat_class="bg-fail"; fi
             
-            local caps=""
-            [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]] && caps+="<span class='badge ok-bg' style='color:#a855f7;'>DNSSEC</span>"
-            [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>DoH</span>"
-            [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>TLS</span>"
-            [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>COOKIE</span>"
-            [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok'>EDNS</span>"
-            
             local ver_st="${STATS_SERVER_VERSION[$ip]}"
             local rec_st="${STATS_SERVER_RECURSION[$ip]}"
             local ver_cls="bg-neutral"; [[ "$ver_st" == "HIDDEN" ]] && ver_cls="bg-ok" || ver_cls="bg-fail"
@@ -2834,9 +2834,21 @@ generate_html_report_v2() {
 
             local loss_clean=$(echo "$loss" | tr -d '%')
             local loss_color="#10b981" # Green
+            local loss_class="bg-ok"
+            local display_lat="${lat}ms"
+
+            if [[ "$loss_clean" == "100" ]]; then
+                 display_lat="TIMEOUT"
+                 lat_class="bg-fail"
+            fi
+
             if [[ "$loss_clean" != "0" ]]; then
                  loss_color="#ef4444" # Red
-                 if [[ "$loss_clean" -lt "$PING_PACKET_LOSS_LIMIT" ]]; then loss_color="#f59e0b"; fi # Yellow
+                 loss_class="bg-fail"
+                 if [[ "$loss_clean" -lt "$PING_PACKET_LOSS_LIMIT" ]]; then 
+                    loss_color="#f59e0b"; # Yellow
+                    loss_class="bg-warn"
+                 fi 
             fi
 
             local safe_ip=${ip//./_}
@@ -2851,31 +2863,27 @@ generate_html_report_v2() {
             
             # Interactive Badges (Event Delegation)
             # Latency
-            local lat_html="<span class='badge $lat_class log-trigger' style='cursor:pointer' data-lid='$lid_lat' data-title='Latency $ip' title='Click to view ping log'>${lat}ms</span>"
+            local lat_html="<span class='badge $lat_class log-trigger' style='cursor:pointer' data-lid='$lid_lat' data-title='Latency $ip' title='Click to view ping log'>${display_lat}</span>"
+            local loss_html="<span class='badge $loss_class log-trigger' style='cursor:pointer' data-lid='$lid_lat' data-title='Loss $ip' title='Click to view ping log'>Loss: $loss</span>"
             
-            # Update Capability Badges with data-attributes
             # Update Capability Badges with data-attributes
             local caps=""
             
             # TCP53
             local lid_p53="${LIDS_SERVER_PORT53[$ip]}"
             if [[ "${STATS_SERVER_PORT_53[$ip]}" == "OPEN" ]]; then
-                 caps+="<span class='badge ok-bg log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 checks'>TCP53</span>"
-            else
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 failure'>TCP53</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_p53' data-title='TCP53 $ip' title='Click to view Port 53 checks'>TCP53</span>"
             fi
             
             # DoT (853)
             local lid_p853="${LIDS_SERVER_PORT853[$ip]}"
             if [[ "${STATS_SERVER_PORT_853[$ip]}" == "OPEN" ]]; then
-                 caps+="<span class='badge ok-bg log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT (Port 853) checks'>DoT</span>"
-            elif [[ "${STATS_SERVER_PORT_853[$ip]}" == "CLOSED" ]]; then
-                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT failure'>DoT</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_p853' data-title='DoT $ip' title='Click to view DoT (Port 853) checks'>DoT</span>"
             fi
             
             # DNSSEC
             if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then
-                 caps+="<span class='badge ok-bg log-trigger' style='color:#a855f7; cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC validation'>DNSSEC</span>"
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC validation'>DNSSEC</span>"
             elif [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]]; then
                  caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_dnssec' data-title='DNSSEC $ip' title='Click to view DNSSEC failure'>DNSSEC</span>"
             fi
@@ -2894,8 +2902,19 @@ generate_html_report_v2() {
                  caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_tls' data-title='TLS $ip' title='Click to view TLS failure'>TLS</span>"
             fi
             
-            [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie stats'>COOKIE</span>"
-            [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]] && caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS stats'>EDNS</span>"
+            # Cookie
+            if [[ "${STATS_SERVER_COOKIE[$ip]}" == "OK" ]]; then
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie stats'>COOKIE</span>"
+            else
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_cookie' data-title='COOKIE $ip' title='Click to view Cookie failure'>COOKIE</span>"
+            fi
+
+            # EDNS
+            if [[ "${STATS_SERVER_EDNS[$ip]}" == "OK" ]]; then
+                 caps+="<span class='badge bg-ok log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS stats'>EDNS</span>"
+            else
+                 caps+="<span class='badge bg-fail log-trigger' style='cursor:pointer' data-lid='$lid_edns' data-title='EDNS $ip' title='Click to view EDNS failure'>EDNS</span>"
+            fi
             
             # Version & Recursion Badges
             # Version
@@ -2905,7 +2924,7 @@ generate_html_report_v2() {
             
             server_rows+="<tr>
                 <td><div style='font-weight:bold; color:#fff'>$ip</div></td>
-                <td>$lat_html <div class='log-trigger' style='font-size:0.75em; font-weight:600; color:$loss_color; cursor:pointer' data-lid='$lid_lat' data-title='Latency $ip' title='Click to view ping log'>Loss: $loss</div></td>
+                <td><div style='display:flex; gap:5px; flex-wrap:wrap;'>$lat_html $loss_html</div></td>
                 <td><div style='margin-bottom:4px;'>$ver_st $rec_st</div><div style='display:flex; gap:5px; flex-wrap:wrap; opacity:0.8'>$caps</div></td>
             </tr>"
         done
@@ -3718,20 +3737,24 @@ check_tcp_dns() {
         local cmd="timeout $TIMEOUT nc -z -v -w $TIMEOUT $host $port"
         log_entry "EXECUTING: $cmd"
         out=$($cmd 2>&1)
+        ret=$?
         [[ -z "$out" ]] && out="(No Output)"
         log_entry "OUTPUT:\n$out"
-        ret=$?
-    else
-        # Fallback to bash /dev/tcp
+
+    fi
+    
+    # Fallback to bash /dev/tcp if nc failed or is missing
+    if [[ "$ret" != "0" ]]; then
         local cmd="timeout $TIMEOUT bash -c \"</dev/tcp/$host/$port\""
-        log_entry "EXECUTING: $cmd"
+        log_entry "EXECUTING: $cmd (Fallback)"
         if eval "$cmd" 2>/dev/null; then
             log_entry "OUTPUT: Connection Succeeded (RC: 0)"
-            out="Connection to $host $port port [tcp/*] succeeded!"
+            out="$out\n[Fallback] Connection to $host $port port [tcp/*] succeeded!"
             ret=0
         else
             log_entry "OUTPUT: Connection Failed (RC: Non-Zero)"
-            out="Connection to $host $port port [tcp/*] failed: Connection refused or Timeout."
+            out="$out\n[Fallback] Connection to $host $port port [tcp/*] failed: Connection refused or Timeout."
+            # Retain original ret if fallback also fails, or ensure it's 1
             ret=1
         fi
     fi
@@ -4215,7 +4238,7 @@ generate_hierarchical_stats() {
              [[ "$s_loss" == "100" ]] && lat_str="DOWN"
              
              printf "       %-18s | ${c_stat}%-6s${NC} | ${c_stat}%-20s${NC} | ${c_p53}%-6s${NC} | ${c_dot}%-12s${NC} | ${c_ver}%-6s${NC} | ${c_rec}%-6s${NC} | ${c_edns}%-6s${NC} | ${c_cookie}%-6s${NC} | ${c_dnssec}%-6s${NC} | ${c_doh}%-6s${NC} | ${c_tls}%-6s${NC}\n" \
-                 "$ip" "$s_status" "$lat_str" "${p53:0:4}" "${p853:0:6}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
+                 "$ip" "$s_status" "$lat_str" "${p53:0:6}" "${p853:0:6}" "${ver:0:4}" "${rec:0:4}" "${edns:0:3}" "${cookie:0:4}" "${dnssec:0:4}" "${doh:0:3}" "${tls:0:3}"
         done
     done
     
@@ -4637,13 +4660,24 @@ resolve_configuration() {
     [[ ! "$CONSISTENCY_CHECKS" =~ ^[0-9]+$ ]] && CONSISTENCY_CHECKS=3
 }
 
-validate_dig_capabilities() {
-    # Check for DoT support (+tls)
+validate_dependencies_and_capabilities() {
+    # Check for OpenSSL (Required for TLS/DoT checks via s_client)
+    if [[ "$ENABLE_TLS_CHECK" == "true" ]]; then
+        if ! command -v openssl &>/dev/null; then
+             echo -e "${YELLOW}⚠️  Aviso: 'openssl' não encontrado. O teste TLS (Handshake) será desativado.${NC}"
+             ENABLE_TLS_CHECK="false"
+        fi
+    fi
+
+    # Check for DoT support (+tls) OR Fallback
+    # Note: We rely on check_tcp_dns (nc/bash) for port 853 if openssl is missing, 
+    # but strictly 'dig +tls' is for proper DoT query.
     if [[ "$ENABLE_DOT_CHECK" == "true" ]]; then
-        # Try a dummy local check. If +tls is invalid, dig returns 1 or prints "Invalid option"
         if ! dig +tls +noall . &>/dev/null; then
-             echo -e "${YELLOW}⚠️  Aviso: O binário 'dig' local não suporta a opção '+tls'. O teste DoT será desativado.${NC}"
-             ENABLE_DOT_CHECK="false"
+             # We don't disable DoT Check completely because we still check Port 853 
+             # via check_tcp_dns, but actual DoT query might fail/skip.
+             # Let's keep it enabled for the PORT check, but warn.
+             : # No-op, just fallback to Port check
         fi
     fi
 
@@ -4942,13 +4976,13 @@ EOF
              if check_tcp_dns "$ip" 853 "port853_$ip"; then 
                  LIDS_SERVER_PORT853[$ip]=$(cat "$TEMP_LID") # Changed from "$LAST_LID"
                  tls853_res_html="<span class='badge status-ok'>OPEN</span>"
-                 tls853_res_term="${GREEN}OK${NC}"
+                 tls853_res_term="${GREEN}OPEN${NC}"
                  STATS_SERVER_PORT_853[$ip]="OPEN"
                  CACHE_TLS_STATUS[$ip]="OK"
                  DOT_SUCCESS=$((DOT_SUCCESS+1))
              else 
                  tls853_res_html="<span class='badge status-fail'>CLOSED</span>"
-                 tls853_res_term="${RED}FAIL${NC}"
+                 tls853_res_term="${RED}CLOSED${NC}"
                  STATS_SERVER_PORT_853[$ip]="CLOSED"
                  LIDS_SERVER_PORT853[$ip]=$(cat "$TEMP_LID") # Added this line
                  CACHE_TLS_STATUS[$ip]="FAIL"
@@ -4986,6 +5020,7 @@ EOF
         else
              STATS_SERVER_VERSION[$ip]="SKIPPED"
              ver_res_term="${GRAY}SKIP${NC}"
+             ver_res_html="<span class='badge neutral'>SKIP</span>"
         fi
         
         if [[ "$ENABLE_RECURSION_CHECK" == "true" ]]; then
@@ -5016,6 +5051,7 @@ EOF
         else
              STATS_SERVER_RECURSION[$ip]="SKIPPED"
              rec_res_term="${GRAY}SKIP${NC}"
+             rec_res_html="<span class='badge neutral'>SKIP</span>"
         fi
 
         # 1.3 Capabilities (EDNS, Cookie)
@@ -5032,14 +5068,15 @@ EOF
                  STATS_SERVER_EDNS[$ip]="OK"
                  EDNS_SUCCESS=$((EDNS_SUCCESS+1)); CACHE_EDNS_STATUS[$ip]="OK"
              else 
-                 edns_res_html="<span class='badge status-fail'>FAIL</span>"
-                 edns_res_term="${RED}FAIL${NC}"
-                 STATS_SERVER_EDNS[$ip]="FAIL"
+                 edns_res_html="<span class='badge status-fail'>UNSUPP</span>"
+                 edns_res_term="${RED}UNSUPP${NC}"
+                 STATS_SERVER_EDNS[$ip]="UNSUPP"
                  EDNS_FAIL=$((EDNS_FAIL+1)); CACHE_EDNS_STATUS[$ip]="FAIL"
              fi
         else
              STATS_SERVER_EDNS[$ip]="SKIPPED"
              edns_res_term="${GRAY}SKIP${NC}"
+             edns_res_html="<span class='badge neutral'>SKIP</span>"
         fi
         
         if [[ "$ENABLE_COOKIE_CHECK" == "true" ]]; then
@@ -5055,10 +5092,10 @@ EOF
                  STATS_SERVER_COOKIE[$ip]="OK"
                  COOKIE_SUCCESS=$((COOKIE_SUCCESS+1)); CACHE_COOKIE_STATUS[$ip]="OK"
              else 
-                 cookie_res_html="<span class='badge status-neutral'>NO</span>"
-                 cookie_res_term="${YELLOW}NO${NC}"
-                 STATS_SERVER_COOKIE[$ip]="ABSENT"
-                 COOKIE_FAIL=$((COOKIE_FAIL+1)); CACHE_COOKIE_STATUS[$ip]="ABSENT"
+                 cookie_res_html="<span class='badge status-neutral'>UNSUPP</span>"
+                 cookie_res_term="${YELLOW}UNSUPP${NC}"
+                 STATS_SERVER_COOKIE[$ip]="UNSUPP"
+                 COOKIE_FAIL=$((COOKIE_FAIL+1)); CACHE_COOKIE_STATUS[$ip]="UNSUPP"
              fi
         fi
         
@@ -5067,34 +5104,40 @@ EOF
              # Only check validation if server is Recursive (OPEN) or UNKNOWN.
              # If CLOSED (Authoritative), it won't validate, so mark N/A.
              if [[ "${STATS_SERVER_RECURSION[$ip]}" == "CLOSED" ]]; then
-                 STATS_SERVER_DNSSEC[$ip]="NA"
-                 dnssec_res_html="<span class='badge neutral' title='Authoritative Only'>N/A (Auth)</span>"
+                 STATS_SERVER_DNSSEC[$ip]="UNSUPP"
+                 dnssec_res_html="<span class='badge status-fail' title='Authoritative (Non-Recursive)'>UNSUPP</span>"
              elif check_dnssec_validation "$ip"; then
                  LIDS_SERVER_DNSSEC[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DNSSEC[$ip]="OK"
                  DNSSEC_SUCCESS=$((DNSSEC_SUCCESS+1))
-                 dnssec_res_html="<span class='badge status-ok'>VALIDATING</span>"
+                 dnssec_res_html="<span class='badge status-ok'>OK</span>"
              else
                  LIDS_SERVER_DNSSEC[$ip]=$(cat "$TEMP_LID")
-                 STATS_SERVER_DNSSEC[$ip]="FAIL" 
+                 STATS_SERVER_DNSSEC[$ip]="UNSUPP" 
                  DNSSEC_FAIL=$((DNSSEC_FAIL+1))
-                 dnssec_res_html="<span class='badge status-fail'>FAIL</span>"
+                 dnssec_res_html="<span class='badge status-fail'>UNSUPP</span>"
              fi
-        else STATS_SERVER_DNSSEC[$ip]="SKIP"; fi
+        else 
+             STATS_SERVER_DNSSEC[$ip]="SKIP"
+             dnssec_res_html="<span class='badge neutral'>SKIP</span>"
+        fi
         
         if [[ "$ENABLE_DOH_CHECK" == "true" ]]; then
              if check_doh_avail "$ip"; then
                  LIDS_SERVER_DOH[$ip]=$(cat "$TEMP_LID")
                  STATS_SERVER_DOH[$ip]="OK"
                  DOH_SUCCESS=$((DOH_SUCCESS+1))
-                 doh_res_html="<span class='badge status-ok'>AVAILABLE</span>"
+                 doh_res_html="<span class='badge status-ok'>OK</span>"
              else
                  LIDS_SERVER_DOH[$ip]=$(cat "$TEMP_LID")
-                 STATS_SERVER_DOH[$ip]="FAIL"
+                 STATS_SERVER_DOH[$ip]="UNSUPP"
                  DOH_FAIL=$((DOH_FAIL+1))
-                 doh_res_html="<span class='badge status-fail'>FAIL</span>"
+                 doh_res_html="<span class='badge status-fail'>UNSUPP</span>"
              fi
-        else STATS_SERVER_DOH[$ip]="SKIP"; fi
+        else 
+             STATS_SERVER_DOH[$ip]="SKIP"
+             doh_res_html="<span class='badge neutral'>SKIP</span>"
+        fi
         
         if [[ "$ENABLE_TLS_CHECK" == "true" ]]; then
              if check_tls_handshake "$ip"; then
@@ -5104,11 +5147,14 @@ EOF
                  tls_res_html="<span class='badge status-ok'>OK</span>"
              else
                  LIDS_SERVER_TLS[$ip]=$(cat "$TEMP_LID")
-                 STATS_SERVER_TLS[$ip]="FAIL"
+                 STATS_SERVER_TLS[$ip]="UNSUPP"
                  TLS_FAIL=$((TLS_FAIL+1))
-                 tls_res_html="<span class='badge status-fail'>FAIL</span>"
+                 tls_res_html="<span class='badge status-fail'>UNSUPP</span>"
              fi
-        else STATS_SERVER_TLS[$ip]="SKIP"; fi
+        else 
+             STATS_SERVER_TLS[$ip]="SKIP"
+             tls_res_html="<span class='badge neutral'>SKIP</span>"
+        fi
         
         # Ping Count
         [[ "$ENABLE_PING" == "true" ]] && CNT_TESTS_SRV=$((CNT_TESTS_SRV+1))
@@ -5143,13 +5189,17 @@ EOF
         local dnssec_term="${GRAY}SKIP${NC}"
         if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "OK" ]]; then dnssec_term="${GREEN}OK${NC}"; fi
         if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "FAIL" ]]; then dnssec_term="${RED}FAIL${NC}"; fi
-        if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "NA" ]]; then dnssec_term="${YELLOW}N/A${NC}"; fi
+        if [[ "${STATS_SERVER_DNSSEC[$ip]}" == "UNSUPP" ]]; then dnssec_term="${RED}UNSUPP${NC}"; fi
         
-        local doh_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && doh_term="${GREEN}OK${NC}"
+        local doh_term="${GRAY}SKIP${NC}"; 
+        [[ "${STATS_SERVER_DOH[$ip]}" == "OK" ]] && doh_term="${GREEN}OK${NC}"
         [[ "${STATS_SERVER_DOH[$ip]}" == "FAIL" ]] && doh_term="${RED}FAIL${NC}"
+        [[ "${STATS_SERVER_DOH[$ip]}" == "UNSUPP" ]] && doh_term="${RED}UNSUPP${NC}"
         
-        local tls_term="${GRAY}SKIP${NC}"; [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && tls_term="${GREEN}OK${NC}"
+        local tls_term="${GRAY}SKIP${NC}"; 
+        [[ "${STATS_SERVER_TLS[$ip]}" == "OK" ]] && tls_term="${GREEN}OK${NC}"
         [[ "${STATS_SERVER_TLS[$ip]}" == "FAIL" ]] && tls_term="${RED}FAIL${NC}"
+        [[ "${STATS_SERVER_TLS[$ip]}" == "UNSUPP" ]] && tls_term="${RED}UNSUPP${NC}"
 
         echo -e "     Ping:${ping_res_term} | TCP53:${tcp53_res_term} | DoT_TCP853:${tls853_res_term} | Ver:${ver_res_term} | Rec:${rec_res_term} | EDNS:${edns_res_term} | Cookie:${cookie_res_term} | DNSSEC:${dnssec_term} | DoH:${doh_term} | TLS:${tls_term}"
 
@@ -5671,7 +5721,8 @@ main() {
     resolve_configuration
     
     # Init and Validation
-    validate_dig_capabilities
+    # Init and Validation
+    validate_dependencies_and_capabilities
     
     # Capture initial preference for charts logic
     INITIAL_ENABLE_CHARTS="$ENABLE_CHARTS"
